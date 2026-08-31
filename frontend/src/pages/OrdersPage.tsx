@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react';
 import api from '../lib/api';
 import { Filter, ChevronDown, Clock, Package, Truck, CheckCircle, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { createSocket } from '../lib/socket';
-import { useAuthStore } from '../store/authStore';
 
 interface Order {
   id: string;
@@ -52,27 +50,7 @@ export const OrdersPage = () => {
     }
   };
 
-  useEffect(() => { 
-    fetchOrders();
-
-    const socket = createSocket();
-    const user = useAuthStore.getState().user;
-    const restaurantId = user?.restaurantId || 'demo-restaurant-id';
-    
-    socket.emit('join_restaurant', restaurantId);
-
-    socket.on('new_order', () => {
-      fetchOrders();
-    });
-
-    socket.on('order_updated', () => {
-      fetchOrders();
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, [activeFilter]);
+  useEffect(() => { fetchOrders(); }, [activeFilter]);
 
   const updateStatus = async (id: string, status: string) => {
     try {

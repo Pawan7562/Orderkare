@@ -4,10 +4,10 @@ import { useCartStore } from '../store/cartStore';
 import { 
   ShoppingCart, Plus, Minus, Search, X, CheckCircle2, Clock, 
   Utensils, Sparkles, ChefHat, MapPin, Star, ArrowRight,
-  Flame, Leaf, RotateCcw, AlertTriangle, Eye
+  Flame, Leaf, RotateCcw
 } from 'lucide-react';
 import axios from 'axios';
-import { createSocket } from '../lib/socket';
+import { io } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
@@ -147,7 +147,6 @@ export const CustomerMenuPage = () => {
   const [showCart, setShowCart] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState<any>(null);
-  const [viewTracker, setViewTracker] = useState(true);
 
   const [customerName, setCustomerName] = useState('');
   const [tableNumber, setTableNumber] = useState(qrTableParam || '04');
@@ -179,64 +178,20 @@ export const CustomerMenuPage = () => {
       }
     };
     fetchMenu();
-
-    // Check for saved active order in localStorage
-    const savedOrderId = localStorage.getItem('orderkare_active_order_id');
-    if (savedOrderId) {
-      axios.get(`${API}/orders/track/${savedOrderId}`)
-        .then((res) => {
-          if (res.data?.order && res.data.order.status !== 'REJECTED' && res.data.order.status !== 'COMPLETED') {
-            setOrderPlaced(res.data.order);
-            setViewTracker(true);
-          } else {
-            localStorage.removeItem('orderkare_active_order_id');
-          }
-        })
-        .catch(() => {
-          // ignore
-        });
-    }
   }, [slug]);
 
-  // Real-time WebSockets & Fail-safe Polling for Live Order Status
   useEffect(() => {
     if (!orderPlaced?.id) return;
 
-    localStorage.setItem('orderkare_active_order_id', orderPlaced.id);
-
-    const socket = createSocket();
+    const socketUrl = import.meta.env.VITE_WS_URL || 'http://localhost:5000';
+    const socket = io(socketUrl);
 
     socket.on(`order_status_${orderPlaced.id}`, (data: { status: string }) => {
-      if (data?.status) {
-        setOrderPlaced((prev: any) => (prev ? { ...prev, status: data.status } : null));
-        try {
-          const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-120.wav');
-          audio.play();
-        } catch (e) { /* ignore sound error */ }
-      }
+      setOrderPlaced((prev: any) => (prev ? { ...prev, status: data.status } : null));
     });
-
-    // Fallback polling every 5 seconds
-    const interval = setInterval(async () => {
-      try {
-        const res = await axios.get(`${API}/orders/track/${orderPlaced.id}`);
-        if (res.data?.order?.status) {
-          setOrderPlaced((prev: any) => {
-            if (!prev) return null;
-            if (prev.status !== res.data.order.status) {
-              return { ...prev, status: res.data.order.status };
-            }
-            return prev;
-          });
-        }
-      } catch (err) {
-        // ignore polling error
-      }
-    }, 5000);
 
     return () => {
       socket.disconnect();
-      clearInterval(interval);
     };
   }, [orderPlaced?.id]);
 
@@ -282,7 +237,6 @@ export const CustomerMenuPage = () => {
         items: cart.items.map((i) => ({ foodItemId: i.foodItemId, quantity: i.quantity })),
       });
       setOrderPlaced(res.data.order);
-      setViewTracker(true);
       cart.clearCart();
       setShowCheckout(false);
       setShowCart(false);
@@ -303,7 +257,6 @@ export const CustomerMenuPage = () => {
         })),
       };
       setOrderPlaced(mockOrder);
-      setViewTracker(true);
       cart.clearCart();
       setShowCheckout(false);
       setShowCart(false);
@@ -322,15 +275,11 @@ export const CustomerMenuPage = () => {
   }
 
   // --- LIVE ORDER TRACKING SCREEN ---
-  if (orderPlaced && viewTracker) {
-    const isRejected = orderPlaced.status === 'REJECTED';
-    const isServedOrCompleted = orderPlaced.status === 'SERVED' || orderPlaced.status === 'COMPLETED';
-    
-    const currentStepIndex = isRejected 
-      ? -1 
-      : isServedOrCompleted 
-      ? ORDER_STEPS.length - 1 
-      : Math.max(0, ORDER_STEPS.findIndex((s) => s.status === orderPlaced.status));
+  if (orderPlaced) {
+    const currentStepIndex = Math.max(
+      0,
+      ORDER_STEPS.findIndex((s) => s.status === orderPlaced.status)
+    );
 
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-between max-w-md mx-auto relative overflow-hidden font-sans">
@@ -341,90 +290,66 @@ export const CustomerMenuPage = () => {
         {/* Top bar */}
         <div className="p-6 relative z-10">
           <div className="flex items-center justify-between mb-6">
-            <span className={`text-xs uppercase tracking-widest font-bold px-3 py-1 rounded-full flex items-center gap-1.5 border ${
-              isRejected ? 'text-red-400 bg-red-950/80 border-red-800' : 'text-emerald-400 bg-emerald-950/80 border-emerald-800'
-            }`}>
-              <span className={`w-2 h-2 rounded-full ${isRejected ? 'bg-red-400' : 'bg-emerald-400 animate-ping'}`} />
-              {isRejected ? 'Order Declined' : 'Live Kitchen Tracker'}
+            <span className="text-xs uppercase tracking-widest text-emerald-400 font-bold bg-emerald-950/80 border border-emerald-800 px-3 py-1 rounded-full flex items-center gap-1.5">
+              <span className="w-2 h-2 bg-emerald-400 rounded-full animate-ping" /> Live Kitchen Tracker
             </span>
             <span className="text-xs font-mono text-slate-400">
               Table #{orderPlaced.tableNumber}
             </span>
           </div>
 
-          {/* Status Hero Header */}
           <div className="text-center my-4">
-            {isRejected ? (
-              <>
-                <motion.div
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="w-20 h-20 bg-red-500/10 border border-red-500/30 rounded-3xl mx-auto flex items-center justify-center text-red-400 mb-4 shadow-lg"
-                >
-                  <AlertTriangle className="w-10 h-10" />
-                </motion.div>
-                <h1 className="text-2xl font-extrabold text-white tracking-tight">Order Rejected 😞</h1>
-                <p className="text-slate-400 text-sm mt-1">Kitchen could not fulfill this order right now.</p>
-              </>
-            ) : (
-              <>
-                <motion.div
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="w-20 h-20 bg-emerald-500/10 border border-emerald-500/30 rounded-3xl mx-auto flex items-center justify-center text-emerald-400 mb-4 shadow-lg shadow-emerald-500/10"
-                >
-                  <Sparkles className="w-10 h-10 animate-bounce" />
-                </motion.div>
-                <h1 className="text-2xl font-extrabold text-white tracking-tight">
-                  {isServedOrCompleted ? 'Order Served! 🎉' : 'Order Placed! 🎉'}
-                </h1>
-                <p className="text-slate-400 text-sm mt-1">Order #{orderPlaced.id.slice(-6).toUpperCase()}</p>
-              </>
-            )}
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="w-20 h-20 bg-emerald-500/10 border border-emerald-500/30 rounded-3xl mx-auto flex items-center justify-center text-emerald-400 mb-4 shadow-lg shadow-emerald-500/10"
+            >
+              <Sparkles className="w-10 h-10 animate-bounce" />
+            </motion.div>
+            <h1 className="text-2xl font-extrabold text-white tracking-tight">Order Placed! 🎉</h1>
+            <p className="text-slate-400 text-sm mt-1">Order #{orderPlaced.id.slice(-6)}</p>
           </div>
 
           {/* Stepper tracker */}
-          {!isRejected && (
-            <div className="bg-slate-900/90 backdrop-blur-md rounded-3xl border border-slate-800 p-5 shadow-2xl my-6">
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-5">Kitchen Status</h2>
-              <div className="space-y-6 relative before:absolute before:left-5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-800">
-                {ORDER_STEPS.map((step, idx) => {
-                  const Icon = step.icon;
-                  const isPassed = idx <= currentStepIndex;
-                  const isCurrent = idx === currentStepIndex;
+          <div className="bg-slate-900/90 backdrop-blur-md rounded-3xl border border-slate-800 p-5 shadow-2xl my-6">
+            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-5">Kitchen Status</h2>
+            <div className="space-y-6 relative before:absolute before:left-5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-800">
+              {ORDER_STEPS.map((step, idx) => {
+                const Icon = step.icon;
+                const isPassed = idx <= currentStepIndex;
+                const isCurrent = idx === currentStepIndex;
 
-                  return (
-                    <div key={step.status} className="flex items-start space-x-4 relative z-10">
-                      <div
-                        className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border transition-all ${
-                          isCurrent
-                            ? 'bg-primary text-white border-primary shadow-lg shadow-primary/30 ring-4 ring-primary/20 scale-110'
-                            : isPassed
-                            ? 'bg-emerald-500 text-slate-950 border-emerald-400'
-                            : 'bg-slate-950 text-slate-600 border-slate-800'
-                        }`}
-                      >
-                        <Icon className="w-5 h-5" />
-                      </div>
-                      <div className="pt-1 flex-1">
-                        <div className="flex items-center justify-between">
-                          <h3 className={`text-sm font-bold ${isPassed ? 'text-white' : 'text-slate-500'}`}>
-                            {step.label}
-                          </h3>
-                          {isCurrent && (
-                            <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-md font-bold uppercase tracking-wider animate-pulse">
-                              Active
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-400 mt-0.5">{step.desc}</p>
-                      </div>
+                return (
+                  <div key={step.status} className="flex items-start space-x-4 relative z-10">
+                    <div
+                      className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border transition-all ${
+                        isCurrent
+                          ? 'bg-primary text-white border-primary shadow-lg shadow-primary/30 ring-4 ring-primary/20 scale-110'
+                          : isPassed
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                          : 'bg-slate-950 text-slate-600 border-slate-800'
+                      }`}
+                    >
+                      <Icon className="w-5 h-5" />
                     </div>
-                  );
-                })}
-              </div>
+                    <div className="pt-1 flex-1">
+                      <div className="flex items-center justify-between">
+                        <h3 className={`text-sm font-bold ${isPassed ? 'text-white' : 'text-slate-500'}`}>
+                          {step.label}
+                        </h3>
+                        {isCurrent && (
+                          <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-md font-bold uppercase tracking-wider animate-pulse">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">{step.desc}</p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          )}
+          </div>
 
           {/* Items Summary */}
           <div className="bg-slate-900/60 rounded-3xl border border-slate-800/80 p-5 space-y-3">
@@ -447,26 +372,14 @@ export const CustomerMenuPage = () => {
         </div>
 
         {/* Action Bottom */}
-        <div className="p-6 pt-0 relative z-10 space-y-3">
-          {isRejected ? (
-            <button
-              onClick={() => {
-                localStorage.removeItem('orderkare_active_order_id');
-                setOrderPlaced(null);
-              }}
-              className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-3.5 rounded-2xl text-sm flex items-center justify-center space-x-2 transition-all shadow-lg"
-            >
-              <span>Try Ordering Again</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => setViewTracker(false)}
-              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-2xl border border-slate-700 text-sm flex items-center justify-center space-x-2 transition-all"
-            >
-              <RotateCcw className="w-4 h-4 text-primary" />
-              <span>Order Additional Items</span>
-            </button>
-          )}
+        <div className="p-6 pt-0 relative z-10">
+          <button
+            onClick={() => setOrderPlaced(null)}
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-2xl border border-slate-700 text-sm flex items-center justify-center space-x-2 transition-all"
+          >
+            <RotateCcw className="w-4 h-4 text-primary" />
+            <span>Order Additional Items</span>
+          </button>
         </div>
       </div>
     );
@@ -475,25 +388,6 @@ export const CustomerMenuPage = () => {
   // --- MAIN CUSTOMER MENU UI ---
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 max-w-md mx-auto relative pb-32 font-sans shadow-2xl">
-      {/* Active Order Banner if browsing menu while order is active */}
-      {orderPlaced && !viewTracker && (
-        <div className="bg-slate-900 text-white px-4 py-2.5 flex items-center justify-between text-xs border-b border-slate-800">
-          <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 bg-emerald-400 rounded-full animate-ping" />
-            <span className="font-medium text-slate-300">
-              Active Order <strong className="text-white font-mono">#{orderPlaced.id.slice(-6).toUpperCase()}</strong>: <span className="text-emerald-400 font-bold uppercase">{orderPlaced.status}</span>
-            </span>
-          </div>
-          <button
-            onClick={() => setViewTracker(true)}
-            className="bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 transition-all"
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span>Track Live</span>
-          </button>
-        </div>
-      )}
-
       {/* Hero Cover Header */}
       <div className="relative bg-slate-950 text-white rounded-b-3xl overflow-hidden pt-7 pb-6 px-5 shadow-xl">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/30 via-slate-950 to-slate-950 opacity-95" />

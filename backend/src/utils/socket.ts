@@ -9,7 +9,6 @@ export const initSocket = (server: HttpServer): Server => {
       origin: '*',
       methods: ['GET', 'POST'],
     },
-    transports: ['websocket', 'polling'],
   });
 
   io.on('connection', (socket: Socket) => {
@@ -42,14 +41,8 @@ export const notifyNewOrder = (restaurantId: string, order: any) => {
   }
 };
 
-export const notifyOrderStatusUpdate = (orderId: string, status: string, restaurantId?: string) => {
+export const notifyOrderStatusUpdate = (orderId: string, status: string) => {
   if (io) {
-    // Notify customer tracking socket
-    io.emit(`order_status_${orderId}`, { orderId, status });
-    // Notify restaurant dashboard room
-    if (restaurantId) {
-      io.to(restaurantId).emit('order_updated', { orderId, status });
-    }
+    io.emit(`order_status_${orderId}`, { status });
   }
 };
-

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../lib/api';
 import { ShoppingBag, IndianRupee, Clock, Grid2X2, ArrowUpRight, RefreshCcw } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
-import { createSocket } from '../lib/socket';
+import { io } from 'socket.io-client';
 import { motion } from 'framer-motion';
 
 interface DashboardStats {
@@ -51,11 +51,13 @@ export const DashboardPage = () => {
   useEffect(() => {
     fetchData();
 
-    const socket = createSocket();
+    const socketUrl = import.meta.env.VITE_WS_URL || 'http://localhost:5000';
+    const socket = io(socketUrl);
     const user = useAuthStore.getState().user;
-    const restaurantId = user?.restaurantId || 'demo-restaurant-id';
 
-    socket.emit('join_restaurant', restaurantId);
+    if (user?.restaurantId) {
+      socket.emit('join_restaurant', user.restaurantId);
+    }
 
     socket.on('new_order', (newOrder: RecentOrder) => {
       try {
@@ -69,10 +71,6 @@ export const DashboardPage = () => {
         todayOrders: prev.todayOrders + 1,
         pendingOrders: prev.pendingOrders + 1,
       }));
-    });
-
-    socket.on('order_updated', () => {
-      fetchData();
     });
 
     return () => { socket.disconnect(); };
