@@ -50,10 +50,16 @@ export function useOrderNotifications(): UseOrderNotificationsReturn {
   }, [stopRing]);
 
   useEffect(() => {
-    const socketUrl = import.meta.env.VITE_API_URL?.replace('/api/v1', '').replace('/api', '') 
-      || import.meta.env.VITE_WS_URL 
-      || 'http://localhost:5000';
+    const apiUrl = import.meta.env.VITE_API_URL || '';
+    const wsBase = apiUrl.replace(/\/api\/v1\/?$/, '').replace(/\/api\/?$/, '');
+    // In production, never fall back to localhost
+    const socketUrl = wsBase || (import.meta.env.PROD ? '' : 'http://localhost:5000');
     
+    if (!socketUrl) {
+      console.warn('No WebSocket URL configured. Set VITE_API_URL env variable.');
+      return;
+    }
+
     const socket = io(socketUrl, {
       transports: ['websocket', 'polling'],
       reconnection: true,

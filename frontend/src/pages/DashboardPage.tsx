@@ -5,10 +5,9 @@ import { motion } from 'framer-motion';
 
 interface DashboardStats {
   todayOrders: number;
-  todaySales: number;
-  pendingOrders: number;
-  activeTables: number;
-  totalTables: number;
+  todayRevenue: number;
+  activeOrders: number;
+  menuItems: number;
 }
 
 interface RecentOrder {
@@ -23,7 +22,7 @@ interface RecentOrder {
 
 export const DashboardPage = () => {
   const [stats, setStats] = useState<DashboardStats>({
-    todayOrders: 0, todaySales: 0, pendingOrders: 0, activeTables: 0, totalTables: 20
+    todayOrders: 0, todayRevenue: 0, activeOrders: 0, menuItems: 0
   });
   const [pendingOrders, setPendingOrders] = useState<RecentOrder[]>([]);
   const [preparingOrders, setPreparingOrders] = useState<RecentOrder[]>([]);
@@ -72,10 +71,10 @@ export const DashboardPage = () => {
   };
 
   const statCards = [
-    { label: "Today's Orders", value: stats.todayOrders, icon: ShoppingBag, color: 'bg-primary/10 text-primary', trend: '+8.2%' },
-    { label: "Today's Sales", value: `₹${stats.todaySales.toLocaleString()}`, icon: IndianRupee, color: 'bg-blue-50 text-blue-600', trend: '+12.4%' },
-    { label: 'Pending Orders', value: stats.pendingOrders, icon: Clock, color: 'bg-amber-50 text-amber-600', highlight: true, trend: '' },
-    { label: 'Active Tables', value: `${stats.activeTables}/${stats.totalTables}`, icon: Grid2X2, color: 'bg-emerald-50 text-emerald-600', trend: '' },
+    { label: "Today's Orders", value: stats.todayOrders ?? 0, icon: ShoppingBag, color: 'bg-primary/10 text-primary', trend: '+8.2%' },
+    { label: "Today's Revenue", value: `₹${(stats.todayRevenue ?? 0).toLocaleString()}`, icon: IndianRupee, color: 'bg-blue-50 text-blue-600', trend: '+12.4%' },
+    { label: 'Active Orders', value: stats.activeOrders ?? 0, icon: Clock, color: 'bg-amber-50 text-amber-600', highlight: true, trend: '' },
+    { label: 'Menu Items', value: stats.menuItems ?? 0, icon: Grid2X2, color: 'bg-emerald-50 text-emerald-600', trend: '' },
   ];
 
   const stagger = {
