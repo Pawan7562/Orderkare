@@ -10,7 +10,7 @@ import axios from 'axios';
 import { io } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+const API = import.meta.env.VITE_API_URL || 'https://orderkare-3.onrender.com/api/v1';
 
 interface Restaurant {
   id: string;
@@ -183,7 +183,7 @@ export const CustomerMenuPage = () => {
   useEffect(() => {
     if (!orderPlaced?.id) return;
 
-    const socketUrl = import.meta.env.VITE_WS_URL || import.meta.env.VITE_API_URL?.replace(/\/api\/v1\/?$/, '').replace(/\/api\/?$/, '') || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000');
+    const socketUrl = import.meta.env.VITE_WS_URL || (import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/v1\/?$/, '').replace(/\/api\/?$/, '') : 'https://orderkare-3.onrender.com');
     const socket = io(socketUrl);
 
     socket.on(`order_status_${orderPlaced.id}`, (data: { status: string }) => {

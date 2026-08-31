@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecret';
+const getJwtSecret = () => process.env.JWT_SECRET || 'orderkare-super-secret-jwt-key-change-in-production';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -20,7 +20,7 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
     return;
   }
 
-  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+  jwt.verify(token, getJwtSecret(), (err, decoded) => {
     if (err) {
       res.status(403).json({ message: 'Invalid or expired token' });
       return;
