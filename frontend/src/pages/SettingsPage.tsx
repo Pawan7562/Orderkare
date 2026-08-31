@@ -20,7 +20,11 @@ export const SettingsPage = () => {
     fetchRestaurant();
   }, []);
 
-  const menuUrl = restaurant ? `${window.location.origin}/menu/${restaurant.slug}` : '';
+  const [selectedTable, setSelectedTable] = useState<string>('ALL');
+
+  const menuUrl = restaurant 
+    ? `${window.location.origin}/menu/${restaurant.slug}${selectedTable !== 'ALL' ? `?table=${selectedTable}` : ''}` 
+    : '';
 
   const handleCopy = () => {
     navigator.clipboard.writeText(menuUrl);
@@ -29,11 +33,10 @@ export const SettingsPage = () => {
   };
 
   const handleDownloadQR = () => {
-    // Generate QR code as a downloadable image using a public API
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(menuUrl)}`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(menuUrl)}`;
     const link = document.createElement('a');
     link.href = qrUrl;
-    link.download = `${restaurant?.name || 'restaurant'}-qr-code.png`;
+    link.download = `${restaurant?.name || 'restaurant'}${selectedTable !== 'ALL' ? `-table-${selectedTable}` : ''}-qr.png`;
     link.click();
   };
 
@@ -78,30 +81,53 @@ export const SettingsPage = () => {
 
       {/* QR Code */}
       <div className="bg-white rounded-3xl border border-slate-200/60 p-6 shadow-sm">
-        <h2 className="font-semibold text-slate-900 mb-4 flex items-center space-x-2">
-          <QrCode className="w-5 h-5 text-primary" />
-          <span>Your QR Code</span>
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-slate-900 flex items-center space-x-2">
+            <QrCode className="w-5 h-5 text-primary" />
+            <span>Table QR Code Generator</span>
+          </h2>
+          <div className="flex items-center space-x-2">
+            <label className="text-xs font-semibold text-slate-500">Target Table:</label>
+            <select
+              value={selectedTable}
+              onChange={(e) => setSelectedTable(e.target.value)}
+              className="bg-slate-50 border border-slate-200 text-xs font-bold rounded-xl px-3 py-1.5 outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="ALL">General (No Table)</option>
+              <option value="01">Table 01</option>
+              <option value="02">Table 02</option>
+              <option value="03">Table 03</option>
+              <option value="04">Table 04</option>
+              <option value="05">Table 05</option>
+              <option value="06">Table 06</option>
+              <option value="07">Table 07</option>
+              <option value="08">Table 08</option>
+            </select>
+          </div>
+        </div>
         <p className="text-sm text-slate-500 mb-5">
-          Print this QR code and place it on your restaurant tables. Customers can scan it to instantly open your digital menu.
+          Print this QR code and attach it to your restaurant table. When a customer scans it with their phone camera, your menu opens directly with Table #{selectedTable === 'ALL' ? '01' : selectedTable} automatically pre-selected.
         </p>
 
-        <div className="flex flex-col sm:flex-row gap-6 items-start">
+        <div className="flex flex-col sm:flex-row gap-6 items-center sm:items-start">
           {/* QR Image */}
-          <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 shadow-inner">
+          <div className="bg-white border-2 border-slate-200 rounded-3xl p-5 shadow-sm text-center">
             {menuUrl && (
               <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(menuUrl)}`}
                 alt="Restaurant QR Code"
-                className="w-48 h-48"
+                className="w-48 h-48 mx-auto"
               />
             )}
+            <span className="inline-block mt-3 text-xs font-mono font-bold bg-slate-100 text-slate-700 px-3 py-1 rounded-full border border-slate-200">
+              {selectedTable === 'ALL' ? 'General Menu QR' : `Table #${selectedTable} QR`}
+            </span>
           </div>
 
           {/* QR Details */}
-          <div className="flex-1 space-y-4">
+          <div className="flex-1 space-y-4 w-full">
             <div>
-              <label className="text-xs text-slate-500 uppercase tracking-wide">Menu URL</label>
+              <label className="text-xs text-slate-500 uppercase tracking-wide">Direct Scan URL</label>
               <div className="flex items-center mt-1.5 bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
                 <input
                   type="text"
@@ -121,16 +147,16 @@ export const SettingsPage = () => {
             <div className="flex flex-wrap gap-3">
               <button
                 onClick={handleDownloadQR}
-                className="flex items-center space-x-2 bg-primary text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors"
+                className="flex items-center space-x-2 bg-primary text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm shadow-primary/15"
               >
                 <Download className="w-4 h-4" />
-                <span>Download QR Code</span>
+                <span>Download High-Res QR</span>
               </button>
               <button
                 onClick={() => { window.open(menuUrl, '_blank'); }}
                 className="flex items-center space-x-2 bg-slate-100 text-slate-700 px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-200 transition-colors"
               >
-                <span>Preview Menu</span>
+                <span>Test Scan Experience ↗</span>
               </button>
             </div>
           </div>

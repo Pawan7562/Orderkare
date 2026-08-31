@@ -135,8 +135,8 @@ export const CustomerMenuPage = () => {
   const { slug } = useParams<{ slug: string }>();
   const [searchParams] = useSearchParams();
 
-  // Auto-detect table number from QR code scan query string (e.g. ?table=4 or ?t=4)
-  const qrTableParam = searchParams.get('table') || searchParams.get('t') || '';
+  // Auto-detect table number from QR code scan query string (e.g. ?table=01, ?t=1, or ?tableNumber=01)
+  const qrTableParam = searchParams.get('table') || searchParams.get('t') || searchParams.get('tableNumber') || '';
 
   const [restaurant, setRestaurant] = useState<Restaurant | null>(MOCK_RESTAURANT);
   const [categories, setCategories] = useState<Category[]>(MOCK_CATEGORIES);
@@ -149,13 +149,19 @@ export const CustomerMenuPage = () => {
   const [orderPlaced, setOrderPlaced] = useState<any>(null);
 
   const [customerName, setCustomerName] = useState('');
-  const [tableNumber, setTableNumber] = useState(qrTableParam || '04');
+  const [tableNumber, setTableNumber] = useState(qrTableParam || '01');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(true);
   const [orderError, setOrderError] = useState('');
   const [placingOrder, setPlacingOrder] = useState(false);
 
   const cart = useCartStore();
+
+  useEffect(() => {
+    if (qrTableParam) {
+      setTableNumber(qrTableParam);
+    }
+  }, [qrTableParam]);
 
   useEffect(() => {
     const fetchMenu = async () => {
