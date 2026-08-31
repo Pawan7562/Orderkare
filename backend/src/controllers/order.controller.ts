@@ -2,47 +2,61 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { notifyNewOrder, notifyOrderStatusUpdate } from '../utils/socket';
 import { prisma } from '../lib/prisma';
+import { OrderStatus } from '@prisma/client';
 
 // In-memory mock store for offline orders
 const fallbackOrders: any[] = [
   {
-    id: 'ord-fallback-1',
-    customerName: 'Aarav Sharma',
+    id: 'ord-101',
+    customerName: 'Aarav Patel',
     tableNumber: '04',
-    phoneNumber: '+91 9988776655',
-    status: 'PENDING',
+    phoneNumber: '+91 98765 43210',
     totalAmount: 440,
-    createdAt: new Date(Date.now() - 120000).toISOString(), // 2 mins ago
+    status: 'PENDING',
+    createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
     items: [
-      { id: 'oi-1', quantity: 2, price: 220, foodItem: { name: 'Paneer Tikka', price: 220 } }
+      { id: 'oi-1', quantity: 2, price: 220, foodItem: { name: 'Paneer Tikka' } }
     ]
   },
   {
-    id: 'ord-fallback-2',
-    customerName: 'Meera Patel',
-    tableNumber: '12',
-    phoneNumber: null,
+    id: 'ord-102',
+    customerName: 'Priya Sharma',
+    tableNumber: '02',
+    phoneNumber: '+91 98111 22233',
+    totalAmount: 600,
     status: 'PREPARING',
-    totalAmount: 340,
-    createdAt: new Date(Date.now() - 720000).toISOString(), // 12 mins ago
+    createdAt: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
     items: [
-      { id: 'oi-2', quantity: 1, price: 340, foodItem: { name: 'Butter Chicken', price: 340 } }
+      { id: 'oi-2', quantity: 1, price: 340, foodItem: { name: 'Butter Chicken' } },
+      { id: 'oi-3', quantity: 1, price: 260, foodItem: { name: 'Dal Makhani' } }
+    ]
+  },
+  {
+    id: 'ord-103',
+    customerName: 'Rohan Gupta',
+    tableNumber: '07',
+    phoneNumber: '+91 99000 11223',
+    totalAmount: 240,
+    status: 'READY',
+    createdAt: new Date(Date.now() - 22 * 60 * 1000).toISOString(),
+    items: [
+      { id: 'oi-4', quantity: 2, price: 120, foodItem: { name: 'Mango Lassi' } }
     ]
   }
 ];
 
-// Helper to mock food retrieval
-const MOCK_FOODS = new Map([
+const fallbackFoodItems = new Map<string, any>([
   ['item-1', { id: 'item-1', name: 'Paneer Tikka', price: 220 }],
-  ['item-2', { id: 'item-2', name: 'Crispy Spring Rolls', price: 180 }],
+  ['item-2', { id: 'item-2', name: 'Veg Spring Rolls', price: 180 }],
   ['item-3', { id: 'item-3', name: 'Butter Chicken', price: 340 }],
   ['item-4', { id: 'item-4', name: 'Dal Makhani', price: 260 }],
-  ['item-5', { id: 'item-5', name: 'Chocolate Brownie', price: 190 }],
+  ['item-5', { id: 'item-5', name: 'Mango Lassi', price: 120 }],
+  ['item-6', { id: 'item-6', name: 'Chocolate Brownie', price: 190 }],
 ]);
 
 export const createOrder = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { slug } = req.params;
+    const slug = req.params.slug as string;
     const { customerName, tableNumber, phoneNumber, items } = req.body;
 
     if (!customerName || !tableNumber || !items || !items.length) {
@@ -69,10 +83,9 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
 
       const foodMap = new Map(foodItems.map(f => [f.id, f]));
       let totalAmount = 0;
-      const orderItems = items.map((item: any) => {
+      const orderItemsData = items.map((item: any) => {
         const food = foodMap.get(item.foodItemId)!;
-        const itemTotal = food.price * item.quantity;
-        totalAmount += itemTotal;
+        totalAmount += food.price * item.quantity;
         return {
           foodItemId: item.foodItemId,
           quantity: item.quantity,
@@ -84,13 +97,18 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         data: {
           customerName,
           tableNumber,
-          phoneNumber: phoneNumber || null,
+          phoneNumber,
           totalAmount,
           restaurantId: restaurant.id,
-          items: { create: orderItems },
+          status: 'PENDING',
+          items: {
+            create: orderItemsData,
+          },
         },
         include: {
-          items: { include: { foodItem: { select: { name: true, price: true } } } },
+          items: {
+            include: { foodItem: true },
+          },
         },
       });
 
@@ -98,35 +116,31 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       res.status(201).json({ order });
     } catch (dbError) {
       console.warn('⚠️ Database offline during order creation. Simulating order placement.');
-      
       let totalAmount = 0;
-      const orderItems = items.map((item: any) => {
-        const food = MOCK_FOODS.get(item.foodItemId) || { name: 'Custom Item', price: 150 };
+      const hydratedItems = items.map((item: any) => {
+        const food = fallbackFoodItems.get(item.foodItemId) || { name: 'Special Item', price: 150 };
         totalAmount += food.price * item.quantity;
         return {
-          id: `oi-${Math.random().toString(36).substring(2, 8)}`,
+          id: `oi-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
           quantity: item.quantity,
           price: food.price,
-          foodItem: { name: food.name, price: food.price }
+          foodItem: { name: food.name, price: food.price },
         };
       });
 
       const newOrder = {
-        id: `ord-fallback-${Math.random().toString(36).substring(2, 8)}`,
+        id: `ord-${Date.now()}`,
         customerName,
         tableNumber,
-        phoneNumber: phoneNumber || null,
-        status: 'PENDING',
+        phoneNumber,
         totalAmount,
+        status: 'PENDING',
         createdAt: new Date().toISOString(),
-        items: orderItems
+        items: hydratedItems,
       };
 
       fallbackOrders.push(newOrder);
-      
-      // Emit socket notification
       notifyNewOrder('demo-restaurant-id', newOrder);
-
       res.status(201).json({ order: newOrder });
     }
   } catch (error) {
@@ -137,7 +151,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
 
 export const getOrderStatus = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     try {
       const order = await prisma.order.findUnique({
         where: { id },
@@ -170,23 +184,35 @@ export const getOrderStatus = async (req: Request, res: Response): Promise<void>
 
 export const getOrders = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const restaurantId = req.user?.restaurantId || 'demo-restaurant-id';
-
-    const { status } = req.query;
+    const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
+    const { status, limit = '50', page = '1' } = req.query;
 
     try {
-      const statusFilter = status
-        ? { status: { in: (status as string).split(',') as any[] } }
-        : {};
+      const take = Math.min(parseInt(limit as string) || 50, 100);
+      const skip = ((parseInt(page as string) || 1) - 1) * take;
 
-      const orders = await prisma.order.findMany({
-        where: { restaurantId, ...statusFilter },
-        orderBy: { createdAt: 'desc' },
-        include: {
-          items: { include: { foodItem: { select: { name: true, price: true } } } },
-        },
-      });
-      res.json({ orders });
+      const where: any = { restaurantId };
+      if (status) {
+        const statusArray = (status as string).split(',');
+        where.status = { in: statusArray };
+      }
+
+      const [orders, total] = await Promise.all([
+        prisma.order.findMany({
+          where,
+          include: {
+            items: {
+              include: { foodItem: { select: { id: true, name: true, price: true, imageUrl: true } } },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take,
+          skip,
+        }),
+        prisma.order.count({ where }),
+      ]);
+
+      res.json({ orders, total, page: parseInt(page as string) || 1, totalPages: Math.ceil(total / take) });
     } catch (dbError) {
       console.warn('⚠️ Database offline. Returning mock active orders.');
       const filtered = status
@@ -202,15 +228,15 @@ export const getOrders = async (req: AuthRequest, res: Response): Promise<void> 
 
 export const updateOrderStatus = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const restaurantId = req.user?.restaurantId;
-    const { id } = req.params;
-    const { status } = req.body;
+    const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
+    const id = req.params.id as string;
+    const status = req.body.status as string;
 
     try {
-      const order = await prisma.order.findFirst({ where: { id, restaurantId: restaurantId! } });
+      const order = await prisma.order.findFirst({ where: { id, restaurantId } });
       if (!order) { res.status(404).json({ message: 'Order not found' }); return; }
 
-      const updated = await prisma.order.update({ where: { id }, data: { status } });
+      const updated = await prisma.order.update({ where: { id }, data: { status: status as OrderStatus } });
       notifyOrderStatusUpdate(id, status);
       res.json({ order: updated });
     } catch (dbError) {
@@ -231,43 +257,38 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response): Promis
 
 export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const restaurantId = req.user?.restaurantId;
-    if (!restaurantId) { res.status(403).json({ message: 'No restaurant linked' }); return; }
+    const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
 
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const [todayOrders, pendingOrders, todaySalesResult] = await Promise.all([
+      const [totalOrdersToday, totalRevenueAgg, activeOrdersCount, menuItemsCount] = await Promise.all([
         prisma.order.count({ where: { restaurantId, createdAt: { gte: today } } }),
-        prisma.order.count({ where: { restaurantId, status: 'PENDING' } }),
         prisma.order.aggregate({
           where: { restaurantId, createdAt: { gte: today }, status: { not: 'REJECTED' } },
           _sum: { totalAmount: true },
         }),
+        prisma.order.count({
+          where: { restaurantId, status: { in: ['PENDING', 'ACCEPTED', 'PREPARING', 'READY'] } },
+        }),
+        prisma.foodItem.count({ where: { restaurantId } }),
       ]);
 
       res.json({
-        todayOrders,
-        todaySales: todaySalesResult._sum.totalAmount || 0,
-        pendingOrders,
-        activeTables: 0,
-        totalTables: 20,
+        todayOrders: totalOrdersToday,
+        todayRevenue: totalRevenueAgg._sum.totalAmount || 0,
+        activeOrders: activeOrdersCount,
+        menuItems: menuItemsCount,
       });
     } catch (dbError) {
       console.warn('⚠️ Database offline. Calculating mock dashboard stats.');
-      const todayOrders = fallbackOrders.length;
-      const pendingOrders = fallbackOrders.filter(o => o.status === 'PENDING').length;
-      const todaySales = fallbackOrders
-        .filter(o => o.status !== 'REJECTED')
-        .reduce((sum, o) => sum + o.totalAmount, 0);
-
+      const totalAmount = fallbackOrders.reduce((acc, cur) => acc + (cur.totalAmount || 0), 0);
       res.json({
-        todayOrders,
-        todaySales,
-        pendingOrders,
-        activeTables: fallbackOrders.filter(o => ['PENDING', 'ACCEPTED', 'PREPARING', 'READY'].includes(o.status)).length,
-        totalTables: 20,
+        todayOrders: fallbackOrders.length + 14,
+        todayRevenue: totalAmount + 3480,
+        activeOrders: fallbackOrders.filter(o => o.status !== 'COMPLETED' && o.status !== 'REJECTED').length,
+        menuItems: 18,
       });
     }
   } catch (error) {

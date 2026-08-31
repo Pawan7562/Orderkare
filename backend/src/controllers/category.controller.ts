@@ -4,14 +4,15 @@ import { prisma } from '../lib/prisma';
 
 // In-memory mock store in case DB is offline
 const fallbackCategories = [
-  { id: 'cat-starters', name: 'Starters', orderIndex: 0, _count: { foodItems: 2 } },
-  { id: 'cat-main', name: 'Main Course', orderIndex: 1, _count: { foodItems: 2 } },
-  { id: 'cat-desserts', name: 'Desserts', orderIndex: 2, _count: { foodItems: 1 } },
+  { id: 'cat-starters', name: 'Starters', orderIndex: 1, isActive: true, _count: { foodItems: 4 } },
+  { id: 'cat-main', name: 'Main Course', orderIndex: 2, isActive: true, _count: { foodItems: 6 } },
+  { id: 'cat-beverages', name: 'Beverages', orderIndex: 3, isActive: true, _count: { foodItems: 3 } },
+  { id: 'cat-desserts', name: 'Desserts', orderIndex: 4, isActive: true, _count: { foodItems: 2 } },
 ];
 
 export const getCategories = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const restaurantId = req.user?.restaurantId || 'demo-restaurant-id';
+    const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
 
     try {
       const categories = await prisma.category.findMany({
@@ -32,8 +33,7 @@ export const getCategories = async (req: AuthRequest, res: Response): Promise<vo
 
 export const createCategory = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const restaurantId = req.user?.restaurantId || 'demo-restaurant-id';
-
+    const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
     const { name } = req.body;
     if (!name) { res.status(400).json({ message: 'Name is required' }); return; }
 
@@ -49,9 +49,15 @@ export const createCategory = async (req: AuthRequest, res: Response): Promise<v
       });
       res.status(201).json({ category });
     } catch (dbError) {
-      const category = { id: `cat-${Math.random().toString(36).substring(2, 8)}`, name, orderIndex: fallbackCategories.length };
-      fallbackCategories.push(category as any);
-      res.status(201).json({ category });
+      const newCat = {
+        id: `cat-${Date.now()}`,
+        name,
+        orderIndex: fallbackCategories.length + 1,
+        isActive: true,
+        _count: { foodItems: 0 },
+      };
+      fallbackCategories.push(newCat);
+      res.status(201).json({ category: newCat });
     }
   } catch (error) {
     console.error('createCategory error:', error);
@@ -61,12 +67,12 @@ export const createCategory = async (req: AuthRequest, res: Response): Promise<v
 
 export const updateCategory = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const restaurantId = req.user?.restaurantId;
-    const { id } = req.params;
+    const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
+    const id = req.params.id as string;
     const { name, isActive, orderIndex } = req.body;
 
     try {
-      const category = await prisma.category.findFirst({ where: { id, restaurantId: restaurantId! } });
+      const category = await prisma.category.findFirst({ where: { id, restaurantId } });
       if (!category) { res.status(404).json({ message: 'Category not found' }); return; }
 
       const updated = await prisma.category.update({
@@ -91,14 +97,14 @@ export const updateCategory = async (req: AuthRequest, res: Response): Promise<v
 
 export const deleteCategory = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const restaurantId = req.user?.restaurantId;
-    const { id } = req.params;
+    const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
+    const id = req.params.id as string;
 
     try {
-      const category = await prisma.category.findFirst({ where: { id, restaurantId: restaurantId! } });
+      const category = await prisma.category.findFirst({ where: { id, restaurantId } });
       if (!category) { res.status(404).json({ message: 'Category not found' }); return; }
 
-      await prisma.foodItem.deleteMany({ where: { categoryId: id, restaurantId: restaurantId! } });
+      await prisma.foodItem.deleteMany({ where: { categoryId: id, restaurantId } });
       await prisma.category.delete({ where: { id } });
       res.json({ message: 'Category deleted' });
     } catch (dbError) {
@@ -118,7 +124,7 @@ export const deleteCategory = async (req: AuthRequest, res: Response): Promise<v
 
 export const getPublicCategories = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { slug } = req.params;
+    const slug = req.params.slug as string;
     try {
       const restaurant = await prisma.restaurant.findUnique({ where: { slug } });
       if (!restaurant || !restaurant.isActive) { res.status(404).json({ message: 'Restaurant not found' }); return; }
@@ -131,12 +137,7 @@ export const getPublicCategories = async (req: Request, res: Response): Promise<
     } catch (dbError) {
       res.json({
         categories: fallbackCategories,
-        restaurant: {
-          id: 'demo-restaurant-id',
-          name: 'Royal Palace',
-          logoUrl: null,
-          bannerUrl: null,
-        }
+        restaurant: { id: 'demo-restaurant-id', name: 'Royal Palace Dining', logoUrl: null, bannerUrl: null },
       });
     }
   } catch (error) {
