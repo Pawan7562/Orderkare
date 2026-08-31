@@ -2,10 +2,13 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { LayoutDashboard, ShoppingBag, Menu, Grid2X2, Users, BarChart3, Settings, Bell, Search, LogOut } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useOrderNotifications } from '../hooks/useOrderNotifications';
+import { OrderNotificationToast } from '../components/OrderNotificationToast';
 
 export const AdminLayout = () => {
   const location = useLocation();
   const { user, logout } = useAuthStore();
+  const { notifications, dismiss, dismissAll } = useOrderNotifications();
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
@@ -19,6 +22,13 @@ export const AdminLayout = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans">
+      {/* Order Notification Toast Overlay */}
+      <OrderNotificationToast
+        notifications={notifications}
+        onDismiss={dismiss}
+        onDismissAll={dismissAll}
+      />
+
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r border-slate-200/60 flex flex-col hidden md:flex h-screen sticky top-0">
         <div className="p-6 flex items-center space-x-3 border-b border-slate-100">
@@ -85,8 +95,21 @@ export const AdminLayout = () => {
             </div>
           </div>
           <div className="flex items-center space-x-4">
-            <button className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-colors">
+            {/* Bell icon with notification badge */}
+            <button
+              onClick={() => { if (notifications.length > 0) dismissAll(); }}
+              className="relative p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-colors"
+            >
               <Bell className="w-5 h-5" />
+              {notifications.length > 0 && (
+                <motion.span
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-lg shadow-red-500/30"
+                >
+                  {notifications.length > 9 ? '9+' : notifications.length}
+                </motion.span>
+              )}
             </button>
             <div className="w-9 h-9 bg-primary/10 text-primary rounded-xl flex items-center justify-center font-extrabold text-sm border border-primary/20">
               {user?.name?.charAt(0) || 'U'}

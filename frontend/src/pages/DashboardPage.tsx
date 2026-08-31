@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../lib/api';
 import { ShoppingBag, IndianRupee, Clock, Grid2X2, ArrowUpRight, RefreshCcw } from 'lucide-react';
-import { useAuthStore } from '../store/authStore';
-import { io } from 'socket.io-client';
 import { motion } from 'framer-motion';
 
 interface DashboardStats {
@@ -51,29 +49,9 @@ export const DashboardPage = () => {
   useEffect(() => {
     fetchData();
 
-    const socketUrl = import.meta.env.VITE_WS_URL || 'http://localhost:5000';
-    const socket = io(socketUrl);
-    const user = useAuthStore.getState().user;
-
-    if (user?.restaurantId) {
-      socket.emit('join_restaurant', user.restaurantId);
-    }
-
-    socket.on('new_order', (newOrder: RecentOrder) => {
-      try {
-        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-120.wav');
-        audio.play();
-      } catch (e) { /* empty */ }
-
-      setPendingOrders((prev) => [newOrder, ...prev]);
-      setStats((prev) => ({
-        ...prev,
-        todayOrders: prev.todayOrders + 1,
-        pendingOrders: prev.pendingOrders + 1,
-      }));
-    });
-
-    return () => { socket.disconnect(); };
+    // Re-fetch every 30 seconds to stay in sync
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const updateOrderStatus = async (orderId: string, status: string) => {
