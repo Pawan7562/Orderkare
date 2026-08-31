@@ -22,9 +22,19 @@ export const SettingsPage = () => {
 
   const [selectedTable, setSelectedTable] = useState<string>('ALL');
 
-  const menuUrl = restaurant 
-    ? `${window.location.origin}/menu/${restaurant.slug}${selectedTable !== 'ALL' ? `?table=${selectedTable}` : ''}` 
-    : '';
+  const menuUrl = (() => {
+    if (!restaurant?.slug) return '';
+
+    const baseOrigin = import.meta.env.VITE_PUBLIC_APP_URL || window.location.origin;
+    const normalizedOrigin = baseOrigin.replace(/\/$/, '');
+    const url = new URL(`/menu/${restaurant.slug}`, normalizedOrigin);
+
+    if (selectedTable !== 'ALL') {
+      url.searchParams.set('table', selectedTable);
+    }
+
+    return url.toString();
+  })();
 
   const handleCopy = () => {
     navigator.clipboard.writeText(menuUrl);

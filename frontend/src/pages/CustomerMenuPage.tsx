@@ -158,9 +158,16 @@ export const CustomerMenuPage = () => {
   const cart = useCartStore();
 
   useEffect(() => {
-    if (qrTableParam) {
-      setTableNumber(qrTableParam);
+    if (!qrTableParam) {
+      setTableNumber('01');
+      return;
     }
+
+    const normalizedTable = /^\d+$/.test(qrTableParam.trim())
+      ? qrTableParam.trim().padStart(2, '0')
+      : qrTableParam.trim() || '01';
+
+    setTableNumber(normalizedTable);
   }, [qrTableParam]);
 
   useEffect(() => {
