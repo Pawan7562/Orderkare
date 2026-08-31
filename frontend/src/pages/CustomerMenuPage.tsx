@@ -183,7 +183,7 @@ export const CustomerMenuPage = () => {
   useEffect(() => {
     if (!orderPlaced?.id) return;
 
-    const socketUrl = import.meta.env.VITE_WS_URL || 'http://localhost:5000';
+    const socketUrl = import.meta.env.VITE_WS_URL || import.meta.env.VITE_API_URL?.replace(/\/api\/v1\/?$/, '').replace(/\/api\/?$/, '') || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000');
     const socket = io(socketUrl);
 
     socket.on(`order_status_${orderPlaced.id}`, (data: { status: string }) => {
