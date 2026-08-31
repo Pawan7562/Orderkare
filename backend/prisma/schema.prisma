@@ -1,0 +1,128 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  RESTAURANT_ADMIN
+  STAFF
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED
+  PREPARING
+  READY
+  SERVED
+  COMPLETED
+  REJECTED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIAL
+  EXPIRED
+  CANCELLED
+  PENDING
+}
+
+model User {
+  id           String      @id @default(uuid())
+  email        String      @unique
+  password     String
+  name         String?
+  role         Role        @default(RESTAURANT_ADMIN)
+  restaurantId String?
+  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model Restaurant {
+  id             String        @id @default(uuid())
+  slug           String        @unique // Used for QR code URL (e.g., hotel-a-8F3K2)
+  name           String
+  address        String
+  phone          String?
+  logoUrl        String?
+  bannerUrl      String?
+  isActive       Boolean       @default(true)
+  subscription   Subscription?
+  categories     Category[]
+  foodItems      FoodItem[]
+  orders         Order[]
+  users          User[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model Subscription {
+  id           String             @id @default(uuid())
+  status       SubscriptionStatus @default(TRIAL)
+  planName     String
+  validUntil   DateTime
+  restaurantId String             @unique
+  restaurant   Restaurant         @relation(fields: [restaurantId], references: [id])
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+}
+
+model Category {
+  id           String     @id @default(uuid())
+  name         String
+  isActive     Boolean    @default(true)
+  orderIndex   Int        @default(0)
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  foodItems    FoodItem[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model FoodItem {
+  id           String      @id @default(uuid())
+  name         String
+  description  String?
+  price        Float
+  isVeg        Boolean     @default(true)
+  isAvailable  Boolean     @default(true)
+  imageUrl     String?
+  categoryId   String
+  category     Category    @relation(fields: [categoryId], references: [id])
+  restaurantId String
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id])
+  orderItems   OrderItem[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model Order {
+  id           String      @id @default(uuid())
+  customerName String
+  tableNumber  String
+  phoneNumber  String?
+  status       OrderStatus @default(PENDING)
+  totalAmount  Float
+  restaurantId String
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id])
+  items        OrderItem[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model OrderItem {
+  id         String   @id @default(uuid())
+  quantity   Int
+  price      Float    // Price at the time of order
+  foodItemId String
+  foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
