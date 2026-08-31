@@ -54,6 +54,8 @@ const fallbackFoodItems = new Map<string, any>([
   ['item-6', { id: 'item-6', name: 'Chocolate Brownie', price: 190 }],
 ]);
 
+const feedbackStore: any[] = [];
+
 export const createOrder = async (req: Request, res: Response): Promise<void> => {
   try {
     const slug = req.params.slug as string;
@@ -251,6 +253,68 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response): Promis
     }
   } catch (error) {
     console.error('updateOrderStatus error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const submitOrderFeedback = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { rating, comment, customerName } = req.body || {};
+    const parsedRating = Number(rating);
+
+    if (!id || Number.isNaN(parsedRating) || parsedRating < 1 || parsedRating > 5) {
+      res.status(400).json({ message: 'Valid rating is required.' });
+      return;
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { items: { include: { foodItem: true } } },
+    }).catch(() => fallbackOrders.find((o) => o.id === id) || null);
+
+    const restaurantId = order?.restaurantId || 'demo-restaurant-id';
+    const foodSummary = order?.items?.map((item: any) => item.foodItem?.name || item.name).join(', ') || 'Ordered food';
+
+    const payload = {
+      id: `fb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      orderId: id,
+      restaurantId,
+      customerName: customerName || order?.customerName || 'Guest',
+      foodName: foodSummary,
+      rating: parsedRating,
+      comment: comment || '',
+      createdAt: new Date().toISOString(),
+    };
+
+    feedbackStore.push(payload);
+
+    res.status(201).json({ feedback: payload, message: 'Feedback submitted successfully.' });
+  } catch (error) {
+    console.error('submitOrderFeedback error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const getRestaurantFeedback = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const restaurantId = (req.user?.restaurantId as string) || 'demo-restaurant-id';
+    const feedback = feedbackStore
+      .filter((entry) => entry.restaurantId === restaurantId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 20);
+
+    const averageRating = feedback.length
+      ? (feedback.reduce((total, entry) => total + Number(entry.rating || 0), 0) / feedback.length).toFixed(1)
+      : '0.0';
+
+    res.json({
+      feedback,
+      averageRating,
+      totalRatings: feedback.length,
+    });
+  } catch (error) {
+    console.error('getRestaurantFeedback error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };

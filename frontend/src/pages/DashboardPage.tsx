@@ -23,19 +23,30 @@ interface RecentOrder {
   items: { foodItem: { name: string }; quantity: number }[];
 }
 
+interface FeedbackItem {
+  id: string;
+  customerName: string;
+  foodName: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+}
+
 export const DashboardPage = () => {
   const [stats, setStats] = useState<DashboardStats>({
     todayOrders: 0, todaySales: 0, pendingOrders: 0, activeTables: 0, totalTables: 20
   });
   const [pendingOrders, setPendingOrders] = useState<RecentOrder[]>([]);
   const [preparingOrders, setPreparingOrders] = useState<RecentOrder[]>([]);
+  const [recentFeedback, setRecentFeedback] = useState<FeedbackItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
     try {
-      const [statsRes, ordersRes] = await Promise.all([
+      const [statsRes, ordersRes, feedbackRes] = await Promise.all([
         api.get('/restaurants/dashboard/stats'),
         api.get('/orders?status=PENDING,ACCEPTED,PREPARING'),
+        api.get('/orders/feedback'),
       ]);
       const d = statsRes.data || {};
       setStats({
@@ -48,6 +59,7 @@ export const DashboardPage = () => {
       const orders = ordersRes.data?.orders || [];
       setPendingOrders(orders.filter((o: RecentOrder) => o.status === 'PENDING'));
       setPreparingOrders(orders.filter((o: RecentOrder) => o.status === 'PREPARING' || o.status === 'ACCEPTED'));
+      setRecentFeedback(feedbackRes.data?.feedback || []);
     } catch (err) {
       // Silently fail — server may not have data yet
     } finally {
@@ -287,6 +299,30 @@ export const DashboardPage = () => {
                   <span className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full ${station.color}`}>
                     {station.status}
                   </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-slate-200/60 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-900 text-sm">Food Feedback</h3>
+              <span className="bg-amber-50 text-amber-600 text-[10px] font-bold px-2 py-1 rounded-full">{recentFeedback.length}</span>
+            </div>
+            <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
+              {recentFeedback.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-slate-400 text-sm font-medium">No customer feedback yet</p>
+                </div>
+              ) : recentFeedback.map((feedback) => (
+                <div key={feedback.id} className="bg-slate-50 rounded-2xl p-3 border border-slate-100">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-slate-800">{feedback.customerName}</span>
+                    <span className="text-[10px] text-amber-600 font-bold">{'★'.repeat(feedback.rating)}{feedback.rating < 5 ? '☆'.repeat(5 - feedback.rating) : ''}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mb-1">{feedback.foodName}</p>
+                  <p className="text-[11px] text-slate-600 leading-relaxed">{feedback.comment || 'No comment provided.'}</p>
+                  <p className="text-[10px] text-slate-400 mt-1">{timeAgo(feedback.createdAt)}</p>
                 </div>
               ))}
             </div>

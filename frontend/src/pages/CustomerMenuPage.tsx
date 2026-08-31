@@ -317,9 +317,21 @@ export const CustomerMenuPage = () => {
     );
 
     if (isDelivered) {
-      const handleFeedbackSubmit = () => {
+      const handleFeedbackSubmit = async () => {
         const feedbackKey = `order-feedback-${orderPlaced.id}`;
-        localStorage.setItem(feedbackKey, JSON.stringify({ rating: feedbackRating, text: feedbackText }));
+        const payload = {
+          rating: feedbackRating,
+          comment: feedbackText,
+          customerName: customerName || 'Guest',
+        };
+
+        try {
+          await axios.post(`${API}/orders/${orderPlaced.id}/feedback`, payload);
+        } catch (error) {
+          localStorage.setItem(feedbackKey, JSON.stringify(payload));
+        }
+
+        localStorage.setItem(feedbackKey, JSON.stringify(payload));
         setFeedbackSubmitted(true);
       };
 
