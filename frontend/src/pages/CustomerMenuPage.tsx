@@ -154,6 +154,9 @@ export const CustomerMenuPage = () => {
   const [loading, setLoading] = useState(true);
   const [orderError, setOrderError] = useState('');
   const [placingOrder, setPlacingOrder] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
   const cart = useCartStore();
 
@@ -231,6 +234,22 @@ export const CustomerMenuPage = () => {
   const tax = subtotal * 0.05;
   const total = subtotal + tax;
 
+  const handleFeedbackSubmit = () => {
+    const trimmedComment = feedbackText.trim();
+    setOrderPlaced((prev: any) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        feedback: {
+          rating: feedbackRating,
+          comment: trimmedComment,
+          submittedAt: new Date().toISOString(),
+        },
+      };
+    });
+    setFeedbackSubmitted(true);
+  };
+
   const handlePlaceOrder = async () => {
     if (!customerName.trim()) {
       setOrderError('Please enter your name');
@@ -289,10 +308,17 @@ export const CustomerMenuPage = () => {
 
   // --- LIVE ORDER TRACKING SCREEN ---
   if (orderPlaced) {
+    const canLeaveFeedback = ['SERVED', 'COMPLETED'].includes(orderPlaced.status);
     const currentStepIndex = Math.max(
       0,
       ORDER_STEPS.findIndex((s) => s.status === orderPlaced.status)
     );
+
+    if (orderPlaced.feedback && !feedbackSubmitted) {
+      setFeedbackRating(orderPlaced.feedback.rating || 5);
+      setFeedbackText(orderPlaced.feedback.comment || '');
+      setFeedbackSubmitted(true);
+    }
 
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-between max-w-md mx-auto relative overflow-hidden font-sans">
@@ -382,6 +408,50 @@ export const CustomerMenuPage = () => {
               <span className="text-emerald-400 text-base font-mono">₹{orderPlaced.totalAmount}</span>
             </div>
           </div>
+
+          {canLeaveFeedback && (
+            <div className="mt-6 bg-slate-900/90 backdrop-blur-md rounded-3xl border border-slate-800 p-5 shadow-2xl">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Food Feedback</h3>
+
+              {!feedbackSubmitted ? (
+                <>
+                  <div className="flex items-center gap-2 mb-3">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setFeedbackRating(star)}
+                        className={`text-2xl transition-transform ${star <= feedbackRating ? 'scale-110 text-amber-400' : 'text-slate-600 hover:text-amber-300'}`}
+                        aria-label={`Rate ${star} stars`}
+                      >
+                        ★
+                      </button>
+                    ))}
+                  </div>
+
+                  <textarea
+                    value={feedbackText}
+                    onChange={(e) => setFeedbackText(e.target.value)}
+                    placeholder="Tell us how your food was today..."
+                    rows={3}
+                    className="w-full bg-slate-950/70 border border-slate-700 rounded-2xl px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-500 resize-none outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={handleFeedbackSubmit}
+                    className="mt-3 w-full bg-gradient-to-r from-primary to-emerald-500 text-white font-bold py-3 rounded-2xl shadow-lg shadow-primary/20 hover:opacity-95 transition-all"
+                  >
+                    Submit Feedback
+                  </button>
+                </>
+              ) : (
+                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300">
+                  Thanks for the feedback! Your {feedbackRating}-star review has been saved.
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Action Bottom */}
