@@ -275,11 +275,17 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
         prisma.foodItem.count({ where: { restaurantId } }),
       ]);
 
+      const rev = totalRevenueAgg._sum.totalAmount || 0;
+
       res.json({
         todayOrders: totalOrdersToday,
-        todayRevenue: totalRevenueAgg._sum.totalAmount || 0,
+        todayRevenue: rev,
+        todaySales: rev,
         activeOrders: activeOrdersCount,
+        pendingOrders: activeOrdersCount,
         menuItems: menuItemsCount,
+        activeTables: 0,
+        totalTables: 20
       });
     } catch (dbError) {
       console.warn('⚠️ Database offline. Calculating mock dashboard stats.');
@@ -287,8 +293,12 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
       res.json({
         todayOrders: fallbackOrders.length + 14,
         todayRevenue: totalAmount + 3480,
+        todaySales: totalAmount + 3480,
         activeOrders: fallbackOrders.filter(o => o.status !== 'COMPLETED' && o.status !== 'REJECTED').length,
+        pendingOrders: fallbackOrders.filter(o => o.status !== 'COMPLETED' && o.status !== 'REJECTED').length,
         menuItems: 18,
+        activeTables: 4,
+        totalTables: 20
       });
     }
   } catch (error) {

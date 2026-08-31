@@ -37,8 +37,15 @@ export const DashboardPage = () => {
         api.get('/restaurants/dashboard/stats'),
         api.get('/orders?status=PENDING,ACCEPTED,PREPARING'),
       ]);
-      setStats(statsRes.data);
-      const orders = ordersRes.data.orders || [];
+      const d = statsRes.data || {};
+      setStats({
+        todayOrders: d.todayOrders || 0,
+        todaySales: d.todaySales ?? d.todayRevenue ?? 0,
+        pendingOrders: d.pendingOrders ?? d.activeOrders ?? 0,
+        activeTables: d.activeTables || 0,
+        totalTables: d.totalTables || 20,
+      });
+      const orders = ordersRes.data?.orders || [];
       setPendingOrders(orders.filter((o: RecentOrder) => o.status === 'PENDING'));
       setPreparingOrders(orders.filter((o: RecentOrder) => o.status === 'PREPARING' || o.status === 'ACCEPTED'));
     } catch (err) {
@@ -95,7 +102,7 @@ export const DashboardPage = () => {
 
   const statCards = [
     { label: "Today's Orders", value: stats.todayOrders, icon: ShoppingBag, color: 'bg-primary/10 text-primary', trend: '+8.2%' },
-    { label: "Today's Sales", value: `₹${stats.todaySales.toLocaleString()}`, icon: IndianRupee, color: 'bg-blue-50 text-blue-600', trend: '+12.4%' },
+    { label: "Today's Sales", value: `₹${(stats.todaySales || 0).toLocaleString()}`, icon: IndianRupee, color: 'bg-blue-50 text-blue-600', trend: '+12.4%' },
     { label: 'Pending Orders', value: stats.pendingOrders, icon: Clock, color: 'bg-amber-50 text-amber-600', highlight: true, trend: '' },
     { label: 'Active Tables', value: `${stats.activeTables}/${stats.totalTables}`, icon: Grid2X2, color: 'bg-emerald-50 text-emerald-600', trend: '' },
   ];
