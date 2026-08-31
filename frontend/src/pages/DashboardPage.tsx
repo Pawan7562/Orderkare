@@ -39,6 +39,7 @@ export const DashboardPage = () => {
   const [pendingOrders, setPendingOrders] = useState<RecentOrder[]>([]);
   const [preparingOrders, setPreparingOrders] = useState<RecentOrder[]>([]);
   const [recentFeedback, setRecentFeedback] = useState<FeedbackItem[]>([]);
+  const [notification, setNotification] = useState<{ id: string; title: string; message: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
@@ -70,6 +71,10 @@ export const DashboardPage = () => {
   useEffect(() => {
     fetchData();
 
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => undefined);
+    }
+
     const socketUrl = import.meta.env.VITE_WS_URL || (import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/v1\/?$/, '').replace(/\/api\/?$/, '') : 'https://orderkare-3.onrender.com');
     const socket = io(socketUrl);
     const user = useAuthStore.getState().user;
@@ -83,6 +88,21 @@ export const DashboardPage = () => {
         const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-120.wav');
         audio.play();
       } catch (e) { /* empty */ }
+
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('New order received', {
+          body: `${newOrder.customerName} • Table ${newOrder.tableNumber} • ₹${newOrder.totalAmount}`,
+          tag: `order-${newOrder.id}`,
+        });
+      }
+
+      setNotification({
+        id: newOrder.id,
+        title: 'New order received',
+        message: `${newOrder.customerName} from table ${newOrder.tableNumber} just placed an order`,
+      });
+
+      setTimeout(() => setNotification(null), 5000);
 
       setPendingOrders((prev) => [newOrder, ...prev]);
       setStats((prev) => ({
@@ -141,6 +161,23 @@ export const DashboardPage = () => {
 
   return (
     <motion.div className="space-y-7" variants={stagger.container} initial="hidden" animate="show">
+      {notification && (
+        <motion.div
+          initial={{ opacity: 0, y: -18 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -18 }}
+          className="fixed top-4 right-4 z-50 max-w-sm w-full rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-lg shadow-emerald-100"
+        >
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white text-sm font-bold">✓</div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-emerald-800">{notification.title}</p>
+              <p className="text-xs text-emerald-700 mt-1">{notification.message}</p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Header */}
       <motion.div variants={stagger.item} className="flex items-center justify-between">
         <div>
