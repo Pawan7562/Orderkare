@@ -31,11 +31,6 @@ export const DashboardPage = () => {
   const [preparingOrders, setPreparingOrders] = useState<RecentOrder[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const mergeLiveOrder = (orders: RecentOrder[], incoming: RecentOrder) => {
-    const deduped = orders.filter((order) => order.id !== incoming.id);
-    return [incoming, ...deduped];
-  };
-
   const fetchData = async () => {
     try {
       const [statsRes, ordersRes] = await Promise.all([
@@ -51,10 +46,8 @@ export const DashboardPage = () => {
         totalTables: d.totalTables || 20,
       });
       const orders = ordersRes.data?.orders || [];
-      const uniquePending = orders.filter((o: RecentOrder) => o.status === 'PENDING');
-      const uniquePreparing = orders.filter((o: RecentOrder) => o.status === 'PREPARING' || o.status === 'ACCEPTED');
-      setPendingOrders(uniquePending);
-      setPreparingOrders(uniquePreparing);
+      setPendingOrders(orders.filter((o: RecentOrder) => o.status === 'PENDING'));
+      setPreparingOrders(orders.filter((o: RecentOrder) => o.status === 'PREPARING' || o.status === 'ACCEPTED'));
     } catch (err) {
       // Silently fail — server may not have data yet
     } finally {
@@ -79,7 +72,7 @@ export const DashboardPage = () => {
         audio.play();
       } catch (e) { /* empty */ }
 
-      setPendingOrders((prev) => mergeLiveOrder(prev, newOrder));
+      setPendingOrders((prev) => [newOrder, ...prev]);
       setStats((prev) => ({
         ...prev,
         todayOrders: prev.todayOrders + 1,
