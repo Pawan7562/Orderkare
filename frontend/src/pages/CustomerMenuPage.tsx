@@ -154,6 +154,9 @@ export const CustomerMenuPage = () => {
   const [loading, setLoading] = useState(true);
   const [orderError, setOrderError] = useState('');
   const [placingOrder, setPlacingOrder] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
   const cart = useCartStore();
 
@@ -192,6 +195,23 @@ export const CustomerMenuPage = () => {
     };
     fetchMenu();
   }, [slug]);
+
+  useEffect(() => {
+    if (!orderPlaced?.id) return;
+
+    const feedbackKey = `order-feedback-${orderPlaced.id}`;
+    const savedFeedback = localStorage.getItem(feedbackKey);
+    if (savedFeedback) {
+      try {
+        const parsed = JSON.parse(savedFeedback);
+        if (parsed.rating) setFeedbackRating(parsed.rating);
+        if (parsed.text) setFeedbackText(parsed.text);
+        setFeedbackSubmitted(true);
+      } catch {
+        // ignore malformed saved feedback
+      }
+    }
+  }, [orderPlaced?.id]);
 
   useEffect(() => {
     if (!orderPlaced?.id) return;
@@ -289,10 +309,125 @@ export const CustomerMenuPage = () => {
 
   // --- LIVE ORDER TRACKING SCREEN ---
   if (orderPlaced) {
+    const finalDeliveryStatuses = ['SERVED', 'COMPLETED', 'DELIVERED', 'RECEIVED'];
+    const isDelivered = finalDeliveryStatuses.includes(String(orderPlaced.status || '').toUpperCase());
     const currentStepIndex = Math.max(
       0,
       ORDER_STEPS.findIndex((s) => s.status === orderPlaced.status)
     );
+
+    if (isDelivered) {
+      const handleFeedbackSubmit = () => {
+        const feedbackKey = `order-feedback-${orderPlaced.id}`;
+        localStorage.setItem(feedbackKey, JSON.stringify({ rating: feedbackRating, text: feedbackText }));
+        setFeedbackSubmitted(true);
+      };
+
+      return (
+        <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-between max-w-md mx-auto relative overflow-hidden font-sans">
+          <div className="absolute -top-32 -left-32 w-80 h-80 bg-primary/20 rounded-full blur-3xl" />
+          <div className="absolute -bottom-32 -right-32 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl" />
+
+          <div className="p-6 relative z-10">
+            <div className="flex items-center justify-between mb-6">
+              <span className="text-xs uppercase tracking-widest text-emerald-400 font-bold bg-emerald-950/80 border border-emerald-800 px-3 py-1 rounded-full flex items-center gap-1.5">
+                <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" /> Food Delivered
+              </span>
+              <span className="text-xs font-mono text-slate-400">Table #{orderPlaced.tableNumber}</span>
+            </div>
+
+            <div className="text-center my-4">
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="w-20 h-20 bg-primary/10 border border-primary/30 rounded-3xl mx-auto flex items-center justify-center text-primary mb-4 shadow-lg shadow-primary/10"
+              >
+                <CheckCircle2 className="w-10 h-10" />
+              </motion.div>
+              <h1 className="text-2xl font-extrabold text-white tracking-tight">Enjoyed your meal?</h1>
+              <p className="text-slate-400 text-sm mt-1">Order #{orderPlaced.id.slice(-6)} • Please share your feedback</p>
+            </div>
+
+            <div className="bg-slate-900/90 backdrop-blur-md rounded-3xl border border-slate-800 p-5 shadow-2xl my-6 space-y-5">
+              <div>
+                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Rate your experience</h2>
+                <div className="flex items-center justify-between gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setFeedbackRating(star)}
+                      className={`flex-1 rounded-2xl border h-12 text-lg font-bold transition-all ${
+                        feedbackRating >= star
+                          ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md shadow-amber-500/20'
+                          : 'bg-slate-800 text-slate-500 border-slate-700 hover:border-slate-500'
+                      }`}
+                      aria-label={`Rate ${star} out of 5`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Feedback & suggestions
+                </label>
+                <textarea
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  rows={4}
+                  placeholder="Tell us how the food, service, and experience were..."
+                  className="w-full bg-slate-950/80 border border-slate-700 rounded-2xl text-sm text-slate-200 px-3 py-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
+                />
+              </div>
+
+              {feedbackSubmitted && (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded-2xl px-3 py-2 text-xs font-medium">
+                  Thank you! Your feedback has been recorded.
+                </div>
+              )}
+            </div>
+
+            <div className="bg-slate-900/60 rounded-3xl border border-slate-800/80 p-5 space-y-3">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Order Items</h3>
+              <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                {orderPlaced.items.map((item: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between text-xs text-slate-300">
+                    <span>
+                      <strong className="text-primary">{item.quantity}x</strong> {item.foodItem?.name || item.name}
+                    </span>
+                    <span className="font-mono text-slate-400">₹{(item.price || 0) * item.quantity}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="pt-3 border-t border-slate-800 flex justify-between items-center text-sm font-bold">
+                <span className="text-slate-400">Total Paid</span>
+                <span className="text-emerald-400 text-base font-mono">₹{orderPlaced.totalAmount}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 pt-0 relative z-10 space-y-3">
+            <button
+              onClick={handleFeedbackSubmit}
+              className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-3.5 rounded-2xl text-sm flex items-center justify-center space-x-2 transition-all"
+            >
+              <Star className="w-4 h-4 fill-white" />
+              <span>{feedbackSubmitted ? 'Update Feedback' : 'Submit Feedback & Rating'}</span>
+            </button>
+            <button
+              onClick={() => setOrderPlaced(null)}
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-2xl border border-slate-700 text-sm flex items-center justify-center space-x-2 transition-all"
+            >
+              <RotateCcw className="w-4 h-4 text-primary" />
+              <span>Order Again</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-between max-w-md mx-auto relative overflow-hidden font-sans">
