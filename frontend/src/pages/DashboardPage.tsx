@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import api from '../lib/api';
 import { ShoppingBag, IndianRupee, Clock, Grid2X2, ArrowUpRight, RefreshCcw } from 'lucide-react';
+import { useAuthStore } from '../store/authStore';
+import { createSocket } from '../lib/socket';
 import { motion } from 'framer-motion';
 
 interface DashboardStats {
   todayOrders: number;
-  todayRevenue: number;
-  activeOrders: number;
-  menuItems: number;
+  todaySales: number;
+  pendingOrders: number;
+  activeTables: number;
+  totalTables: number;
 }
 
 interface RecentOrder {
@@ -22,7 +25,7 @@ interface RecentOrder {
 
 export const DashboardPage = () => {
   const [stats, setStats] = useState<DashboardStats>({
-    todayOrders: 0, todayRevenue: 0, activeOrders: 0, menuItems: 0
+    todayOrders: 0, todaySales: 0, pendingOrders: 0, activeTables: 0, totalTables: 20
   });
   const [pendingOrders, setPendingOrders] = useState<RecentOrder[]>([]);
   const [preparingOrders, setPreparingOrders] = useState<RecentOrder[]>([]);
@@ -48,9 +51,31 @@ export const DashboardPage = () => {
   useEffect(() => {
     fetchData();
 
-    // Re-fetch every 30 seconds to stay in sync
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+    const socket = createSocket();
+    const user = useAuthStore.getState().user;
+    const restaurantId = user?.restaurantId || 'demo-restaurant-id';
+
+    socket.emit('join_restaurant', restaurantId);
+
+    socket.on('new_order', (newOrder: RecentOrder) => {
+      try {
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-120.wav');
+        audio.play();
+      } catch (e) { /* empty */ }
+
+      setPendingOrders((prev) => [newOrder, ...prev]);
+      setStats((prev) => ({
+        ...prev,
+        todayOrders: prev.todayOrders + 1,
+        pendingOrders: prev.pendingOrders + 1,
+      }));
+    });
+
+    socket.on('order_updated', () => {
+      fetchData();
+    });
+
+    return () => { socket.disconnect(); };
   }, []);
 
   const updateOrderStatus = async (orderId: string, status: string) => {
@@ -71,10 +96,10 @@ export const DashboardPage = () => {
   };
 
   const statCards = [
-    { label: "Today's Orders", value: stats.todayOrders ?? 0, icon: ShoppingBag, color: 'bg-primary/10 text-primary', trend: '+8.2%' },
-    { label: "Today's Revenue", value: `₹${(stats.todayRevenue ?? 0).toLocaleString()}`, icon: IndianRupee, color: 'bg-blue-50 text-blue-600', trend: '+12.4%' },
-    { label: 'Active Orders', value: stats.activeOrders ?? 0, icon: Clock, color: 'bg-amber-50 text-amber-600', highlight: true, trend: '' },
-    { label: 'Menu Items', value: stats.menuItems ?? 0, icon: Grid2X2, color: 'bg-emerald-50 text-emerald-600', trend: '' },
+    { label: "Today's Orders", value: stats.todayOrders, icon: ShoppingBag, color: 'bg-primary/10 text-primary', trend: '+8.2%' },
+    { label: "Today's Sales", value: `₹${stats.todaySales.toLocaleString()}`, icon: IndianRupee, color: 'bg-blue-50 text-blue-600', trend: '+12.4%' },
+    { label: 'Pending Orders', value: stats.pendingOrders, icon: Clock, color: 'bg-amber-50 text-amber-600', highlight: true, trend: '' },
+    { label: 'Active Tables', value: `${stats.activeTables}/${stats.totalTables}`, icon: Grid2X2, color: 'bg-emerald-50 text-emerald-600', trend: '' },
   ];
 
   const stagger = {

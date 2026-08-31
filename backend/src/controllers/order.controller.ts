@@ -237,13 +237,13 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response): Promis
       if (!order) { res.status(404).json({ message: 'Order not found' }); return; }
 
       const updated = await prisma.order.update({ where: { id }, data: { status: status as OrderStatus } });
-      notifyOrderStatusUpdate(id, status);
+      notifyOrderStatusUpdate(id, status, restaurantId);
       res.json({ order: updated });
     } catch (dbError) {
       const orderIdx = fallbackOrders.findIndex(o => o.id === id);
       if (orderIdx !== -1) {
         fallbackOrders[orderIdx].status = status;
-        notifyOrderStatusUpdate(id, status);
+        notifyOrderStatusUpdate(id, status, restaurantId);
         res.json({ order: fallbackOrders[orderIdx] });
       } else {
         res.status(404).json({ message: 'Order not found' });
