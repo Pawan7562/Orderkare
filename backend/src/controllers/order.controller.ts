@@ -232,7 +232,13 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response): Promis
   try {
     const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
     const id = req.params.id as string;
-    const status = req.body.status as string;
+    const rawStatus = req.body.status;
+    const status = typeof rawStatus === 'string' ? rawStatus : Array.isArray(rawStatus) ? rawStatus[0] : '';
+
+    if (!status) {
+      res.status(400).json({ message: 'Order status is required' });
+      return;
+    }
 
     try {
       const order = await prisma.order.findFirst({ where: { id, restaurantId } });
@@ -259,7 +265,8 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response): Promis
 
 export const submitOrderFeedback = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
+    const idParam = req.params.id;
+    const id = typeof idParam === 'string' ? idParam : Array.isArray(idParam) ? idParam[0] : '';
     const { rating, comment, customerName } = req.body || {};
     const parsedRating = Number(rating);
 
