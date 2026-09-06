@@ -95,24 +95,54 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         };
       });
 
-      const order = await prisma.order.create({
-        data: {
+      const openOrder = await prisma.order.findFirst({
+        where: {
+          restaurantId: restaurant.id,
           customerName,
           tableNumber,
-          phoneNumber,
-          totalAmount,
-          restaurantId: restaurant.id,
-          status: 'PENDING',
-          items: {
-            create: orderItemsData,
-          },
+          status: { notIn: ['PAID', 'COMPLETED', 'REJECTED'] },
         },
-        include: {
-          items: {
-            include: { foodItem: true },
-          },
-        },
+        include: { items: true },
+        orderBy: { createdAt: 'desc' },
       });
+
+      let order;
+      if (openOrder) {
+        const existingItems = new Map(openOrder.items.map((item) => [item.foodItemId, item]));
+        await prisma.$transaction(
+          orderItemsData.map((item) => {
+            const existing = existingItems.get(item.foodItemId);
+            return existing
+              ? prisma.orderItem.update({
+                  where: { id: existing.id },
+                  data: { quantity: existing.quantity + item.quantity },
+                })
+              : prisma.orderItem.create({ data: { ...item, orderId: openOrder.id } });
+          })
+        );
+
+        order = await prisma.order.update({
+          where: { id: openOrder.id },
+          data: {
+            totalAmount: openOrder.totalAmount + totalAmount,
+            phoneNumber: phoneNumber || openOrder.phoneNumber,
+          },
+          include: { items: { include: { foodItem: true } } },
+        });
+      } else {
+        order = await prisma.order.create({
+          data: {
+            customerName,
+            tableNumber,
+            phoneNumber,
+            totalAmount,
+            restaurantId: restaurant.id,
+            status: 'PENDING',
+            items: { create: orderItemsData },
+          },
+          include: { items: { include: { foodItem: true } } },
+        });
+      }
 
       notifyNewOrder(restaurant.id, order);
       res.status(201).json({ order });
@@ -129,6 +159,31 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
           foodItem: { name: food.name, price: food.price },
         };
       });
+
+      const openOrder = fallbackOrders.find(
+        (order) =>
+          order.customerName === customerName &&
+          order.tableNumber === tableNumber &&
+          !['PAID', 'COMPLETED', 'REJECTED'].includes(order.status)
+      );
+
+      if (openOrder) {
+        hydratedItems.forEach((item) => {
+          const existing = openOrder.items.find(
+            (existingItem: any) => existingItem.foodItem.name === item.foodItem.name
+          );
+          if (existing) {
+            existing.quantity += item.quantity;
+          } else {
+            openOrder.items.push(item);
+          }
+        });
+        openOrder.totalAmount += totalAmount;
+        if (phoneNumber) openOrder.phoneNumber = phoneNumber;
+        notifyNewOrder('demo-restaurant-id', openOrder);
+        res.status(201).json({ order: openOrder });
+        return;
+      }
 
       const newOrder = {
         id: `ord-${Date.now()}`,
@@ -181,6 +236,34 @@ export const getOrderStatus = async (req: Request, res: Response): Promise<void>
   } catch (error) {
     console.error('getOrderStatus error:', error);
     res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const completeOrderPayment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+
+    try {
+      const order = await prisma.order.update({
+        where: { id },
+        data: { status: 'COMPLETED' },
+        include: { items: { include: { foodItem: true } } },
+      });
+      notifyOrderStatusUpdate(id, 'COMPLETED');
+      res.json({ order });
+    } catch (dbError) {
+      const order = fallbackOrders.find((item) => item.id === id);
+      if (!order) {
+        res.status(404).json({ message: 'Order not found' });
+        return;
+      }
+      order.status = 'COMPLETED';
+      notifyOrderStatusUpdate(id, 'COMPLETED');
+      res.json({ order });
+    }
+  } catch (error) {
+    console.error('completeOrderPayment error:', error);
+    res.status(500).json({ message: 'Failed to complete payment' });
   }
 };
 

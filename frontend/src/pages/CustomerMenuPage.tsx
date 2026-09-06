@@ -154,6 +154,8 @@ export const CustomerMenuPage = () => {
   const [loading, setLoading] = useState(true);
   const [orderError, setOrderError] = useState('');
   const [placingOrder, setPlacingOrder] = useState(false);
+  const [completingPayment, setCompletingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
   const [feedbackRating, setFeedbackRating] = useState(5);
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
@@ -298,6 +300,20 @@ export const CustomerMenuPage = () => {
     }
   };
 
+  const handleCompletePayment = async () => {
+    if (!orderPlaced?.id) return;
+    setCompletingPayment(true);
+    setPaymentError('');
+    try {
+      const res = await axios.post(`${API}/orders/${orderPlaced.id}/pay`);
+      setOrderPlaced(res.data.order);
+    } catch (err) {
+      setPaymentError('Payment could not be completed. Please try again.');
+    } finally {
+      setCompletingPayment(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center space-y-4">
@@ -309,7 +325,7 @@ export const CustomerMenuPage = () => {
 
   // --- LIVE ORDER TRACKING SCREEN ---
   if (orderPlaced) {
-    const finalDeliveryStatuses = ['SERVED', 'COMPLETED', 'DELIVERED', 'RECEIVED'];
+    const finalDeliveryStatuses = ['COMPLETED', 'DELIVERED', 'RECEIVED'];
     const isDelivered = finalDeliveryStatuses.includes(String(orderPlaced.status || '').toUpperCase());
     const currentStepIndex = Math.max(
       0,
@@ -532,7 +548,22 @@ export const CustomerMenuPage = () => {
         </div>
 
         {/* Action Bottom */}
-        <div className="p-6 pt-0 relative z-10">
+        <div className="p-6 pt-0 relative z-10 space-y-3">
+          {orderPlaced.status === 'SERVED' && paymentError && (
+            <div className="bg-red-500/10 border border-red-500/30 text-red-300 rounded-2xl px-3 py-2 text-xs font-medium">
+              {paymentError}
+            </div>
+          )}
+          {orderPlaced.status === 'SERVED' && (
+            <button
+              onClick={handleCompletePayment}
+              disabled={completingPayment}
+              className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3.5 rounded-2xl text-sm flex items-center justify-center space-x-2 transition-all disabled:opacity-50"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{completingPayment ? 'Completing Payment...' : 'Complete Payment'}</span>
+            </button>
+          )}
           <button
             onClick={() => setOrderPlaced(null)}
             className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-2xl border border-slate-700 text-sm flex items-center justify-center space-x-2 transition-all"
