@@ -228,40 +228,102 @@ export const getOrders = async (req: AuthRequest, res: Response): Promise<void> 
   }
 };
 
-export const updateOrderStatus = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
-    const id = req.params.id as string;
-    const rawStatus = req.body.status;
-    const status = typeof rawStatus === 'string' ? rawStatus : Array.isArray(rawStatus) ? rawStatus[0] : '';
 
-    if (!status) {
-      res.status(400).json({ message: 'Order status is required' });
+export const updateOrderStatus = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const restaurantId = req.user?.restaurantId as string;
+    const id = req.params.id as string;
+
+    const rawStatus = req.body.status;
+    const status =
+      typeof rawStatus === 'string'
+        ? rawStatus
+        : Array.isArray(rawStatus)
+          ? rawStatus[0]
+          : '';
+
+    // Validate status
+    const validStatuses = [
+  'PENDING',
+  'ACCEPTED',
+  'PREPARING',
+  'READY',
+  'SERVED',
+  'PAID',
+  'COMPLETED',
+  'REJECTED',
+] as const;
+
+   if (!status || !validStatuses.includes(status as (typeof validStatuses)[number])) {
+      res.status(400).json({
+        message: 'Invalid order status',
+      });
       return;
     }
 
-    try {
-      const order = await prisma.order.findFirst({ where: { id, restaurantId } });
-      if (!order) { res.status(404).json({ message: 'Order not found' }); return; }
-
-      const updated = await prisma.order.update({ where: { id }, data: { status: status as OrderStatus } });
-      notifyOrderStatusUpdate(id, status);
-      res.json({ order: updated });
-    } catch (dbError) {
-      const orderIdx = fallbackOrders.findIndex(o => o.id === id);
-      if (orderIdx !== -1) {
-        fallbackOrders[orderIdx].status = status;
-        notifyOrderStatusUpdate(id, status);
-        res.json({ order: fallbackOrders[orderIdx] });
-      } else {
-        res.status(404).json({ message: 'Order not found' });
-      }
+    if (!restaurantId) {
+      res.status(401).json({
+        message: 'Restaurant not found',
+      });
+      return;
     }
+
+
+    console.log('UPDATE STATUS DEBUG:', {
+  id,
+  restaurantId,
+  status,
+});
+
+const orderById = await prisma.order.findUnique({
+  where: { id },
+});
+
+console.log('ORDER BY ID DEBUG:', orderById);
+
+    // Find order belonging to this restaurant
+    const order = await prisma.order.findFirst({
+      where: {
+        id,
+        restaurantId,
+      },
+    });
+
+    if (!order) {
+      res.status(404).json({
+        message: 'Order not found',
+      });
+      return;
+    }
+
+    // Update status
+    const updated = await prisma.order.update({
+      where: {
+        id,
+      },
+      data: {
+        status: status as OrderStatus,
+      },
+    });
+
+    // Notify connected clients
+    notifyOrderStatusUpdate(id, status);
+
+    res.status(200).json({
+      order: updated,
+    });
   } catch (error) {
     console.error('updateOrderStatus error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+
+    res.status(500).json({
+      message: 'Failed to update order status',
+    });
   }
 };
+
 
 export const submitOrderFeedback = async (req: Request, res: Response): Promise<void> => {
   try {

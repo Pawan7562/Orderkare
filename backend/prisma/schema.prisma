@@ -9,6 +9,101 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model User {
+  id           String      @id @default(uuid())
+  email        String      @unique
+  password     String
+  name         String
+  role         Role        @default(RESTAURANT_ADMIN)
+  restaurantId String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @default(now()) @updatedAt
+  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id], onUpdate: NoAction)
+}
+
+model Restaurant {
+  id                 String             @id @default(uuid())
+  name               String
+  slug               String             @unique
+  logoUrl            String?
+  bannerUrl          String?
+  address            String?
+  phone              String?
+  subscriptionStatus SubscriptionStatus @default(ACTIVE)
+  isActive           Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @default(now()) @updatedAt
+  categories         Category[]
+  foodItems          FoodItem[]
+  orders             Order[]
+  Table              Table[]
+  users              User[]
+}
+
+model Category {
+  id           String     @id @default(uuid())
+  name         String
+  orderIndex   Int        @default(0)
+  isActive     Boolean    @default(true)
+  restaurantId String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @default(now()) @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  foodItems    FoodItem[]
+}
+
+model FoodItem {
+  id           String      @id @default(uuid())
+  name         String
+  description  String?
+  price        Float
+  isVeg        Boolean     @default(true)
+  isAvailable  Boolean     @default(true)
+  imageUrl     String?
+  categoryId   String
+  restaurantId String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @default(now()) @updatedAt
+  category     Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  orderItems   OrderItem[]
+}
+
+model Order {
+  id           String      @id @default(uuid())
+  customerName String
+  tableNumber  String
+  phoneNumber  String?
+  status       OrderStatus @default(PENDING)
+  totalAmount  Float
+  restaurantId String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @default(now()) @updatedAt
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  items        OrderItem[]
+}
+
+model OrderItem {
+  id         String   @id @default(uuid())
+  orderId    String
+  foodItemId String
+  quantity   Int      @default(1)
+  price      Float
+  foodItem   FoodItem @relation(fields: [foodItemId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model Table {
+  id           String     @id
+  tableNumber  String
+  qrCodeUrl    String?
+  isOccupied   Boolean    @default(false)
+  restaurantId String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @default(now())
+  Restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
 enum Role {
   SUPER_ADMIN
   RESTAURANT_ADMIN
@@ -21,6 +116,7 @@ enum OrderStatus {
   PREPARING
   READY
   SERVED
+  PAID
   COMPLETED
   REJECTED
 }
@@ -30,99 +126,4 @@ enum SubscriptionStatus {
   TRIAL
   EXPIRED
   CANCELLED
-  PENDING
-}
-
-model User {
-  id           String      @id @default(uuid())
-  email        String      @unique
-  password     String
-  name         String?
-  role         Role        @default(RESTAURANT_ADMIN)
-  restaurantId String?
-  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id])
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-}
-
-model Restaurant {
-  id             String        @id @default(uuid())
-  slug           String        @unique // Used for QR code URL (e.g., hotel-a-8F3K2)
-  name           String
-  address        String
-  phone          String?
-  logoUrl        String?
-  bannerUrl      String?
-  isActive       Boolean       @default(true)
-  subscription   Subscription?
-  categories     Category[]
-  foodItems      FoodItem[]
-  orders         Order[]
-  users          User[]
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-}
-
-model Subscription {
-  id           String             @id @default(uuid())
-  status       SubscriptionStatus @default(TRIAL)
-  planName     String
-  validUntil   DateTime
-  restaurantId String             @unique
-  restaurant   Restaurant         @relation(fields: [restaurantId], references: [id])
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-}
-
-model Category {
-  id           String     @id @default(uuid())
-  name         String
-  isActive     Boolean    @default(true)
-  orderIndex   Int        @default(0)
-  restaurantId String
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
-  foodItems    FoodItem[]
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-}
-
-model FoodItem {
-  id           String      @id @default(uuid())
-  name         String
-  description  String?
-  price        Float
-  isVeg        Boolean     @default(true)
-  isAvailable  Boolean     @default(true)
-  imageUrl     String?
-  categoryId   String
-  category     Category    @relation(fields: [categoryId], references: [id])
-  restaurantId String
-  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id])
-  orderItems   OrderItem[]
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-}
-
-model Order {
-  id           String      @id @default(uuid())
-  customerName String
-  tableNumber  String
-  phoneNumber  String?
-  status       OrderStatus @default(PENDING)
-  totalAmount  Float
-  restaurantId String
-  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id])
-  items        OrderItem[]
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-}
-
-model OrderItem {
-  id         String   @id @default(uuid())
-  quantity   Int
-  price      Float    // Price at the time of order
-  foodItemId String
-  foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
-  orderId    String
-  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }

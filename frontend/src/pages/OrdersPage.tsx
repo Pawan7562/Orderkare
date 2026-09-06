@@ -15,13 +15,14 @@ interface Order {
 }
 
 const statusConfig: Record<string, { label: string; bg: string; icon: any }> = {
-  PENDING:   { label: 'Pending',   bg: 'bg-amber-50 text-amber-700 border-amber-200', icon: Clock },
-  ACCEPTED:  { label: 'Accepted',  bg: 'bg-blue-50 text-blue-700 border-blue-200', icon: Package },
+  PENDING: { label: 'Pending', bg: 'bg-amber-50 text-amber-700 border-amber-200', icon: Clock },
+  ACCEPTED: { label: 'Accepted', bg: 'bg-blue-50 text-blue-700 border-blue-200', icon: Package },
   PREPARING: { label: 'Preparing', bg: 'bg-indigo-50 text-indigo-700 border-indigo-200', icon: Package },
-  READY:     { label: 'Ready',     bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: Truck },
-  SERVED:    { label: 'Served',    bg: 'bg-teal-50 text-teal-700 border-teal-200', icon: CheckCircle },
+  READY: { label: 'Ready', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: Truck },
+  SERVED: { label: 'Served', bg: 'bg-teal-50 text-teal-700 border-teal-200', icon: CheckCircle },
   COMPLETED: { label: 'Completed', bg: 'bg-green-50 text-green-700 border-green-200', icon: CheckCircle },
-  REJECTED:  { label: 'Rejected',  bg: 'bg-red-50 text-red-700 border-red-200', icon: XCircle },
+  PAID: { label: 'Paid', bg: 'bg-green-50 text-green-700 border-green-200', icon: CheckCircle },
+  REJECTED: { label: 'Rejected', bg: 'bg-red-50 text-red-700 border-red-200', icon: XCircle },
 };
 
 const statusFlow: Record<string, string> = {
@@ -29,14 +30,18 @@ const statusFlow: Record<string, string> = {
   ACCEPTED: 'PREPARING',
   PREPARING: 'READY',
   READY: 'SERVED',
-  SERVED: 'COMPLETED',
+  SERVED: 'PAID',
+  PAID: 'COMPLETED',
 };
-
 export const OrdersPage = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    orderId: string;
+    status: string;
+  } | null>(null);
 
   const fetchOrders = async () => {
     try {
@@ -69,14 +74,23 @@ export const OrdersPage = () => {
     return `${Math.floor(mins / 60)}h ago`;
   };
 
-  const filters = ['ALL', 'PENDING', 'ACCEPTED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED', 'REJECTED'];
-
+  const filters = [
+    'ALL',
+    'PENDING',
+    'ACCEPTED',
+    'PREPARING',
+    'READY',
+    'SERVED',
+    'PAID',
+    'COMPLETED',
+    'REJECTED',
+  ];
   if (loading) {
     return (
       <div className="animate-pulse space-y-6">
         <div className="h-8 w-48 bg-slate-200 rounded-lg" />
-        <div className="flex gap-3">{[1,2,3,4].map(i => <div key={i} className="h-9 w-24 bg-slate-200 rounded-xl" />)}</div>
-        {[1,2,3].map(i => <div key={i} className="h-28 bg-slate-200 rounded-3xl" />)}
+        <div className="flex gap-3">{[1, 2, 3, 4].map(i => <div key={i} className="h-9 w-24 bg-slate-200 rounded-xl" />)}</div>
+        {[1, 2, 3].map(i => <div key={i} className="h-28 bg-slate-200 rounded-3xl" />)}
       </div>
     );
   }
@@ -100,11 +114,10 @@ export const OrdersPage = () => {
           <button
             key={f}
             onClick={() => setActiveFilter(f)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all capitalize ${
-              activeFilter === f
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all capitalize ${activeFilter === f
                 ? 'bg-primary text-white shadow-md shadow-primary/15'
                 : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50 hover:text-slate-800'
-            }`}
+              }`}
           >
             {f === 'ALL' ? 'All Orders' : f.toLowerCase()}
           </button>
@@ -214,7 +227,17 @@ export const OrdersPage = () => {
                               )}
                               {nextStatus && (
                                 <button
-                                  onClick={() => updateStatus(order.id, nextStatus)}
+                                  onClick={() => {
+                                    if (nextStatus === 'SERVED' || nextStatus === 'COMPLETED') {
+                                      setConfirmAction({
+                                        orderId: order.id,
+                                        status: nextStatus,
+                                      });
+                                      return;
+                                    }
+
+                                    updateStatus(order.id, nextStatus);
+                                  }}
                                   className="px-5 py-2 bg-primary text-white text-xs rounded-xl font-bold hover:bg-primary/90 transition-colors shadow-sm shadow-primary/10"
                                 >
                                   Move to {statusConfig[nextStatus]?.label || nextStatus}
@@ -232,6 +255,85 @@ export const OrdersPage = () => {
           </AnimatePresence>
         )}
       </div>
+      <AnimatePresence>
+        {confirmAction && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4"
+            onClick={() => setConfirmAction(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden"
+            >
+              <div className="p-6">
+                {/* Icon */}
+                <div className="flex justify-center mb-5">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center">
+                    <CheckCircle className="w-7 h-7 text-amber-600" />
+                  </div>
+                </div>
+
+                {/* Title */}
+                <h2 className="text-xl font-extrabold text-slate-900 text-center">
+                  {confirmAction.status === 'SERVED'
+                    ? 'Mark Order as Served?'
+                    : 'Complete This Order?'}
+                </h2>
+
+                {/* Message */}
+                <p className="text-sm text-slate-500 text-center mt-2 leading-relaxed">
+                  {confirmAction.status === 'SERVED'
+                    ? 'Please confirm that this order has been delivered to the customer.'
+                    : 'Please confirm that payment has been received and this order is ready to be completed.'}
+                </p>
+
+                {/* Status change */}
+                <div className="flex items-center justify-center gap-3 mt-5">
+                  <span className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold">
+                    {confirmAction.status === 'SERVED' ? 'READY' : 'PAID'}
+                  </span>
+
+                  <span className="text-slate-400">→</span>
+
+                  <span className="px-3 py-1.5 rounded-xl bg-green-50 text-green-700 border border-green-200 text-xs font-bold">
+                    {confirmAction.status}
+                  </span>
+                </div>
+
+                {/* Buttons */}
+                <div className="flex gap-3 mt-7">
+                  <button
+                    onClick={() => setConfirmAction(null)}
+                    className="flex-1 px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-bold hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      updateStatus(
+                        confirmAction.orderId,
+                        confirmAction.status
+                      );
+                      setConfirmAction(null);
+                    }}
+                    className="flex-1 px-4 py-3 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-colors shadow-sm"
+                  >
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
