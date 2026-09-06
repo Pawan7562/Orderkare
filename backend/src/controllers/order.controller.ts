@@ -95,24 +95,54 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         };
       });
 
-      const order = await prisma.order.create({
-        data: {
+      const openOrder = await prisma.order.findFirst({
+        where: {
+          restaurantId: restaurant.id,
           customerName,
           tableNumber,
-          phoneNumber,
-          totalAmount,
-          restaurantId: restaurant.id,
-          status: 'PENDING',
-          items: {
-            create: orderItemsData,
-          },
+          status: { notIn: ['PAID', 'COMPLETED', 'REJECTED'] },
         },
-        include: {
-          items: {
-            include: { foodItem: true },
-          },
-        },
+        include: { items: true },
+        orderBy: { createdAt: 'desc' },
       });
+
+      let order;
+      if (openOrder) {
+        const existingItems = new Map(openOrder.items.map((item) => [item.foodItemId, item]));
+        await prisma.$transaction(
+          orderItemsData.map((item) => {
+            const existing = existingItems.get(item.foodItemId);
+            return existing
+              ? prisma.orderItem.update({
+                  where: { id: existing.id },
+                  data: { quantity: existing.quantity + item.quantity },
+                })
+              : prisma.orderItem.create({ data: { ...item, orderId: openOrder.id } });
+          })
+        );
+
+        order = await prisma.order.update({
+          where: { id: openOrder.id },
+          data: {
+            totalAmount: openOrder.totalAmount + totalAmount,
+            phoneNumber: phoneNumber || openOrder.phoneNumber,
+          },
+          include: { items: { include: { foodItem: true } } },
+        });
+      } else {
+        order = await prisma.order.create({
+          data: {
+            customerName,
+            tableNumber,
+            phoneNumber,
+            totalAmount,
+            restaurantId: restaurant.id,
+            status: 'PENDING',
+            items: { create: orderItemsData },
+          },
+          include: { items: { include: { foodItem: true } } },
+        });
+      }
 
       notifyNewOrder(restaurant.id, order);
       res.status(201).json({ order });
@@ -129,6 +159,31 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
           foodItem: { name: food.name, price: food.price },
         };
       });
+
+      const openOrder = fallbackOrders.find(
+        (order) =>
+          order.customerName === customerName &&
+          order.tableNumber === tableNumber &&
+          !['PAID', 'COMPLETED', 'REJECTED'].includes(order.status)
+      );
+
+      if (openOrder) {
+        hydratedItems.forEach((item) => {
+          const existing = openOrder.items.find(
+            (existingItem: any) => existingItem.foodItem.name === item.foodItem.name
+          );
+          if (existing) {
+            existing.quantity += item.quantity;
+          } else {
+            openOrder.items.push(item);
+          }
+        });
+        openOrder.totalAmount += totalAmount;
+        if (phoneNumber) openOrder.phoneNumber = phoneNumber;
+        notifyNewOrder('demo-restaurant-id', openOrder);
+        res.status(201).json({ order: openOrder });
+        return;
+      }
 
       const newOrder = {
         id: `ord-${Date.now()}`,
@@ -184,6 +239,34 @@ export const getOrderStatus = async (req: Request, res: Response): Promise<void>
   }
 };
 
+export const completeOrderPayment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+
+    try {
+      const order = await prisma.order.update({
+        where: { id },
+        data: { status: 'COMPLETED' },
+        include: { items: { include: { foodItem: true } } },
+      });
+      notifyOrderStatusUpdate(id, 'COMPLETED');
+      res.json({ order });
+    } catch (dbError) {
+      const order = fallbackOrders.find((item) => item.id === id);
+      if (!order) {
+        res.status(404).json({ message: 'Order not found' });
+        return;
+      }
+      order.status = 'COMPLETED';
+      notifyOrderStatusUpdate(id, 'COMPLETED');
+      res.json({ order });
+    }
+  } catch (error) {
+    console.error('completeOrderPayment error:', error);
+    res.status(500).json({ message: 'Failed to complete payment' });
+  }
+};
+
 export const getOrders = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
@@ -228,40 +311,102 @@ export const getOrders = async (req: AuthRequest, res: Response): Promise<void> 
   }
 };
 
-export const updateOrderStatus = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
-    const id = req.params.id as string;
-    const rawStatus = req.body.status;
-    const status = typeof rawStatus === 'string' ? rawStatus : Array.isArray(rawStatus) ? rawStatus[0] : '';
 
-    if (!status) {
-      res.status(400).json({ message: 'Order status is required' });
+export const updateOrderStatus = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const restaurantId = req.user?.restaurantId as string;
+    const id = req.params.id as string;
+
+    const rawStatus = req.body.status;
+    const status =
+      typeof rawStatus === 'string'
+        ? rawStatus
+        : Array.isArray(rawStatus)
+          ? rawStatus[0]
+          : '';
+
+    // Validate status
+    const validStatuses = [
+  'PENDING',
+  'ACCEPTED',
+  'PREPARING',
+  'READY',
+  'SERVED',
+  'PAID',
+  'COMPLETED',
+  'REJECTED',
+] as const;
+
+   if (!status || !validStatuses.includes(status as (typeof validStatuses)[number])) {
+      res.status(400).json({
+        message: 'Invalid order status',
+      });
       return;
     }
 
-    try {
-      const order = await prisma.order.findFirst({ where: { id, restaurantId } });
-      if (!order) { res.status(404).json({ message: 'Order not found' }); return; }
-
-      const updated = await prisma.order.update({ where: { id }, data: { status: status as OrderStatus } });
-      notifyOrderStatusUpdate(id, status);
-      res.json({ order: updated });
-    } catch (dbError) {
-      const orderIdx = fallbackOrders.findIndex(o => o.id === id);
-      if (orderIdx !== -1) {
-        fallbackOrders[orderIdx].status = status;
-        notifyOrderStatusUpdate(id, status);
-        res.json({ order: fallbackOrders[orderIdx] });
-      } else {
-        res.status(404).json({ message: 'Order not found' });
-      }
+    if (!restaurantId) {
+      res.status(401).json({
+        message: 'Restaurant not found',
+      });
+      return;
     }
+
+
+    console.log('UPDATE STATUS DEBUG:', {
+  id,
+  restaurantId,
+  status,
+});
+
+const orderById = await prisma.order.findUnique({
+  where: { id },
+});
+
+console.log('ORDER BY ID DEBUG:', orderById);
+
+    // Find order belonging to this restaurant
+    const order = await prisma.order.findFirst({
+      where: {
+        id,
+        restaurantId,
+      },
+    });
+
+    if (!order) {
+      res.status(404).json({
+        message: 'Order not found',
+      });
+      return;
+    }
+
+    // Update status
+    const updated = await prisma.order.update({
+      where: {
+        id,
+      },
+      data: {
+        status: status as OrderStatus,
+      },
+    });
+
+    // Notify connected clients
+    notifyOrderStatusUpdate(id, status);
+
+    res.status(200).json({
+      order: updated,
+    });
   } catch (error) {
     console.error('updateOrderStatus error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+
+    res.status(500).json({
+      message: 'Failed to update order status',
+    });
   }
 };
+
 
 export const submitOrderFeedback = async (req: Request, res: Response): Promise<void> => {
   try {

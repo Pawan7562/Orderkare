@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getOrders, updateOrderStatus, createOrder, getOrderStatus, getDashboardStats, submitOrderFeedback, getRestaurantFeedback } from '../controllers/order.controller';
+import { getOrders, updateOrderStatus, createOrder, getOrderStatus, getDashboardStats, submitOrderFeedback, getRestaurantFeedback, completeOrderPayment } from '../controllers/order.controller';
 import { authenticateToken, requireRole } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -11,6 +11,7 @@ router.patch('/:id/status', authenticateToken, requireRole(['RESTAURANT_ADMIN', 
 
 // Public routes (for customer ordering)
 router.post('/place/:slug', createOrder);
+router.post('/:id/pay', completeOrderPayment);
 router.post('/:id/feedback', submitOrderFeedback);
 router.get('/track/:id', getOrderStatus);
 
