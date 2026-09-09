@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, ActivityIndicator, Alert, TextInput,
+  RefreshControl, ActivityIndicator, Alert, TextInput, Modal,
   Image, StatusBar,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -62,6 +62,7 @@ export default function DashboardScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedColumn, setSelectedColumn] = useState<string>('ALL');
   const [isSocketConnected, setIsSocketConnected] = useState(false);
+  const [incomingOrder, setIncomingOrder] = useState<Order | null>(null);
 
   const restaurantId = user?.restaurant?._id || (user as any)?.restaurantId;
 
@@ -108,7 +109,7 @@ export default function DashboardScreen() {
       socket.on('disconnect', () => setIsSocketConnected(false));
       socket.on('new_order', (newOrder: Order) => {
         setOrders(prev => [newOrder, ...prev.filter(o => (o.id || o._id) !== (newOrder.id || newOrder._id))]);
-        Alert.alert('🔔 New Order!', `Table #${newOrder.tableNumber} — ₹${newOrder.totalAmount}`);
+        setIncomingOrder(newOrder);
         void Notifications.scheduleNotificationAsync({
           content: {
             title: 'New order received',
@@ -371,6 +372,44 @@ export default function DashboardScreen() {
           )}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={!!incomingOrder}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIncomingOrder(null)}
+      >
+        <View style={styles.orderModalBackdrop}>
+          <View style={styles.orderModalCard}>
+            <View style={styles.orderModalIcon}>
+              <MaterialIcons name="notifications-active" size={28} color={Colors.primary} />
+            </View>
+            <Text style={styles.orderModalEyebrow}>New order received</Text>
+            <Text style={styles.orderModalTitle}>Kitchen action required</Text>
+            <Text style={styles.orderModalSummary}>
+              Table {incomingOrder?.tableNumber}  |  {incomingOrder?.items?.length || 0} items  |  ₹{incomingOrder?.totalAmount || 0}
+            </Text>
+            <View style={styles.orderModalActions}>
+              <TouchableOpacity
+                style={styles.orderModalSecondary}
+                onPress={() => setIncomingOrder(null)}
+              >
+                <Text style={styles.orderModalSecondaryText}>Dismiss</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.orderModalPrimary}
+                onPress={() => {
+                  setSelectedColumn('PENDING');
+                  setIncomingOrder(null);
+                }}
+              >
+                <Text style={styles.orderModalPrimaryText}>Open order</Text>
+                <MaterialIcons name="arrow-forward" size={17} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -816,5 +855,90 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
+  },
+  orderModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(9, 13, 22, 0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  orderModalCard: {
+    width: '100%',
+    backgroundColor: Colors.surface,
+    borderRadius: 22,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: Colors.primaryBorder,
+    shadowColor: Colors.shadowMd,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  orderModalIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primaryBg,
+    borderWidth: 1,
+    borderColor: Colors.primaryBorder,
+    marginBottom: 16,
+  },
+  orderModalEyebrow: {
+    color: Colors.primary,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  orderModalTitle: {
+    color: Colors.text,
+    fontSize: 21,
+    fontWeight: '800',
+    marginTop: 5,
+  },
+  orderModalSummary: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 10,
+  },
+  orderModalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 22,
+  },
+  orderModalSecondary: {
+    flex: 1,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.bg,
+  },
+  orderModalSecondaryText: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  orderModalPrimary: {
+    flex: 1.3,
+    height: 46,
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+  },
+  orderModalPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
   },
 });
