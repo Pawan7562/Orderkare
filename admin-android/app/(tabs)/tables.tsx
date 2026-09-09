@@ -24,7 +24,7 @@ export default function TablesScreen() {
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const restaurantSlug = user?.restaurant?._id;
+  const restaurantSlug = user?.restaurant?.slug;
 
   const fetchTables = async () => {
     try {

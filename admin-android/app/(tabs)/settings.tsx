@@ -14,7 +14,7 @@ export default function SettingsScreen() {
   const [copied, setCopied] = useState(false);
 
   const restaurant = user?.restaurant;
-  const menuUrl = restaurant?._id ? `${MENU_BASE_URL}/menu/${restaurant._id}` : '';
+  const menuUrl = restaurant?.slug ? `${MENU_BASE_URL}/menu/${restaurant.slug}` : '';
   const qrImageUrl = menuUrl
     ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(menuUrl)}&color=F97316&bgcolor=FFFFFF`
     : null;

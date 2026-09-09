@@ -64,7 +64,7 @@ export default function DashboardScreen() {
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [incomingOrder, setIncomingOrder] = useState<Order | null>(null);
 
-  const restaurantId = user?.restaurant?._id || (user as any)?.restaurantId;
+  const restaurantId = user?.restaurant?.id || (user as any)?.restaurantId;
 
   const fetchDashboardData = useCallback(async () => {
     try {

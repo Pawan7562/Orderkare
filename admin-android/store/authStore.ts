@@ -3,7 +3,8 @@ import api from '../lib/api';
 import * as SecureStore from 'expo-secure-store';
 
 export interface Restaurant {
-  _id: string;
+  id: string;
+  slug: string;
   name: string;
   address?: string;
   phone?: string;
@@ -11,7 +12,7 @@ export interface Restaurant {
 }
 
 export interface User {
-  _id: string;
+  id: string;
   name: string;
   email: string;
   role: string;
