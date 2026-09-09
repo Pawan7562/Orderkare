@@ -102,11 +102,15 @@ export default function DashboardScreen() {
     fetchDashboardData();
     if (token) {
       const socket = getSocket(token);
-      socket.on('connect', () => {
+      const joinRestaurant = () => {
         setIsSocketConnected(true);
         if (restaurantId) socket.emit('join_restaurant', restaurantId);
-      });
-      socket.on('disconnect', () => setIsSocketConnected(false));
+      };
+      const handleDisconnect = () => setIsSocketConnected(false);
+      socket.on('connect', joinRestaurant);
+      socket.on('disconnect', handleDisconnect);
+      socket.on('connect_error', handleDisconnect);
+      if (socket.connected) joinRestaurant();
       socket.on('new_order', (newOrder: Order) => {
         setOrders(prev => [newOrder, ...prev.filter(o => (o.id || o._id) !== (newOrder.id || newOrder._id))]);
         setIncomingOrder(newOrder);
