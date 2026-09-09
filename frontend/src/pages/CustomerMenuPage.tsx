@@ -7,7 +7,6 @@ import {
   Flame, Leaf, RotateCcw
 } from 'lucide-react';
 import axios from 'axios';
-import { io } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const API = import.meta.env.VITE_API_URL || 'https://orderkare-3.onrender.com/api/v1';
@@ -38,91 +37,6 @@ interface FoodItem {
   category?: { name: string };
 }
 
-const MOCK_RESTAURANT: Restaurant = {
-  id: 'demo-restaurant-id',
-  name: 'Royal Palace Dining',
-  logoUrl: null,
-  bannerUrl: null,
-  address: 'Sector 62, Noida • Fine Dining',
-  phone: '+91 98765 43210'
-};
-
-const MOCK_CATEGORIES: Category[] = [
-  { id: 'cat-starters', name: 'Starters' },
-  { id: 'cat-main', name: 'Main Course' },
-  { id: 'cat-beverages', name: 'Beverages' },
-  { id: 'cat-desserts', name: 'Desserts' },
-];
-
-const MOCK_FOODS: FoodItem[] = [
-  {
-    id: 'item-1',
-    name: 'Paneer Tikka Specially Grilled',
-    description: 'Fresh cottage cheese marinated in hung curd, spices and chargrilled in clay tandoor.',
-    price: 220,
-    isVeg: true,
-    isAvailable: true,
-    imageUrl: 'https://images.unsplash.com/photo-1599487488170-d11ec9c172f0?auto=format&fit=crop&w=400&q=80',
-    categoryId: 'cat-starters',
-    category: { name: 'Starters' },
-  },
-  {
-    id: 'item-2',
-    name: 'Crispy Veg Spring Rolls',
-    description: 'Golden wok-fried spring rolls filled with crunchy garden vegetables & glass noodles.',
-    price: 180,
-    isVeg: true,
-    isAvailable: true,
-    imageUrl: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=400&q=80',
-    categoryId: 'cat-starters',
-    category: { name: 'Starters' },
-  },
-  {
-    id: 'item-3',
-    name: 'Royal Butter Chicken',
-    description: 'Tender chicken smoked in tandoor & simmered in rich creamy tomato cashew gravy.',
-    price: 340,
-    isVeg: false,
-    isAvailable: true,
-    imageUrl: 'https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?auto=format&fit=crop&w=400&q=80',
-    categoryId: 'cat-main',
-    category: { name: 'Main Course' },
-  },
-  {
-    id: 'item-4',
-    name: 'Dal Makhani Shahi',
-    description: 'Slow cooked black lentils simmered overnight with white butter, cream & fresh spices.',
-    price: 260,
-    isVeg: true,
-    isAvailable: true,
-    imageUrl: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=400&q=80',
-    categoryId: 'cat-main',
-    category: { name: 'Main Course' },
-  },
-  {
-    id: 'item-5',
-    name: 'Classic Mango Lassi',
-    description: 'Thick churned sweet yogurt blended with fresh Alphonso mango pulp.',
-    price: 120,
-    isVeg: true,
-    isAvailable: true,
-    imageUrl: 'https://images.unsplash.com/photo-1534353473418-4cfa6c56fd38?auto=format&fit=crop&w=400&q=80',
-    categoryId: 'cat-beverages',
-    category: { name: 'Beverages' },
-  },
-  {
-    id: 'item-6',
-    name: 'Chocolate Lava Cake',
-    description: 'Warm cocoa cake with molten chocolate core served with vanilla bean scoop.',
-    price: 190,
-    isVeg: true,
-    isAvailable: true,
-    imageUrl: 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=400&q=80',
-    categoryId: 'cat-desserts',
-    category: { name: 'Desserts' },
-  },
-];
-
 const ORDER_STEPS = [
   { status: 'PENDING', label: 'Order Received', icon: Clock, desc: 'Sent to kitchen staff' },
   { status: 'ACCEPTED', label: 'Order Accepted', icon: CheckCircle2, desc: 'Kitchen accepted your order' },
@@ -138,9 +52,9 @@ export const CustomerMenuPage = () => {
   // Auto-detect table number from QR code scan query string (e.g. ?table=01, ?t=1, or ?tableNumber=01)
   const qrTableParam = searchParams.get('table') || searchParams.get('t') || searchParams.get('tableNumber') || '';
 
-  const [restaurant, setRestaurant] = useState<Restaurant | null>(MOCK_RESTAURANT);
-  const [categories, setCategories] = useState<Category[]>(MOCK_CATEGORIES);
-  const [foods, setFoods] = useState<FoodItem[]>(MOCK_FOODS);
+  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [foods, setFoods] = useState<FoodItem[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('ALL');
   const [vegFilter, setVegFilter] = useState<'ALL' | 'VEG' | 'NONVEG'>('ALL');
   const [search, setSearch] = useState('');
@@ -188,7 +102,7 @@ export const CustomerMenuPage = () => {
           setFoods(foodRes.data.foods);
         }
       } catch (err: any) {
-        console.warn('Using mock customer menu data fallback');
+        setOrderError('Menu is temporarily unavailable. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -216,16 +130,18 @@ export const CustomerMenuPage = () => {
   useEffect(() => {
     if (!orderPlaced?.id) return;
 
-    const socketUrl = import.meta.env.VITE_WS_URL || (import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/v1\/?$/, '').replace(/\/api\/?$/, '') : 'https://orderkare-3.onrender.com');
-    const socket = io(socketUrl);
-
-    socket.on(`order_status_${orderPlaced.id}`, (data: { status: string }) => {
-      setOrderPlaced((prev: any) => (prev ? { ...prev, status: data.status } : null));
-    });
-
-    return () => {
-      socket.disconnect();
+    const pollStatus = async () => {
+      try {
+        const response = await axios.get(`${API}/orders/track/${orderPlaced.id}`);
+        const currentOrder = response.data?.order;
+        if (currentOrder) setOrderPlaced((prev: any) => ({ ...prev, ...currentOrder }));
+      } catch {
+        // Keep the last known status while the service reconnects.
+      }
     };
+    void pollStatus();
+    const interval = window.setInterval(pollStatus, 5000);
+    return () => window.clearInterval(interval);
   }, [orderPlaced?.id]);
 
   const filteredFoods = foods.filter((f) => {
@@ -274,25 +190,7 @@ export const CustomerMenuPage = () => {
       setShowCheckout(false);
       setShowCart(false);
     } catch (err: any) {
-      // Mock order placement fallback if DB server is offline
-      const mockOrder = {
-        id: `ORD-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-        customerName,
-        tableNumber,
-        status: 'PENDING',
-        totalAmount: total,
-        createdAt: new Date().toISOString(),
-        items: cart.items.map((i) => ({
-          id: `item-${i.foodItemId}`,
-          quantity: i.quantity,
-          price: i.price,
-          foodItem: { name: i.name },
-        })),
-      };
-      setOrderPlaced(mockOrder);
-      cart.clearCart();
-      setShowCheckout(false);
-      setShowCart(false);
+      setOrderError(err.response?.data?.message || 'Order could not be placed. Please try again.');
     } finally {
       setPlacingOrder(false);
     }

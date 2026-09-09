@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
 import { useAuthStore } from './store/authStore';
 import { Colors } from './constants/colors';
 
@@ -41,6 +42,23 @@ export default function App() {
 
   useEffect(() => {
     init();
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+    void Notifications.requestPermissionsAsync();
+    if (Platform.OS === 'android') {
+      void Notifications.setNotificationChannelAsync('default', {
+        name: 'Orders',
+        importance: Notifications.AndroidImportance.MAX,
+        sound: 'default',
+        vibrationPattern: [0, 250, 250, 250],
+      });
+    }
   }, []);
 
   if (!isReady) {

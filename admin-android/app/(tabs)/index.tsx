@@ -5,6 +5,7 @@ import {
   Image, StatusBar,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
 import { useAuthStore } from '../../store/authStore';
 import { Colors } from '../../constants/colors';
 import api from '../../lib/api';
@@ -71,15 +72,21 @@ export default function DashboardScreen() {
         api.get('/restaurants/dashboard/stats'),
       ]);
 
-      if (ordersRes.status === 'fulfilled' && ordersRes.value.data?.data) {
-        const fetchedOrders = ordersRes.value.data.data;
-        if (Array.isArray(fetchedOrders) && fetchedOrders.length > 0) {
+      if (ordersRes.status === 'fulfilled') {
+        const fetchedOrders = ordersRes.value.data?.orders || ordersRes.value.data?.data || [];
+        if (Array.isArray(fetchedOrders)) {
           setOrders(fetchedOrders);
         }
       }
 
-      if (statsRes.status === 'fulfilled' && statsRes.value.data?.data) {
-        setStats(statsRes.value.data.data);
+      if (statsRes.status === 'fulfilled') {
+        const dashboardStats = statsRes.value.data?.data || statsRes.value.data || {};
+        setStats({
+          todayOrders: Number(dashboardStats.todayOrders || 0),
+          todayRevenue: Number(dashboardStats.todayRevenue || 0),
+          pendingOrders: Number(dashboardStats.pendingOrders || 0),
+          activeTables: Number(dashboardStats.activeTables || 0),
+        });
       } else {
         const currentOrders = orders;
         const pendingCount = currentOrders.filter(o => o.status.toUpperCase() === 'PENDING').length;
@@ -102,6 +109,14 @@ export default function DashboardScreen() {
       socket.on('new_order', (newOrder: Order) => {
         setOrders(prev => [newOrder, ...prev.filter(o => (o.id || o._id) !== (newOrder.id || newOrder._id))]);
         Alert.alert('🔔 New Order!', `Table #${newOrder.tableNumber} — ₹${newOrder.totalAmount}`);
+        void Notifications.scheduleNotificationAsync({
+          content: {
+            title: 'New order received',
+            body: `Table #${newOrder.tableNumber} - ₹${newOrder.totalAmount}`,
+            sound: 'default',
+          },
+          trigger: null,
+        });
       });
       return () => { disconnectSocket(); };
     }
