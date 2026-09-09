@@ -24,7 +24,7 @@ services:
       - key: PORT
         value: 10000
       - key: CORS_ORIGIN
-        sync: false
+        value: https://www.orderkare.co.in,https://orderkare.co.in
       - key: DB_POOL_MAX
         value: 20
       - key: REDIS_URL

@@ -7,7 +7,10 @@ import { verifyToken } from './jwt';
 let io: Server | null = null;
 
 export const initSocket = async (server: HttpServer): Promise<Server> => {
-  const allowedOrigins = process.env.CORS_ORIGIN?.split(',').map(origin => origin.trim()).filter(Boolean) || [];
+  const allowedOrigins = (process.env.CORS_ORIGIN || 'https://www.orderkare.co.in,https://orderkare.co.in')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean);
   io = new Server(server, {
     cors: {
       origin: allowedOrigins,

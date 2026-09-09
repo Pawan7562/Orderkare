@@ -19,7 +19,10 @@ const app = express();
 const server = createServer(app);
 export const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
-const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map(origin => origin.trim()).filter(Boolean);
+const allowedOrigins = (process.env.CORS_ORIGIN || 'https://www.orderkare.co.in,https://orderkare.co.in')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
 
 app.set('trust proxy', 1);
 app.use(helmet());
@@ -41,6 +44,7 @@ app.use(rateLimit({
 // API Routes (supporting both /api/v1 and /api)
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
 
 app.use('/api/v1/categories', categoryRoutes);
 app.use('/api/categories', categoryRoutes);
