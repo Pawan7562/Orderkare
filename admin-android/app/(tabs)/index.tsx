@@ -765,9 +765,10 @@ const styles = StyleSheet.create({
   },
   customerRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 6,
     marginBottom: 10,
+    flexWrap: 'wrap',
   },
   customerName: {
     fontSize: 13,
@@ -778,6 +779,9 @@ const styles = StyleSheet.create({
   customerPhone: {
     fontSize: 11,
     color: Colors.textMuted,
+    flexShrink: 1,
+    maxWidth: '48%',
+    textAlign: 'right',
   },
   itemsBox: {
     backgroundColor: Colors.bg,
@@ -807,6 +811,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.textSecondary,
     fontWeight: '500',
+    flexShrink: 1,
   },
   itemPrice: {
     fontSize: 12,
@@ -814,9 +819,8 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
   },
   orderFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
+    alignItems: 'stretch',
     borderTopWidth: 1,
     borderTopColor: Colors.border,
     paddingTop: 10,
@@ -835,7 +839,10 @@ const styles = StyleSheet.create({
   },
   actionsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
     gap: 8,
+    marginTop: 10,
   },
   rejectBtn: {
     backgroundColor: Colors.redBg,
@@ -851,7 +858,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   actionBtn: {
-    paddingHorizontal: 14,
+    flexGrow: 1,
+    minWidth: 120,
+    alignItems: 'center',
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
   },
