@@ -48,18 +48,23 @@ app.use('/auth', authRoutes);
 
 app.use('/api/v1/categories', categoryRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/categories', categoryRoutes);
 
 app.use('/api/v1/foods', foodRoutes);
 app.use('/api/foods', foodRoutes);
+app.use('/foods', foodRoutes);
 
 app.use('/api/v1/orders', orderRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/orders', orderRoutes);
 
 app.use('/api/v1/menu', menuRoutes);
 app.use('/api/menu', menuRoutes);
+app.use('/menu', menuRoutes);
 
 app.use('/api/v1/restaurants', restaurantRoutes);
 app.use('/api/restaurants', restaurantRoutes);
+app.use('/restaurants', restaurantRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
