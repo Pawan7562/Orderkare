@@ -2,7 +2,12 @@ services:
   - type: web
     name: orderkare-backend
     runtime: node
-    plan: free
+    plan: starter
+    scaling:
+      minInstances: 2
+      maxInstances: 10
+      targetCPUPercent: 60
+      targetMemoryPercent: 70
     rootDir: backend
     buildCommand: npm install && npm run build
     startCommand: npm start
@@ -18,3 +23,9 @@ services:
         sync: false
       - key: PORT
         value: 10000
+      - key: CORS_ORIGIN
+        sync: false
+      - key: DB_POOL_MAX
+        value: 20
+      - key: REDIS_URL
+        sync: false

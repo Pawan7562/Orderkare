@@ -7,10 +7,19 @@ dotenv.config();
 // Configure WebSocket constructor for Node.js environment
 neonConfig.webSocketConstructor = ws;
 
-const connectionString = process.env.DATABASE_URL || "postgresql://neondb_owner:npg_6qwSBRlnKui4@ep-silent-darkness-aeuf1dek-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require";
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error('DATABASE_URL must be configured');
+}
 
 // Create singleton Neon connection pool
-export const db = new Pool({ connectionString });
+export const db = new Pool({
+  connectionString,
+  max: Number(process.env.DB_POOL_MAX || 20),
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+});
 
 export const query = async (text: string, params?: any[]) => {
   const start = Date.now();

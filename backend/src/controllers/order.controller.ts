@@ -4,56 +4,6 @@ import { notifyNewOrder, notifyOrderStatusUpdate } from '../utils/socket';
 import { prisma } from '../lib/prisma';
 import { OrderStatus } from '@prisma/client';
 
-// In-memory mock store for offline orders
-const fallbackOrders: any[] = [
-  {
-    id: 'ord-101',
-    customerName: 'Aarav Patel',
-    tableNumber: '04',
-    phoneNumber: '+91 98765 43210',
-    totalAmount: 440,
-    status: 'PENDING',
-    createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    items: [
-      { id: 'oi-1', quantity: 2, price: 220, foodItem: { name: 'Paneer Tikka' } }
-    ]
-  },
-  {
-    id: 'ord-102',
-    customerName: 'Priya Sharma',
-    tableNumber: '02',
-    phoneNumber: '+91 98111 22233',
-    totalAmount: 600,
-    status: 'PREPARING',
-    createdAt: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
-    items: [
-      { id: 'oi-2', quantity: 1, price: 340, foodItem: { name: 'Butter Chicken' } },
-      { id: 'oi-3', quantity: 1, price: 260, foodItem: { name: 'Dal Makhani' } }
-    ]
-  },
-  {
-    id: 'ord-103',
-    customerName: 'Rohan Gupta',
-    tableNumber: '07',
-    phoneNumber: '+91 99000 11223',
-    totalAmount: 240,
-    status: 'READY',
-    createdAt: new Date(Date.now() - 22 * 60 * 1000).toISOString(),
-    items: [
-      { id: 'oi-4', quantity: 2, price: 120, foodItem: { name: 'Mango Lassi' } }
-    ]
-  }
-];
-
-const fallbackFoodItems = new Map<string, any>([
-  ['item-1', { id: 'item-1', name: 'Paneer Tikka', price: 220 }],
-  ['item-2', { id: 'item-2', name: 'Veg Spring Rolls', price: 180 }],
-  ['item-3', { id: 'item-3', name: 'Butter Chicken', price: 340 }],
-  ['item-4', { id: 'item-4', name: 'Dal Makhani', price: 260 }],
-  ['item-5', { id: 'item-5', name: 'Mango Lassi', price: 120 }],
-  ['item-6', { id: 'item-6', name: 'Chocolate Brownie', price: 190 }],
-]);
-
 const feedbackStore: any[] = [];
 
 export const createOrder = async (req: Request, res: Response): Promise<void> => {
@@ -117,33 +67,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       notifyNewOrder(restaurant.id, order);
       res.status(201).json({ order });
     } catch (dbError) {
-      console.warn('⚠️ Database offline during order creation. Simulating order placement.');
-      let totalAmount = 0;
-      const hydratedItems = items.map((item: any) => {
-        const food = fallbackFoodItems.get(item.foodItemId) || { name: 'Special Item', price: 150 };
-        totalAmount += food.price * item.quantity;
-        return {
-          id: `oi-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          quantity: item.quantity,
-          price: food.price,
-          foodItem: { name: food.name, price: food.price },
-        };
-      });
-
-      const newOrder = {
-        id: `ord-${Date.now()}`,
-        customerName,
-        tableNumber,
-        phoneNumber,
-        totalAmount,
-        status: 'PENDING',
-        createdAt: new Date().toISOString(),
-        items: hydratedItems,
-      };
-
-      fallbackOrders.push(newOrder);
-      notifyNewOrder('demo-restaurant-id', newOrder);
-      res.status(201).json({ order: newOrder });
+      res.status(503).json({ message: 'Database temporarily unavailable' });
     }
   } catch (error) {
     console.error('createOrder error:', error);
@@ -171,12 +95,7 @@ export const getOrderStatus = async (req: Request, res: Response): Promise<void>
       if (!order) { res.status(404).json({ message: 'Order not found' }); return; }
       res.json({ order });
     } catch (dbError) {
-      const order = fallbackOrders.find(o => o.id === id);
-      if (order) {
-        res.json({ order: { ...order, restaurant: { name: 'Royal Palace' } } });
-      } else {
-        res.status(404).json({ message: 'Order not found' });
-      }
+      res.status(503).json({ message: 'Database temporarily unavailable' });
     }
   } catch (error) {
     console.error('getOrderStatus error:', error);
@@ -186,7 +105,7 @@ export const getOrderStatus = async (req: Request, res: Response): Promise<void>
 
 export const getOrders = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
+    const restaurantId: string = req.user?.restaurantId as string;
     const { status, limit = '50', page = '1' } = req.query;
 
     try {
@@ -216,11 +135,7 @@ export const getOrders = async (req: AuthRequest, res: Response): Promise<void> 
 
       res.json({ orders, total, page: parseInt(page as string) || 1, totalPages: Math.ceil(total / take) });
     } catch (dbError) {
-      console.warn('⚠️ Database offline. Returning mock active orders.');
-      const filtered = status
-        ? fallbackOrders.filter(o => (status as string).split(',').includes(o.status))
-        : fallbackOrders;
-      res.json({ orders: filtered.slice().reverse() });
+      res.status(503).json({ message: 'Database temporarily unavailable' });
     }
   } catch (error) {
     console.error('getOrders error:', error);
@@ -230,7 +145,7 @@ export const getOrders = async (req: AuthRequest, res: Response): Promise<void> 
 
 export const updateOrderStatus = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
+    const restaurantId: string = req.user?.restaurantId as string;
     const id = req.params.id as string;
     const rawStatus = req.body.status;
     const status = typeof rawStatus === 'string' ? rawStatus : Array.isArray(rawStatus) ? rawStatus[0] : '';
@@ -248,14 +163,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response): Promis
       notifyOrderStatusUpdate(id, status);
       res.json({ order: updated });
     } catch (dbError) {
-      const orderIdx = fallbackOrders.findIndex(o => o.id === id);
-      if (orderIdx !== -1) {
-        fallbackOrders[orderIdx].status = status;
-        notifyOrderStatusUpdate(id, status);
-        res.json({ order: fallbackOrders[orderIdx] });
-      } else {
-        res.status(404).json({ message: 'Order not found' });
-      }
+      res.status(503).json({ message: 'Database temporarily unavailable' });
     }
   } catch (error) {
     console.error('updateOrderStatus error:', error);
@@ -278,16 +186,21 @@ export const submitOrderFeedback = async (req: Request, res: Response): Promise<
     const order = await prisma.order.findUnique({
       where: { id },
       include: { items: { include: { foodItem: true } } },
-    }).catch(() => fallbackOrders.find((o) => o.id === id) || null);
+    });
 
-    const restaurantId = order?.restaurantId || 'demo-restaurant-id';
-    const foodSummary = order?.items?.map((item: any) => item.foodItem?.name || item.name).join(', ') || 'Ordered food';
+    if (!order) {
+      res.status(404).json({ message: 'Order not found' });
+      return;
+    }
+
+    const restaurantId = order.restaurantId;
+    const foodSummary = order.items.map((item: any) => item.foodItem?.name || item.name).join(', ');
 
     const payload = {
       id: `fb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       orderId: id,
       restaurantId,
-      customerName: customerName || order?.customerName || 'Guest',
+      customerName: customerName || order.customerName || 'Guest',
       foodName: foodSummary,
       rating: parsedRating,
       comment: comment || '',
@@ -305,7 +218,7 @@ export const submitOrderFeedback = async (req: Request, res: Response): Promise<
 
 export const getRestaurantFeedback = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const restaurantId = (req.user?.restaurantId as string) || 'demo-restaurant-id';
+    const restaurantId = req.user?.restaurantId as string;
     const feedback = feedbackStore
       .filter((entry) => entry.restaurantId === restaurantId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -328,7 +241,7 @@ export const getRestaurantFeedback = async (req: AuthRequest, res: Response): Pr
 
 export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
+    const restaurantId: string = req.user?.restaurantId as string;
 
     try {
       const today = new Date();
@@ -359,18 +272,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
         totalTables: 20
       });
     } catch (dbError) {
-      console.warn('⚠️ Database offline. Calculating mock dashboard stats.');
-      const totalAmount = fallbackOrders.reduce((acc, cur) => acc + (cur.totalAmount || 0), 0);
-      res.json({
-        todayOrders: fallbackOrders.length + 14,
-        todayRevenue: totalAmount + 3480,
-        todaySales: totalAmount + 3480,
-        activeOrders: fallbackOrders.filter(o => o.status !== 'COMPLETED' && o.status !== 'REJECTED').length,
-        pendingOrders: fallbackOrders.filter(o => o.status !== 'COMPLETED' && o.status !== 'REJECTED').length,
-        menuItems: 18,
-        activeTables: 4,
-        totalTables: 20
-      });
+      res.status(503).json({ message: 'Database temporarily unavailable' });
     }
   } catch (error) {
     console.error('getDashboardStats error:', error);

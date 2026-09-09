@@ -8,17 +8,20 @@ dotenv.config();
 
 neonConfig.webSocketConstructor = ws;
 
-const connectionString = process.env.DATABASE_URL || "postgresql://neondb_owner:npg_6qwSBRlnKui4@ep-silent-darkness-aeuf1dek-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require";
+const connectionString = process.env.DATABASE_URL;
 
-let prisma: PrismaClient;
-
-try {
-  const pool = new Pool({ connectionString });
-  const adapter = new PrismaNeon(pool as any);
-  prisma = new PrismaClient({ adapter: adapter as any });
-} catch (error) {
-  prisma = new PrismaClient();
+if (!connectionString) {
+  throw new Error('DATABASE_URL must be configured');
 }
+
+const pool = new Pool({
+  connectionString,
+  max: Number(process.env.DB_POOL_MAX || 20),
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+});
+const adapter = new PrismaNeon(pool as any);
+const prisma = new PrismaClient({ adapter: adapter as any });
 
 export { prisma };
 export default prisma;

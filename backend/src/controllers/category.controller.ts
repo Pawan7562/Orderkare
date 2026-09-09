@@ -2,17 +2,9 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { prisma } from '../lib/prisma';
 
-// In-memory mock store in case DB is offline
-const fallbackCategories = [
-  { id: 'cat-starters', name: 'Starters', orderIndex: 1, isActive: true, _count: { foodItems: 4 } },
-  { id: 'cat-main', name: 'Main Course', orderIndex: 2, isActive: true, _count: { foodItems: 6 } },
-  { id: 'cat-beverages', name: 'Beverages', orderIndex: 3, isActive: true, _count: { foodItems: 3 } },
-  { id: 'cat-desserts', name: 'Desserts', orderIndex: 4, isActive: true, _count: { foodItems: 2 } },
-];
-
 export const getCategories = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
+    const restaurantId: string = req.user?.restaurantId as string;
 
     try {
       const categories = await prisma.category.findMany({
@@ -22,8 +14,7 @@ export const getCategories = async (req: AuthRequest, res: Response): Promise<vo
       });
       res.json({ categories });
     } catch (dbError) {
-      console.warn('⚠️ Database offline. Returning mock categories.');
-      res.json({ categories: fallbackCategories });
+      res.status(503).json({ message: 'Database temporarily unavailable' });
     }
   } catch (error) {
     console.error('getCategories error:', error);
@@ -33,7 +24,7 @@ export const getCategories = async (req: AuthRequest, res: Response): Promise<vo
 
 export const createCategory = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
+    const restaurantId: string = req.user?.restaurantId as string;
     const { name } = req.body;
     if (!name) { res.status(400).json({ message: 'Name is required' }); return; }
 
@@ -49,15 +40,7 @@ export const createCategory = async (req: AuthRequest, res: Response): Promise<v
       });
       res.status(201).json({ category });
     } catch (dbError) {
-      const newCat = {
-        id: `cat-${Date.now()}`,
-        name,
-        orderIndex: fallbackCategories.length + 1,
-        isActive: true,
-        _count: { foodItems: 0 },
-      };
-      fallbackCategories.push(newCat);
-      res.status(201).json({ category: newCat });
+      res.status(503).json({ message: 'Database temporarily unavailable' });
     }
   } catch (error) {
     console.error('createCategory error:', error);
@@ -67,7 +50,7 @@ export const createCategory = async (req: AuthRequest, res: Response): Promise<v
 
 export const updateCategory = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
+    const restaurantId: string = req.user?.restaurantId as string;
     const id = req.params.id as string;
     const { name, isActive, orderIndex } = req.body;
 
@@ -81,13 +64,7 @@ export const updateCategory = async (req: AuthRequest, res: Response): Promise<v
       });
       res.json({ category: updated });
     } catch (dbError) {
-      const catIdx = fallbackCategories.findIndex(c => c.id === id);
-      if (catIdx !== -1) {
-        if (name !== undefined) fallbackCategories[catIdx].name = name;
-        res.json({ category: fallbackCategories[catIdx] });
-      } else {
-        res.status(404).json({ message: 'Category not found' });
-      }
+      res.status(503).json({ message: 'Database temporarily unavailable' });
     }
   } catch (error) {
     console.error('updateCategory error:', error);
@@ -97,7 +74,7 @@ export const updateCategory = async (req: AuthRequest, res: Response): Promise<v
 
 export const deleteCategory = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const restaurantId: string = (req.user?.restaurantId as string) || 'demo-restaurant-id';
+    const restaurantId: string = req.user?.restaurantId as string;
     const id = req.params.id as string;
 
     try {
@@ -108,13 +85,7 @@ export const deleteCategory = async (req: AuthRequest, res: Response): Promise<v
       await prisma.category.delete({ where: { id } });
       res.json({ message: 'Category deleted' });
     } catch (dbError) {
-      const catIdx = fallbackCategories.findIndex(c => c.id === id);
-      if (catIdx !== -1) {
-        fallbackCategories.splice(catIdx, 1);
-        res.json({ message: 'Category deleted' });
-      } else {
-        res.status(404).json({ message: 'Category not found' });
-      }
+      res.status(503).json({ message: 'Database temporarily unavailable' });
     }
   } catch (error) {
     console.error('deleteCategory error:', error);
@@ -135,10 +106,7 @@ export const getPublicCategories = async (req: Request, res: Response): Promise<
       });
       res.json({ categories, restaurant: { id: restaurant.id, name: restaurant.name, logoUrl: restaurant.logoUrl, bannerUrl: restaurant.bannerUrl } });
     } catch (dbError) {
-      res.json({
-        categories: fallbackCategories,
-        restaurant: { id: 'demo-restaurant-id', name: 'Royal Palace Dining', logoUrl: null, bannerUrl: null },
-      });
+      res.status(503).json({ message: 'Database temporarily unavailable' });
     }
   } catch (error) {
     console.error('getPublicCategories error:', error);

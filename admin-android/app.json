@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "OrderKare Admin",
+    "slug": "orderkare-admin",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "orderkare-admin",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.orderkare.admin"
+    },
+    "android": {
+      "package": "com.orderkare.admin",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "backgroundColor": "#0D0D0D"
+      },
+      "permissions": [
+        "NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
+      ]
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-notifications",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": false
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0d4b9bf4-ee0c-4abc-8782-fd570cdb2c73"
+      }
+    }
+  }
+}

@@ -1,7 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-const getJwtSecret = () => process.env.JWT_SECRET || 'orderkare-super-secret-jwt-key-change-in-production';
+const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error('JWT_SECRET must be configured with at least 32 characters');
+  }
+  return secret;
+};
 
 export interface AuthRequest extends Request {
   user?: {
