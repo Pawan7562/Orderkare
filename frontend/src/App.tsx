@@ -15,6 +15,7 @@ import { SuperAdminSubscriptions } from './pages/SuperAdminSubscriptions';
 import { SuperAdminPlans } from './pages/SuperAdminPlans';
 import { SuperAdminAnalytics } from './pages/SuperAdminAnalytics';
 import { SuperAdminSettings } from './pages/SuperAdminSettings';
+import { SuperAdminAds } from './pages/SuperAdminAds';
 import { TablesPage } from './pages/TablesPage';
 import { WorkersPage } from './pages/WorkersPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
@@ -50,6 +51,7 @@ function App() {
             <Route path="/admin" element={<SuperAdminDashboard />} />
             <Route path="/admin/subscriptions" element={<SuperAdminSubscriptions />} />
             <Route path="/admin/plans" element={<SuperAdminPlans />} />
+            <Route path="/admin/ads" element={<SuperAdminAds />} />
             <Route path="/admin/analytics" element={<SuperAdminAnalytics />} />
             <Route path="/admin/settings" element={<SuperAdminSettings />} />
           </Route>

@@ -5,6 +5,8 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { Colors } from '../constants/colors';
 
+import GlobalOrderNotifier from '../components/GlobalOrderNotifier';
+
 export default function RootLayout() {
   const { token, isReady, init } = useAuthStore();
   const segments = useSegments();
@@ -40,6 +42,17 @@ export default function RootLayout() {
     <>
       <StatusBar style="light" />
       <Slot />
+      {token ? (
+        <GlobalOrderNotifier
+          onNavigateToTab={(tab) => {
+            if (tab === 'orders') {
+              router.replace('/(tabs)/orders');
+            } else {
+              router.replace('/(tabs)');
+            }
+          }}
+        />
+      ) : null}
     </>
   );
 }

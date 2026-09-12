@@ -5,11 +5,11 @@ import {
   Image, StatusBar,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as Notifications from 'expo-notifications';
 import { useAuthStore } from '../../store/authStore';
 import { Colors } from '../../constants/colors';
 import api from '../../lib/api';
 import { getSocket, disconnectSocket } from '../../lib/socket';
+import { playOrderRingSound } from '../../lib/sound';
 
 export interface OrderItem {
   id?: string;
@@ -107,23 +107,22 @@ export default function DashboardScreen() {
         if (restaurantId) socket.emit('join_restaurant', restaurantId);
       };
       const handleDisconnect = () => setIsSocketConnected(false);
+      const handleNewOrder = (newOrder: Order) => {
+        setOrders(prev => [newOrder, ...prev.filter(o => (o.id || o._id) !== (newOrder.id || newOrder._id))]);
+      };
+
       socket.on('connect', joinRestaurant);
       socket.on('disconnect', handleDisconnect);
       socket.on('connect_error', handleDisconnect);
+      socket.on('new_order', handleNewOrder);
       if (socket.connected) joinRestaurant();
-      socket.on('new_order', (newOrder: Order) => {
-        setOrders(prev => [newOrder, ...prev.filter(o => (o.id || o._id) !== (newOrder.id || newOrder._id))]);
-        setIncomingOrder(newOrder);
-        void Notifications.scheduleNotificationAsync({
-          content: {
-            title: 'New order received',
-            body: `Table #${newOrder.tableNumber} - ₹${newOrder.totalAmount}`,
-            sound: 'default',
-          },
-          trigger: null,
-        });
-      });
-      return () => { disconnectSocket(); };
+
+      return () => {
+        socket.off('connect', joinRestaurant);
+        socket.off('disconnect', handleDisconnect);
+        socket.off('connect_error', handleDisconnect);
+        socket.off('new_order', handleNewOrder);
+      };
     }
   }, [token, restaurantId]);
 
@@ -164,10 +163,10 @@ export default function DashboardScreen() {
   });
 
   const STAT_CARDS = [
-    { label: "Today's Revenue", value: `₹${stats.todayRevenue.toLocaleString('en-IN')}`, icon: 'currency-rupee', color: Colors.primary, bg: Colors.primaryBg, border: Colors.primaryBorder },
-    { label: 'Total Orders',    value: `${stats.todayOrders}`,                            icon: 'receipt-long',   color: Colors.blue,   bg: Colors.blueBg,   border: Colors.blueBorder },
-    { label: 'Pending Queue',   value: `${stats.pendingOrders}`,                          icon: 'pending-actions',color: Colors.amber,  bg: Colors.amberBg,  border: Colors.amberBorder },
-    { label: 'Active Tables',   value: `${stats.activeTables}`,                           icon: 'table-restaurant',color: Colors.green,  bg: Colors.greenBg,  border: Colors.greenBorder },
+    { label: "Today's Revenue", value: `₹${stats.todayRevenue.toLocaleString('en-IN')}`, delta: 'Sales', icon: 'currency-rupee', color: Colors.primary, bg: Colors.primaryBg, border: Colors.primaryBorder },
+    { label: 'Total Orders',    value: `${stats.todayOrders}`,                            delta: 'Today', icon: 'receipt-long',   color: Colors.blue,   bg: Colors.blueBg,   border: Colors.blueBorder },
+    { label: 'Pending Queue',   value: `${stats.pendingOrders}`,                          delta: stats.pendingOrders > 0 ? `${stats.pendingOrders} wait` : 'Clear', icon: 'pending-actions',color: Colors.amber,  bg: Colors.amberBg,  border: Colors.amberBorder },
+    { label: 'Active Tables',   value: `${stats.activeTables}`,                           delta: 'Dining', icon: 'table-restaurant',color: Colors.green,  bg: Colors.greenBg,  border: Colors.greenBorder },
   ];
 
   const FILTER_TABS = ['ALL', 'PENDING', 'ACCEPTED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED'];
@@ -221,13 +220,25 @@ export default function DashboardScreen() {
 
         {/* KPI Stat Cards */}
         <View style={styles.statsGrid}>
-          {STAT_CARDS.map((s, i) => (
-            <View key={i} style={[styles.statCard, { borderColor: s.border }]}>
-              <View style={[styles.statIconBg, { backgroundColor: s.bg }]}>
-                <MaterialIcons name={s.icon as any} size={20} color={s.color} />
-              </View>
-              <Text style={styles.statValue}>{s.value}</Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
+          {[0, 2].map((rowStart) => (
+            <View key={rowStart} style={styles.statsRow}>
+              {STAT_CARDS.slice(rowStart, rowStart + 2).map((s) => (
+                <View
+                  key={s.label}
+                  style={[styles.statCard, { borderColor: s.border }]}
+                >
+                  <View style={styles.statTopRow}>
+                    <View style={[styles.statIconBg, { backgroundColor: s.bg }]}>
+                      <MaterialIcons name={s.icon as any} size={18} color={s.color} />
+                    </View>
+                    <View style={[styles.statDeltaBadge, { backgroundColor: s.bg, borderColor: s.border }]}>
+                      <Text style={[styles.statDeltaText, { color: s.color }]}>{s.delta}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{s.value}</Text>
+                  <Text style={styles.statLabel} numberOfLines={1}>{s.label}</Text>
+                </View>
+              ))}
             </View>
           ))}
         </View>
@@ -249,37 +260,43 @@ export default function DashboardScreen() {
           ) : null}
         </View>
 
-        {/* Status Filters */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterTabs}>
-          {FILTER_TABS.map((col) => {
-            const isSel = selectedColumn === col;
-            const count = col === 'ALL' ? orders.length : orders.filter(o => o.status.toUpperCase() === col).length;
-            return (
-              <TouchableOpacity
-                key={col}
-                style={[styles.filterChip, isSel && styles.activeFilterChip]}
-                onPress={() => setSelectedColumn(col)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.filterChipText, isSel && styles.activeFilterChipText]}>{col}</Text>
-                <View style={[styles.filterBadge, isSel && styles.activeFilterBadge]}>
-                  <Text style={[styles.filterBadgeText, isSel && styles.activeFilterBadgeText]}>{count}</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
         {/* Orders Section */}
         <View style={styles.ordersSection}>
-          <View style={styles.sectionTitleRow}>
-            <View style={styles.sectionTitleAccent} />
-            <Text style={styles.sectionHeading}>
-              {selectedColumn === 'ALL' ? 'Live Order Pipeline' : `${selectedColumn} Orders`}
-            </Text>
-            <View style={styles.sectionCountBadge}>
-              <Text style={styles.sectionCountText}>{filteredOrders.length}</Text>
+          <View style={styles.ordersHeader}>
+            <View style={styles.sectionTitleRow}>
+              <View style={styles.sectionTitleAccent} />
+              <View style={styles.sectionHeadingGroup}>
+                <Text style={styles.sectionHeading}>
+                  {selectedColumn === 'ALL' ? 'Live Order Pipeline' : `${selectedColumn} Orders`}
+                </Text>
+                <Text style={styles.sectionSubheading}>Track and update every order</Text>
+              </View>
+              <View style={styles.sectionCountBadge}>
+                <Text style={styles.sectionCountText}>{filteredOrders.length}</Text>
+              </View>
             </View>
+          </View>
+
+          <View style={styles.filterRail}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterTabs}>
+              {FILTER_TABS.map((col) => {
+                const isSel = selectedColumn === col;
+                const count = col === 'ALL' ? orders.length : orders.filter(o => o.status.toUpperCase() === col).length;
+                return (
+                  <TouchableOpacity
+                    key={col}
+                    style={[styles.filterChip, isSel && styles.activeFilterChip]}
+                    onPress={() => setSelectedColumn(col)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.filterChipText, isSel && styles.activeFilterChipText]}>{col}</Text>
+                    <View style={[styles.filterBadge, isSel && styles.activeFilterBadge]}>
+                      <Text style={[styles.filterBadgeText, isSel && styles.activeFilterBadgeText]}>{count}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
 
           {filteredOrders.length === 0 ? (
@@ -318,11 +335,13 @@ export default function DashboardScreen() {
 
                     {/* Customer Info */}
                     <View style={styles.customerRow}>
-                      <MaterialIcons name="person" size={14} color={Colors.primary} />
-                      <Text style={styles.customerName}>{order.customerName || 'Guest Customer'}</Text>
-                      {order.phoneNumber ? (
-                        <Text style={styles.customerPhone}>{order.phoneNumber}</Text>
-                      ) : null}
+                      <View style={styles.customerIdentity}>
+                        <View style={styles.customerIcon}>
+                          <MaterialIcons name="person" size={14} color={Colors.primary} />
+                        </View>
+                        <Text style={styles.customerName}>{order.customerName || 'Guest Customer'}</Text>
+                      </View>
+                      {order.phoneNumber ? <Text style={styles.customerPhone}>{order.phoneNumber}</Text> : null}
                     </View>
 
                     {/* Items */}
@@ -376,44 +395,6 @@ export default function DashboardScreen() {
           )}
         </View>
       </ScrollView>
-
-      <Modal
-        visible={!!incomingOrder}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIncomingOrder(null)}
-      >
-        <View style={styles.orderModalBackdrop}>
-          <View style={styles.orderModalCard}>
-            <View style={styles.orderModalIcon}>
-              <MaterialIcons name="notifications-active" size={28} color={Colors.primary} />
-            </View>
-            <Text style={styles.orderModalEyebrow}>New order received</Text>
-            <Text style={styles.orderModalTitle}>Kitchen action required</Text>
-            <Text style={styles.orderModalSummary}>
-              Table {incomingOrder?.tableNumber}  |  {incomingOrder?.items?.length || 0} items  |  ₹{incomingOrder?.totalAmount || 0}
-            </Text>
-            <View style={styles.orderModalActions}>
-              <TouchableOpacity
-                style={styles.orderModalSecondary}
-                onPress={() => setIncomingOrder(null)}
-              >
-                <Text style={styles.orderModalSecondaryText}>Dismiss</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.orderModalPrimary}
-                onPress={() => {
-                  setSelectedColumn('PENDING');
-                  setIncomingOrder(null);
-                }}
-              >
-                <Text style={styles.orderModalPrimaryText}>Open order</Text>
-                <MaterialIcons name="arrow-forward" size={17} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -536,13 +517,16 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 10,
     marginBottom: 14,
   },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
   statCard: {
-    width: '48.5%',
+    flex: 1,
+    minHeight: 126,
     backgroundColor: Colors.surface,
     borderWidth: 1.5,
     borderRadius: 16,
@@ -553,16 +537,31 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
+  statTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
   statIconBg: {
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+  },
+  statDeltaBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  statDeltaText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   statValue: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: Colors.text,
     letterSpacing: -0.5,
@@ -571,7 +570,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.textMuted,
     fontWeight: '600',
-    marginTop: 3,
+    marginTop: 2,
   },
   searchWrapper: {
     flexDirection: 'row',
@@ -596,28 +595,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   filterTabs: {
-    gap: 8,
-    paddingBottom: 14,
+    gap: 6,
+    paddingBottom: 10,
   },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderWidth: 1.5,
+    justifyContent: 'center',
+    backgroundColor: Colors.bg,
+    borderWidth: 1,
     borderColor: Colors.border,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
+    minHeight: 36,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 10,
     gap: 6,
   },
   activeFilterChip: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
     shadowColor: Colors.shadowOrange,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 2,
   },
   filterChipText: {
     fontSize: 11,
@@ -628,10 +629,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   filterBadge: {
-    backgroundColor: Colors.bg,
-    paddingHorizontal: 6,
+    minWidth: 20,
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 5,
     paddingVertical: 2,
-    borderRadius: 10,
+    borderRadius: 6,
   },
   activeFilterBadge: {
     backgroundColor: 'rgba(255,255,255,0.25)',
@@ -646,6 +649,14 @@ const styles = StyleSheet.create({
   },
   ordersSection: {
     gap: 10,
+  },
+  ordersHeader: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   sectionTitleRow: {
     flexDirection: 'row',
@@ -663,7 +674,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     color: Colors.text,
+  },
+  sectionHeadingGroup: {
     flex: 1,
+  },
+  sectionSubheading: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 2,
   },
   sectionCountBadge: {
     backgroundColor: Colors.primaryBg,
@@ -677,6 +695,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: Colors.primary,
+  },
+  filterRail: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 14,
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 0,
   },
   emptyState: {
     alignItems: 'center',
@@ -766,21 +793,36 @@ const styles = StyleSheet.create({
   customerRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 6,
+    justifyContent: 'space-between',
+    gap: 8,
     marginBottom: 10,
-    flexWrap: 'wrap',
+  },
+  customerIdentity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    flex: 1,
+  },
+  customerIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primaryBg,
   },
   customerName: {
     fontSize: 13,
     fontWeight: '700',
     color: Colors.text,
     flex: 1,
+    flexShrink: 1,
   },
   customerPhone: {
     fontSize: 11,
     color: Colors.textMuted,
     flexShrink: 1,
-    maxWidth: '48%',
+    maxWidth: '42%',
     textAlign: 'right',
   },
   itemsBox: {
@@ -819,8 +861,10 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
   },
   orderFooter: {
-    flexDirection: 'column',
-    alignItems: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
     paddingTop: 10,
@@ -842,15 +886,20 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'flex-end',
     gap: 8,
-    marginTop: 10,
+    flex: 1,
+    minHeight: 38,
   },
   rejectBtn: {
     backgroundColor: Colors.redBg,
     borderColor: Colors.redBorder,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    minHeight: 38,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderRadius: 9,
+    minWidth: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rejectBtnText: {
     color: Colors.red,
@@ -858,12 +907,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   actionBtn: {
-    flexGrow: 1,
-    minWidth: 120,
+    flex: 1,
+    minWidth: 108,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 38,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingVertical: 9,
+    borderRadius: 9,
   },
   actionBtnText: {
     color: '#FFFFFF',

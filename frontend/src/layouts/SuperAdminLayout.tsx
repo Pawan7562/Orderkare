@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { Building2, CreditCard, Diamond, BarChart3, Settings, Bell, Search, LogOut, ShieldCheck } from 'lucide-react';
+import { Building2, CreditCard, Diamond, BarChart3, Settings, Bell, Search, LogOut, ShieldCheck, Megaphone } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export const SuperAdminLayout = () => {
@@ -11,9 +11,11 @@ export const SuperAdminLayout = () => {
     { label: 'Hotels & Venues', path: '/admin', icon: Building2 },
     { label: 'Subscriptions', path: '/admin/subscriptions', icon: CreditCard },
     { label: 'SaaS Plans', path: '/admin/plans', icon: Diamond },
+    { label: 'Sponsored Ads', path: '/admin/ads', icon: Megaphone },
     { label: 'Platform Analytics', path: '/admin/analytics', icon: BarChart3 },
     { label: 'System Settings', path: '/admin/settings', icon: Settings },
   ];
+
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex font-sans">

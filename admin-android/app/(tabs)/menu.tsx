@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   TextInput, Switch, Alert, Modal, ScrollView,
-  RefreshControl, ActivityIndicator,
+  RefreshControl, StatusBar,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
@@ -29,8 +29,7 @@ interface FoodItem {
 export default function MenuScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [foods, setFoods] = useState<FoodItem[]>([]);
-  const [activeCat, setActiveCat] = useState<string>('cat-1');
-  const [loading, setLoading] = useState(false);
+  const [activeCat, setActiveCat] = useState<string>('ALL');
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -42,6 +41,7 @@ export default function MenuScreen() {
     description: '',
     price: '',
     isVeg: true,
+    categoryId: '',
   });
 
   const [catModalVisible, setCatModalVisible] = useState(false);
@@ -58,9 +58,6 @@ export default function MenuScreen() {
         const fetchedCats = catsRes.value.data.data || catsRes.value.data.categories || catsRes.value.data;
         if (Array.isArray(fetchedCats) && fetchedCats.length > 0) {
           setCategories(fetchedCats);
-          if (!activeCat) {
-            setActiveCat(fetchedCats[0].id || fetchedCats[0]._id || 'cat-1');
-          }
         }
       }
 
@@ -71,13 +68,13 @@ export default function MenuScreen() {
         }
       }
     } catch {
-      // Keep the current data visible if a refresh fails.
+      // Keep existing data visible
     }
-  }, [activeCat]);
+  }, []);
 
   useEffect(() => {
     loadMenuData();
-  }, []);
+  }, [loadMenuData]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -106,6 +103,7 @@ export default function MenuScreen() {
         description: food.description || '',
         price: String(food.price),
         isVeg: food.isVeg,
+        categoryId: food.categoryId || '',
       });
     } else {
       setEditingFood(null);
@@ -114,6 +112,7 @@ export default function MenuScreen() {
         description: '',
         price: '',
         isVeg: true,
+        categoryId: activeCat !== 'ALL' ? activeCat : (categories[0]?.id || categories[0]?._id || ''),
       });
     }
     setFoodModalVisible(true);
@@ -131,15 +130,15 @@ export default function MenuScreen() {
       const foodId = editingFood.id || editingFood._id || '';
       try {
         await api.put(`/foods/${foodId}`, {
-          name: foodForm.name,
-          description: foodForm.description,
+          name: foodForm.name.trim(),
+          description: foodForm.description.trim(),
           price: priceNum,
           isVeg: foodForm.isVeg,
-          categoryId: activeCat,
+          categoryId: foodForm.categoryId || undefined,
         });
         setFoods(prev => prev.map(f =>
           (f.id || f._id) === foodId
-            ? { ...f, name: foodForm.name, description: foodForm.description, price: priceNum, isVeg: foodForm.isVeg }
+            ? { ...f, name: foodForm.name.trim(), description: foodForm.description.trim(), price: priceNum, isVeg: foodForm.isVeg, categoryId: foodForm.categoryId }
             : f
         ));
       } catch {
@@ -149,20 +148,20 @@ export default function MenuScreen() {
     } else {
       const newFood: FoodItem = {
         id: `item-${Date.now()}`,
-        name: foodForm.name,
-        description: foodForm.description,
+        name: foodForm.name.trim(),
+        description: foodForm.description.trim(),
         price: priceNum,
         isVeg: foodForm.isVeg,
         isAvailable: true,
-        categoryId: activeCat,
+        categoryId: foodForm.categoryId || (categories[0]?.id || categories[0]?._id || ''),
       };
       try {
         const { data } = await api.post('/foods', {
-          name: foodForm.name,
-          description: foodForm.description,
+          name: foodForm.name.trim(),
+          description: foodForm.description.trim(),
           price: priceNum,
           isVeg: foodForm.isVeg,
-          categoryId: activeCat,
+          categoryId: foodForm.categoryId || undefined,
         });
         const savedFood = data.data || data.food || data;
         setFoods(prev => [savedFood?.name ? savedFood : newFood, ...prev]);
@@ -213,34 +212,58 @@ export default function MenuScreen() {
   };
 
   const filteredFoods = foods.filter(f => {
-    const matchesCat = !activeCat || f.categoryId === activeCat || !f.categoryId;
+    const matchesCat = activeCat === 'ALL' || f.categoryId === activeCat || !f.categoryId;
     const matchesSearch =
       f.name.toLowerCase().includes(search.toLowerCase()) ||
       (f.description || '').toLowerCase().includes(search.toLowerCase());
     return matchesCat && matchesSearch;
   });
 
+  const vegCount = foods.filter(f => f.isVeg).length;
+  const inStockCount = foods.filter(f => f.isAvailable).length;
+
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
+
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Menu & Dishes</Text>
-          <Text style={styles.headerSubtitle}>{foods.length} items listed in catalog</Text>
+        <View style={styles.headerLeft}>
+          <View style={styles.headerTitleRow}>
+            <View style={styles.headerAccent} />
+            <Text style={styles.headerTitle}>Menu & Dishes</Text>
+          </View>
+          <Text style={styles.headerSubtitle}>{foods.length} items in restaurant catalog</Text>
         </View>
 
         <TouchableOpacity
           style={styles.addDishBtn}
           onPress={() => openAddFoodModal()}
-          activeOpacity={0.7}
+          activeOpacity={0.8}
         >
-          <MaterialIcons name="add" size={20} color="#FFFFFF" />
-          <Text style={styles.addDishBtnText}>Add Item</Text>
+          <MaterialIcons name="add" size={18} color="#FFFFFF" />
+          <Text style={styles.addDishBtnText}>Add Dish</Text>
         </TouchableOpacity>
       </View>
 
+      {/* Quick Summary Pill Bar */}
+      <View style={styles.kpiRow}>
+        <View style={styles.kpiPill}>
+          <Text style={styles.kpiPillLabel}>Total Dishes</Text>
+          <Text style={styles.kpiPillVal}>{foods.length}</Text>
+        </View>
+        <View style={[styles.kpiPill, { borderColor: Colors.greenBorder, backgroundColor: Colors.greenBg }]}>
+          <Text style={[styles.kpiPillLabel, { color: Colors.green }]}>Veg Items</Text>
+          <Text style={[styles.kpiPillVal, { color: Colors.green }]}>{vegCount}</Text>
+        </View>
+        <View style={[styles.kpiPill, { borderColor: Colors.primaryBorder, backgroundColor: Colors.primaryBg }]}>
+          <Text style={[styles.kpiPillLabel, { color: Colors.primary }]}>In Stock</Text>
+          <Text style={[styles.kpiPillVal, { color: Colors.primary }]}>{inStockCount}</Text>
+        </View>
+      </View>
+
       {/* Search Bar */}
-      <View style={styles.searchBoxContainer}>
+      <View style={styles.searchWrapper}>
         <View style={styles.searchBox}>
           <MaterialIcons name="search" size={20} color={Colors.textMuted} />
           <TextInput
@@ -250,15 +273,31 @@ export default function MenuScreen() {
             value={search}
             onChangeText={setSearch}
           />
+          {search ? (
+            <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <MaterialIcons name="close" size={18} color={Colors.textMuted} />
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
 
       {/* Category Tabs */}
       <View style={styles.catTabsWrapper}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catTabsList}>
+          <TouchableOpacity
+            style={[styles.catTab, activeCat === 'ALL' && styles.activeCatTab]}
+            onPress={() => setActiveCat('ALL')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.catTabText, activeCat === 'ALL' && styles.activeCatTabText]}>
+              All Dishes ({foods.length})
+            </Text>
+          </TouchableOpacity>
+
           {categories.map(cat => {
             const catId = cat.id || cat._id || '';
             const isActive = activeCat === catId;
+            const count = foods.filter(f => f.categoryId === catId).length;
             return (
               <TouchableOpacity
                 key={catId}
@@ -267,7 +306,7 @@ export default function MenuScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={[styles.catTabText, isActive && styles.activeCatTabText]}>
-                  {cat.name}
+                  {cat.name} {count > 0 ? `(${count})` : ''}
                 </Text>
               </TouchableOpacity>
             );
@@ -278,7 +317,7 @@ export default function MenuScreen() {
             onPress={() => setCatModalVisible(true)}
             activeOpacity={0.7}
           >
-            <MaterialIcons name="add" size={16} color={Colors.accent} />
+            <MaterialIcons name="add" size={16} color={Colors.primary} />
             <Text style={styles.addCatText}>New Category</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -290,25 +329,39 @@ export default function MenuScreen() {
         keyExtractor={item => item.id || item._id || String(Math.random())}
         contentContainerStyle={styles.listContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} colors={[Colors.primary]} />
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <MaterialIcons name="restaurant-menu" size={48} color={Colors.textDim} />
-            <Text style={styles.emptyTitle}>No Dishes in this Category</Text>
-            <Text style={styles.emptyText}>Tap "+ Add Item" above to add delicious menu items.</Text>
+            <View style={styles.emptyIconBg}>
+              <MaterialIcons name="restaurant-menu" size={40} color={Colors.textDim} />
+            </View>
+            <Text style={styles.emptyTitle}>No Dishes Found</Text>
+            <Text style={styles.emptyText}>
+              {search ? 'No dishes match your search query' : 'Tap "+ Add Dish" above to create items in this category'}
+            </Text>
           </View>
         }
         renderItem={({ item }) => {
+          const matchedCategory = categories.find(c => (c.id || c._id) === item.categoryId);
           return (
             <View style={[styles.dishCard, !item.isAvailable && styles.dishCardUnavailable]}>
-              <View style={styles.dishInfo}>
-                <View style={styles.dishTitleRow}>
-                  {/* Veg / Non-Veg Icon */}
+              <View style={styles.dishMain}>
+                <View style={styles.dishHeaderRow}>
+                  {/* Veg / Non-Veg Indicator */}
                   <View style={[styles.vegBadge, { borderColor: item.isVeg ? Colors.green : Colors.red }]}>
                     <View style={[styles.vegDot, { backgroundColor: item.isVeg ? Colors.green : Colors.red }]} />
                   </View>
-                  <Text style={styles.dishName}>{item.name}</Text>
+
+                  <Text style={styles.dishName} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+
+                  {matchedCategory ? (
+                    <View style={styles.categoryPill}>
+                      <Text style={styles.categoryPillText}>{matchedCategory.name}</Text>
+                    </View>
+                  ) : null}
                 </View>
 
                 {item.description ? (
@@ -317,35 +370,43 @@ export default function MenuScreen() {
                   </Text>
                 ) : null}
 
-                <Text style={styles.dishPrice}>₹{item.price}</Text>
-              </View>
+                <View style={styles.dishBottomRow}>
+                  <Text style={styles.dishPrice}>₹{item.price.toLocaleString('en-IN')}</Text>
 
-              <View style={styles.dishControls}>
-                <View style={styles.availabilityRow}>
-                  <Text style={[styles.availText, { color: item.isAvailable ? Colors.green : Colors.textDim }]}>
-                    {item.isAvailable ? 'In Stock' : 'Out of Stock'}
-                  </Text>
-                  <Switch
-                    value={item.isAvailable}
-                    onValueChange={() => toggleAvailability(item)}
-                    trackColor={{ false: Colors.surfaceLight, true: 'rgba(16, 185, 129, 0.4)' }}
-                    thumbColor={item.isAvailable ? Colors.green : Colors.textDim}
-                  />
-                </View>
+                  <View style={styles.dishControls}>
+                    {/* In Stock toggle */}
+                    <View style={styles.stockToggle}>
+                      <Text style={[styles.stockText, { color: item.isAvailable ? Colors.green : Colors.textDim }]}>
+                        {item.isAvailable ? 'In Stock' : 'Out of Stock'}
+                      </Text>
+                      <Switch
+                        value={item.isAvailable}
+                        onValueChange={() => toggleAvailability(item)}
+                        trackColor={{ false: '#E5E7EB', true: Colors.primaryLight }}
+                        thumbColor={item.isAvailable ? Colors.primary : '#9CA3AF'}
+                        style={{ transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] }}
+                      />
+                    </View>
 
-                <View style={styles.dishActionButtons}>
-                  <TouchableOpacity
-                    style={styles.iconAction}
-                    onPress={() => openAddFoodModal(item)}
-                  >
-                    <MaterialIcons name="edit" size={18} color={Colors.textMuted} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.iconAction}
-                    onPress={() => deleteFood(item)}
-                  >
-                    <MaterialIcons name="delete-outline" size={18} color={Colors.red} />
-                  </TouchableOpacity>
+                    {/* Action buttons */}
+                    <View style={styles.actionButtons}>
+                      <TouchableOpacity
+                        style={styles.iconBtn}
+                        onPress={() => openAddFoodModal(item)}
+                        activeOpacity={0.7}
+                      >
+                        <MaterialIcons name="edit" size={16} color={Colors.primary} />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.iconBtn, styles.deleteBtn]}
+                        onPress={() => deleteFood(item)}
+                        activeOpacity={0.7}
+                      >
+                        <MaterialIcons name="delete-outline" size={16} color={Colors.red} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                 </View>
               </View>
             </View>
@@ -353,25 +414,28 @@ export default function MenuScreen() {
         }}
       />
 
-      {/* Add / Edit Food Modal */}
+      {/* Add / Edit Dish Modal */}
       <Modal visible={foodModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {editingFood ? 'Edit Menu Item' : 'Add New Menu Item'}
-              </Text>
-              <TouchableOpacity onPress={() => setFoodModalVisible(false)}>
-                <MaterialIcons name="close" size={24} color={Colors.textMuted} />
+              <View style={styles.modalHeaderLeft}>
+                <View style={styles.modalAccent} />
+                <Text style={styles.modalTitle}>
+                  {editingFood ? 'Edit Dish' : 'Add New Dish'}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setFoodModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <MaterialIcons name="close" size={22} color={Colors.textMuted} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.modalBody}>
+            <ScrollView contentContainerStyle={styles.modalBody} showsVerticalScrollIndicator={false}>
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Dish Name *</Text>
                 <TextInput
                   style={styles.modalInput}
-                  placeholder="e.g. Paneer Butter Masala"
+                  placeholder="e.g. Butter Chicken, Paneer Tikka..."
                   placeholderTextColor={Colors.textDim}
                   value={foodForm.name}
                   onChangeText={v => setFoodForm(prev => ({ ...prev, name: v }))}
@@ -379,15 +443,24 @@ export default function MenuScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Description</Text>
-                <TextInput
-                  style={[styles.modalInput, { height: 64 }]}
-                  placeholder="Ingredients, flavors or notes..."
-                  placeholderTextColor={Colors.textDim}
-                  value={foodForm.description}
-                  onChangeText={v => setFoodForm(prev => ({ ...prev, description: v }))}
-                  multiline
-                />
+                <Text style={styles.inputLabel}>Category</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modalCatList}>
+                  {categories.map(c => {
+                    const cId = c.id || c._id || '';
+                    const isSelected = foodForm.categoryId === cId;
+                    return (
+                      <TouchableOpacity
+                        key={cId}
+                        style={[styles.modalCatChip, isSelected && styles.activeModalCatChip]}
+                        onPress={() => setFoodForm(prev => ({ ...prev, categoryId: cId }))}
+                      >
+                        <Text style={[styles.modalCatChipText, isSelected && styles.activeModalCatChipText]}>
+                          {c.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
               </View>
 
               <View style={styles.inputGroup}>
@@ -402,18 +475,52 @@ export default function MenuScreen() {
                 />
               </View>
 
-              <View style={styles.vegSwitchRow}>
-                <Text style={styles.inputLabel}>Vegetarian Dish</Text>
-                <Switch
-                  value={foodForm.isVeg}
-                  onValueChange={v => setFoodForm(prev => ({ ...prev, isVeg: v }))}
-                  trackColor={{ false: Colors.surfaceLight, true: 'rgba(16, 185, 129, 0.4)' }}
-                  thumbColor={foodForm.isVeg ? Colors.green : Colors.red}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Description</Text>
+                <TextInput
+                  style={[styles.modalInput, styles.modalInputMulti]}
+                  placeholder="Ingredients, spice level, or special notes..."
+                  placeholderTextColor={Colors.textDim}
+                  value={foodForm.description}
+                  onChangeText={v => setFoodForm(prev => ({ ...prev, description: v }))}
+                  multiline
+                  numberOfLines={3}
                 />
               </View>
 
+              {/* Veg / Non-Veg Choice */}
+              <View style={styles.vegSelectionRow}>
+                <Text style={styles.inputLabel}>Dietary Type</Text>
+                <View style={styles.vegButtons}>
+                  <TouchableOpacity
+                    style={[styles.vegChoiceBtn, foodForm.isVeg && styles.activeVegBtn]}
+                    onPress={() => setFoodForm(prev => ({ ...prev, isVeg: true }))}
+                  >
+                    <View style={[styles.vegBadge, { borderColor: Colors.green }]}>
+                      <View style={[styles.vegDot, { backgroundColor: Colors.green }]} />
+                    </View>
+                    <Text style={[styles.vegChoiceText, foodForm.isVeg && { color: Colors.green, fontWeight: '800' }]}>
+                      Vegetarian
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.vegChoiceBtn, !foodForm.isVeg && styles.activeNonVegBtn]}
+                    onPress={() => setFoodForm(prev => ({ ...prev, isVeg: false }))}
+                  >
+                    <View style={[styles.vegBadge, { borderColor: Colors.red }]}>
+                      <View style={[styles.vegDot, { backgroundColor: Colors.red }]} />
+                    </View>
+                    <Text style={[styles.vegChoiceText, !foodForm.isVeg && { color: Colors.red, fontWeight: '800' }]}>
+                      Non-Veg
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
               <TouchableOpacity style={styles.modalSaveBtn} onPress={saveFoodItem} activeOpacity={0.8}>
-                <Text style={styles.modalSaveBtnText}>Save Dish</Text>
+                <MaterialIcons name="check" size={20} color="#FFFFFF" />
+                <Text style={styles.modalSaveBtnText}>{editingFood ? 'Save Changes' : 'Add Dish to Menu'}</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -423,23 +530,29 @@ export default function MenuScreen() {
       {/* Add Category Modal */}
       <Modal visible={catModalVisible} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+          <View style={styles.modalCardSmall}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Category</Text>
-              <TouchableOpacity onPress={() => setCatModalVisible(false)}>
-                <MaterialIcons name="close" size={24} color={Colors.textMuted} />
+              <View style={styles.modalHeaderLeft}>
+                <View style={styles.modalAccent} />
+                <Text style={styles.modalTitle}>New Category</Text>
+              </View>
+              <TouchableOpacity onPress={() => setCatModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <MaterialIcons name="close" size={22} color={Colors.textMuted} />
               </TouchableOpacity>
             </View>
 
             <View style={styles.modalBody}>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="e.g. Soups, Breads, Mocktails..."
-                placeholderTextColor={Colors.textDim}
-                value={catName}
-                onChangeText={setCatName}
-                autoFocus
-              />
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Category Name *</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="e.g. Starters, Main Course, Drinks..."
+                  placeholderTextColor={Colors.textDim}
+                  value={catName}
+                  onChangeText={setCatName}
+                  autoFocus
+                />
+              </View>
 
               <TouchableOpacity style={styles.modalSaveBtn} onPress={addCategory} activeOpacity={0.8}>
                 <Text style={styles.modalSaveBtnText}>Create Category</Text>
@@ -463,76 +576,147 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 14,
-    paddingBottom: 8,
+    paddingBottom: 14,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerAccent: {
+    width: 4,
+    height: 22,
+    backgroundColor: Colors.primary,
+    borderRadius: 2,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: Colors.text,
   },
   headerSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.textMuted,
     marginTop: 2,
+    marginLeft: 14,
   },
   addDishBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.primary,
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingVertical: 9,
+    borderRadius: 12,
     gap: 4,
+    shadowColor: Colors.shadowOrange,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 2,
   },
   addDishBtnText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
   },
-  searchBoxContainer: {
+  kpiRow: {
+    flexDirection: 'row',
     paddingHorizontal: 16,
-    marginBottom: 8,
+    paddingTop: 12,
+    gap: 8,
+  },
+  kpiPill: {
+    flex: 1,
+    flexDirection: 'column',
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.5,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  kpiPillLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.textMuted,
+  },
+  kpiPillVal: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.text,
+    marginTop: 1,
+  },
+  searchWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 6,
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surfaceCard,
-    borderWidth: 1,
+    backgroundColor: Colors.surface,
+    borderWidth: 1.5,
     borderColor: Colors.border,
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 12,
-    height: 42,
+    height: 44,
+    gap: 8,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 1,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
     color: Colors.text,
-    fontSize: 14,
+    fontSize: 13,
   },
   catTabsWrapper: {
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingBottom: 4,
   },
   catTabsList: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 6,
     gap: 8,
   },
   catTab: {
-    backgroundColor: Colors.surfaceCard,
+    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 10,
   },
   activeCatTab: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
+    shadowColor: Colors.shadowOrange,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 2,
   },
   catTabText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     color: Colors.textMuted,
   },
   activeCatTabText: {
@@ -541,62 +725,79 @@ const styles = StyleSheet.create({
   addCatBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.primaryBg,
     borderWidth: 1,
-    borderColor: Colors.borderLight,
+    borderColor: Colors.primaryBorder,
     borderStyle: 'dashed',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 10,
     gap: 4,
   },
   addCatText: {
-    fontSize: 12,
-    color: Colors.accentLight,
-    fontWeight: '600',
+    fontSize: 11,
+    color: Colors.primary,
+    fontWeight: '700',
   },
   listContent: {
     padding: 16,
-    paddingBottom: 30,
+    paddingTop: 6,
+    paddingBottom: 36,
   },
   emptyContainer: {
     alignItems: 'center',
     paddingVertical: 48,
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginTop: 8,
+  },
+  emptyIconBg: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: Colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   },
   emptyTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: Colors.text,
-    marginTop: 12,
   },
   emptyText: {
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.textMuted,
     marginTop: 4,
     textAlign: 'center',
+    paddingHorizontal: 20,
   },
   dishCard: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surfaceCard,
-    borderWidth: 1,
+    backgroundColor: Colors.surface,
+    borderWidth: 1.5,
     borderColor: Colors.border,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 14,
-    marginBottom: 10,
-    alignItems: 'center',
+    marginBottom: 12,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 2,
   },
   dishCardUnavailable: {
     opacity: 0.65,
+    backgroundColor: '#FAFAFA',
   },
-  dishInfo: {
-    flex: 1,
-    paddingRight: 10,
+  dishMain: {
+    gap: 6,
   },
-  dishTitleRow: {
+  dishHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
   },
   vegBadge: {
     width: 14,
@@ -613,66 +814,128 @@ const styles = StyleSheet.create({
   },
   dishName: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
     color: Colors.text,
+    flex: 1,
+  },
+  categoryPill: {
+    backgroundColor: Colors.bg,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  categoryPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.textMuted,
   },
   dishDesc: {
     fontSize: 12,
     color: Colors.textMuted,
-    marginBottom: 6,
+    lineHeight: 16,
+  },
+  dishBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
   },
   dishPrice: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '800',
-    color: Colors.accentLight,
+    color: Colors.primary,
   },
   dishControls: {
-    alignItems: 'flex-end',
-    gap: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  availabilityRow: {
+  stockToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  stockText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  actionButtons: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  availText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  dishActionButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  iconAction: {
+  iconBtn: {
     width: 32,
     height: 32,
-    borderRadius: 8,
-    backgroundColor: Colors.surfaceLight,
+    borderRadius: 9,
+    backgroundColor: Colors.primaryBg,
+    borderWidth: 1,
+    borderColor: Colors.primaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  deleteBtn: {
+    backgroundColor: Colors.redBg,
+    borderColor: Colors.redBorder,
+  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
-    padding: 20,
+    padding: 16,
   },
   modalCard: {
-    backgroundColor: Colors.surfaceCard,
+    backgroundColor: Colors.surface,
     borderRadius: 20,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: Colors.border,
-    padding: 20,
-    maxHeight: '80%',
+    padding: 18,
+    maxHeight: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  modalCardSmall: {
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 5,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  modalAccent: {
+    width: 4,
+    height: 18,
+    backgroundColor: Colors.primary,
+    borderRadius: 2,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: Colors.text,
   },
@@ -680,40 +943,101 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   inputGroup: {
-    gap: 6,
+    gap: 5,
   },
   inputLabel: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
     color: Colors.textSecondary,
   },
   modalInput: {
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.bg,
     borderWidth: 1,
-    borderColor: Colors.borderLight,
+    borderColor: Colors.border,
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 9,
     color: Colors.text,
-    fontSize: 14,
+    fontSize: 13,
   },
-  vegSwitchRow: {
+  modalInputMulti: {
+    height: 64,
+    textAlignVertical: 'top',
+  },
+  modalCatList: {
+    gap: 6,
+    paddingVertical: 2,
+  },
+  modalCatChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: Colors.bg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  activeModalCatChip: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  modalCatChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textMuted,
+  },
+  activeModalCatChipText: {
+    color: '#FFFFFF',
+  },
+  vegSelectionRow: {
+    gap: 6,
+  },
+  vegButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  vegChoiceBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    backgroundColor: Colors.bg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+  },
+  activeVegBtn: {
+    backgroundColor: Colors.greenBg,
+    borderColor: Colors.green,
+  },
+  activeNonVegBtn: {
+    backgroundColor: Colors.redBg,
+    borderColor: Colors.red,
+  },
+  vegChoiceText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textMuted,
   },
   modalSaveBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    height: 46,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    height: 44,
+    gap: 6,
+    marginTop: 6,
+    shadowColor: Colors.shadowOrange,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 2,
   },
   modalSaveBtnText: {
     color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

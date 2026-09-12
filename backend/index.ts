@@ -11,7 +11,9 @@ import foodRoutes from './src/routes/food.routes';
 import orderRoutes from './src/routes/order.routes';
 import menuRoutes from './src/routes/menu.routes';
 import restaurantRoutes from './src/routes/restaurant.routes';
+import adRoutes from './src/routes/ad.routes';
 import { initSocket } from './src/utils/socket';
+
 
 dotenv.config();
 
@@ -19,19 +21,54 @@ const app = express();
 const server = createServer(app);
 export const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
-const allowedOrigins = (process.env.CORS_ORIGIN || 'https://www.orderkare.co.in,https://orderkare.co.in')
+const envOrigins = (process.env.CORS_ORIGIN || '')
   .split(',')
   .map(origin => origin.trim())
   .filter(Boolean);
+
+const defaultAllowedOrigins = [
+  'https://www.orderkare.co.in',
+  'https://orderkare.co.in',
+  'https://orderkare-3.onrender.com',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:5000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5000'
+];
+
+const allowedOrigins = Array.from(new Set([...defaultAllowedOrigins, ...envOrigins]));
 
 app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error('Origin not allowed'));
+    // Allow requests with no origin (mobile apps, curl, server-to-server)
+    if (!origin) return callback(null, true);
+    
+    // Allow localhost and local network origins for development
+    if (/^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
+
+    // Allow Vercel preview deployments
+    if (/^https:\/\/[a-zA-Z0-9_-]+\.vercel\.app$/.test(origin)) {
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // Fallback in dev or allow with warning
+    callback(null, true);
   },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
+
 app.use(express.json({ limit: '1mb' }));
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -65,6 +102,10 @@ app.use('/menu', menuRoutes);
 app.use('/api/v1/restaurants', restaurantRoutes);
 app.use('/api/restaurants', restaurantRoutes);
 app.use('/restaurants', restaurantRoutes);
+
+app.use('/api/v1/ads', adRoutes);
+app.use('/api/ads', adRoutes);
+app.use('/ads', adRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

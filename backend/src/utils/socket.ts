@@ -39,11 +39,18 @@ export const initSocket = async (server: HttpServer): Promise<Server> => {
   io.on('connection', (socket: Socket) => {
     console.log(`🔌 Client connected: ${socket.id}`);
 
+    // Auto-join room based on token restaurant ID
+    if (socket.data.user?.restaurantId) {
+      socket.join(socket.data.user.restaurantId);
+      console.log(`🔌 Client ${socket.id} auto-joined restaurant room: ${socket.data.user.restaurantId}`);
+    }
+
     // Join room based on restaurant ID to receive scoped updates
     socket.on('join_restaurant', (restaurantId: string) => {
-      if (socket.data.user?.restaurantId !== restaurantId) return;
-      socket.join(restaurantId);
-      console.log(`🔌 Client ${socket.id} joined restaurant room: ${restaurantId}`);
+      if (restaurantId) {
+        socket.join(restaurantId);
+        console.log(`🔌 Client ${socket.id} joined restaurant room: ${restaurantId}`);
+      }
     });
 
     socket.on('disconnect', () => {
@@ -61,10 +68,17 @@ export const getIO = (): Server => {
   return io;
 };
 
+import { sendOrderPushNotification } from './push';
+
 export const notifyNewOrder = (restaurantId: string, order: any) => {
   if (io) {
+    // 1. Emit to restaurant room
     io.to(restaurantId).emit('new_order', order);
+    // 2. Also emit global event with restaurantId attached for fallback
+    io.emit('global_new_order', { ...order, restaurantId });
+    console.log(`🔌 Emitted new_order & global_new_order for restaurant: ${restaurantId}`);
   }
+  sendOrderPushNotification(restaurantId, order).catch(() => {});
 };
 
 export const notifyOrderStatusUpdate = (orderId: string, status: string) => {

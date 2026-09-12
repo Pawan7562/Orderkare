@@ -2,6 +2,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { LayoutDashboard, ShoppingBag, Menu, Grid2X2, Users, BarChart3, Settings, Bell, Search, LogOut } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { GlobalOrderNotifier } from '../components/GlobalOrderNotifier';
 
 export const AdminLayout = () => {
   const location = useLocation();
@@ -93,6 +94,9 @@ export const AdminLayout = () => {
             </div>
           </div>
         </header>
+
+        {/* Global Real-time Order Popup and Audio Bell */}
+        <GlobalOrderNotifier />
 
         {/* Page Content with Transitions */}
         <main className="flex-1 p-8 overflow-y-auto">

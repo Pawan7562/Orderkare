@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  SafeAreaView, StatusBar, ActivityIndicator,
+  StatusBar, ActivityIndicator,
   Platform, Image,
 } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as Notifications from 'expo-notifications';
 import { useAuthStore } from './store/authStore';
 import { Colors } from './constants/colors';
 
@@ -18,6 +17,8 @@ import MenuScreen from './app/(tabs)/menu';
 import TablesScreen from './app/(tabs)/tables';
 import AnalyticsScreen from './app/(tabs)/analytics';
 import SettingsScreen from './app/(tabs)/settings';
+
+import GlobalOrderNotifier from './components/GlobalOrderNotifier';
 
 type TabKey = 'dashboard' | 'orders' | 'menu' | 'tables' | 'analytics' | 'settings';
 
@@ -42,23 +43,6 @@ export default function App() {
 
   useEffect(() => {
     init();
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-        shouldShowBanner: true,
-        shouldShowList: true,
-      }),
-    });
-    void Notifications.requestPermissionsAsync();
-    if (Platform.OS === 'android') {
-      void Notifications.setNotificationChannelAsync('default', {
-        name: 'Orders',
-        importance: Notifications.AndroidImportance.MAX,
-        sound: 'default',
-        vibrationPattern: [0, 250, 250, 250],
-      });
-    }
   }, []);
 
   if (!isReady) {
@@ -109,6 +93,9 @@ export default function App() {
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor={Colors.surface} />
         
+        {/* Global Real-Time Order Popup & Kitchen Chime Bell */}
+        <GlobalOrderNotifier onNavigateToTab={(t) => setActiveTab(t)} />
+
         {/* Main Content Area */}
         <View style={styles.content}>
           {renderActiveScreen()}

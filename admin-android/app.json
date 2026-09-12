@@ -2,6 +2,7 @@
   "expo": {
     "name": "OrderKare Admin",
     "slug": "orderkare-admin",
+    "owner": "pawan75",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -19,17 +20,24 @@
         "backgroundColor": "#0D0D0D"
       },
       "permissions": [
-        "NOTIFICATIONS",
-        "RECEIVE_BOOT_COMPLETED",
+        "POST_NOTIFICATIONS",
         "VIBRATE",
-        "USE_BIOMETRIC",
-        "USE_FINGERPRINT"
+        "WAKE_LOCK",
+        "RECEIVE_BOOT_COMPLETED"
       ]
     },
     "plugins": [
       "expo-secure-store",
-      "expo-notifications",
-      "expo-font"
+      "expo-font",
+      "expo-audio",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#F97316"
+        }
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": false

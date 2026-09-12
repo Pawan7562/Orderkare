@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { Role } from '@prisma/client';
 import { generateToken } from '../utils/jwt';
 import { query } from '../lib/db';
+import { AuthRequest } from '../middleware/auth.middleware';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -217,9 +218,30 @@ export const getMe = async (req: Request | any, res: Response): Promise<void> =>
       return;
     }
 
-    res.status(404).json({ message: 'User not found' });
+      res.status(404).json({ message: 'User not found' });
   } catch (error) {
     console.error('Get me error:', error);
     res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+import { registerPushToken } from '../utils/push';
+
+export const savePushToken = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { pushToken, restaurantId: bodyRestId } = req.body;
+    const restaurantId = req.user?.restaurantId || bodyRestId || 'global_all';
+
+    if (!pushToken || typeof pushToken !== 'string') {
+      res.status(400).json({ message: 'Valid pushToken is required' });
+      return;
+    }
+
+    registerPushToken(restaurantId, pushToken);
+    
+    res.json({ message: 'Push token registered successfully', pushToken, restaurantId });
+  } catch (error) {
+    console.error('savePushToken error:', error);
+    res.status(500).json({ message: 'Failed to save push token' });
   }
 };

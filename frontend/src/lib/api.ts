@@ -1,12 +1,21 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
+const getBaseApiUrl = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return 'http://localhost:5000/api/v1';
+  }
+  return 'https://orderkare-3.onrender.com/api/v1';
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://orderkare-3.onrender.com/api/v1',
+  baseURL: getBaseApiUrl(),
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
 
 api.interceptors.request.use(
   (config) => {
