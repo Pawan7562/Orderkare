@@ -159,6 +159,7 @@ export const CustomerMenuPage = () => {
   const [feedbackRating, setFeedbackRating] = useState(5);
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [specialInstructions, setSpecialInstructions] = useState('');
 
   const cart = useCartStore();
 
@@ -252,8 +253,16 @@ export const CustomerMenuPage = () => {
   const subtotal = cart.getTotal();
   const tax = subtotal * 0.05;
   const total = subtotal + tax;
-
+          //handle place order
+   /*       
   const handlePlaceOrder = async () => {
+    const payload = {
+     customerName,
+    tableNumber,
+  phoneNumber,
+  items: cart.items,
+  specialInstructions: specialInstructions.trim(),
+};
     if (!customerName.trim()) {
       setOrderError('Please enter your name');
       return;
@@ -299,7 +308,83 @@ export const CustomerMenuPage = () => {
       setPlacingOrder(false);
     }
   };
+*/
+const handlePlaceOrder = async () => {
+  if (!customerName.trim()) {
+    setOrderError("Please enter your name");
+    return;
+  }
 
+  if (!tableNumber.trim()) {
+    setOrderError("Please enter table number");
+    return;
+  }
+
+  setPlacingOrder(true);
+  setOrderError("");
+
+  try {
+    const orderData = {
+      customerName: customerName.trim(),
+      tableNumber: tableNumber.trim(),
+      phoneNumber: phoneNumber?.trim() || undefined,
+
+      // This was missing
+      specialInstructions: specialInstructions?.trim() || undefined,
+
+      items: cart.items.map((item) => ({
+        foodItemId: item.foodItemId,
+        quantity: item.quantity,
+      })),
+    };
+
+    console.log("📤 FRONTEND ORDER PAYLOAD:", orderData);
+
+    const res = await axios.post(
+      `${API}/orders/place/${slug || "royal-palace"}`,
+      orderData
+    );
+
+    console.log("📥 CREATED ORDER:", res.data.order);
+
+    setOrderPlaced(res.data.order);
+    cart.clearCart();
+    setShowCheckout(false);
+    setShowCart(false);
+  } catch (err: any) {
+    console.error("Order placement failed:", err);
+
+    // Mock order placement fallback if DB server is offline
+    const mockOrder = {
+      id: `ORD-${Math.random()
+        .toString(36)
+        .substring(2, 8)
+        .toUpperCase()}`,
+      customerName,
+      tableNumber,
+      phoneNumber: phoneNumber || null,
+      specialInstructions: specialInstructions?.trim() || null,
+      status: "PENDING",
+      totalAmount: total,
+      createdAt: new Date().toISOString(),
+      items: cart.items.map((item) => ({
+        id: `item-${item.foodItemId}`,
+        quantity: item.quantity,
+        price: item.price,
+        foodItem: {
+          name: item.name,
+        },
+      })),
+    };
+
+    setOrderPlaced(mockOrder);
+    cart.clearCart();
+    setShowCheckout(false);
+    setShowCart(false);
+  } finally {
+    setPlacingOrder(false);
+  }
+};
   const handleCompletePayment = async () => {
     if (!orderPlaced?.id) return;
     setCompletingPayment(true);
@@ -354,6 +439,7 @@ export const CustomerMenuPage = () => {
       return (
         <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-between max-w-md mx-auto relative overflow-hidden font-sans">
           <div className="absolute -top-32 -left-32 w-80 h-80 bg-primary/20 rounded-full blur-3xl" />
+           
           <div className="absolute -bottom-32 -right-32 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl" />
 
           <div className="p-6 relative z-10">
@@ -964,129 +1050,205 @@ export const CustomerMenuPage = () => {
 
       {/* Checkout Modal */}
       <AnimatePresence>
-        {showCheckout && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4"
+  {showCheckout && (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      onClick={() => setShowCheckout(false)}
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal Header */}
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+          <div>
+            <h2 className="text-lg font-extrabold text-slate-900">
+              Complete Your Order
+            </h2>
+
+            <p className="mt-0.5 text-xs text-slate-400">
+              Please confirm details for Table #{tableNumber}
+            </p>
+          </div>
+
+          <button
+            type="button"
             onClick={() => setShowCheckout(false)}
+            className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Close checkout"
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border border-slate-100"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-5">
-                <div>
-                  <h2 className="text-lg font-extrabold text-slate-900">Complete Your Order</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">Please confirm details for Table #{tableNumber}</p>
-                </div>
-                <button
-                  onClick={() => setShowCheckout(false)}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Scrollable Modal Content */}
+        <div className="overflow-y-auto px-6 py-5">
+          {/* Error Message */}
+          {orderError && (
+            <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-2.5 text-xs font-semibold text-red-600">
+              {orderError}
+            </div>
+          )}
+
+          {/* Customer Details */}
+          <div className="mb-6 space-y-4">
+            {/* Customer Name */}
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                Your Name *
+              </label>
+
+              <input
+                type="text"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="e.g. Rahul Sharma"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+
+            {/* Table Number and Phone */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Table No. *
+                </label>
+
+                <input
+                  type="text"
+                  value={tableNumber}
+                  onChange={(e) => setTableNumber(e.target.value)}
+                  placeholder="e.g. 01"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
               </div>
 
-              {orderError && (
-                <div className="bg-red-50 text-red-600 px-4 py-2.5 rounded-2xl text-xs font-semibold mb-4 border border-red-100">
-                  {orderError}
-                </div>
-              )}
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Phone{" "}
+                  <span className="font-normal normal-case text-slate-400">
+                    (Optional)
+                  </span>
+                </label>
 
-              <div className="space-y-3.5 mb-6">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Your Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="e.g. Rahul Sharma"
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                  />
-                </div>
+                <input
+                  type="tel"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="+91 98765..."
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+            </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Table No. *
-                    </label>
-                    <input
-                      type="text"
-                      value={tableNumber}
-                      onChange={(e) => setTableNumber(e.target.value)}
-                      placeholder="e.g. 04"
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-mono"
-                    />
-                  </div>
+            {/* Special Instructions */}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Special Instructions
+                </label>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Phone (Optional)
-                    </label>
-                    <input
-                      type="tel"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder="+91 98765..."
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                    />
-                  </div>
-                </div>
+                <span className="text-[10px] font-medium text-slate-400">
+                  Optional
+                </span>
               </div>
 
-              {/* Summary card */}
-              <div className="bg-slate-50 rounded-2xl p-4 mb-6 border border-slate-100 space-y-2 text-xs">
-                <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
-                  <span className="font-bold text-slate-700">Order Summary</span>
-                  <span className="text-slate-400 font-mono">{cart.getItemCount()} items</span>
-                </div>
-                {cart.items.map((item) => (
-                  <div key={item.foodItemId} className="flex justify-between text-slate-600">
-                    <span>
-                      {item.quantity}x {item.name}
-                    </span>
-                    <span className="font-mono">₹{item.price * item.quantity}</span>
-                  </div>
-                ))}
-                <div className="pt-2 border-t border-slate-200/60 flex justify-between font-extrabold text-slate-900 text-sm">
-                  <span>Total Payable</span>
-                  <span className="text-primary font-mono text-base">₹{total.toFixed(0)}</span>
-                </div>
-              </div>
+              <textarea
+                value={specialInstructions}
+                onChange={(e) => setSpecialInstructions(e.target.value)}
+                rows={3}
+                maxLength={250}
+                placeholder="e.g. Make it more spicy, less oil, no onions..."
+                className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-800 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+              />
 
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => setShowCheckout(false)}
-                  className="px-4 py-3 text-slate-600 bg-slate-100 rounded-2xl text-xs font-bold hover:bg-slate-200 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handlePlaceOrder}
-                  disabled={placingOrder}
-                  className="flex-1 bg-primary text-white py-3.5 rounded-2xl text-xs font-bold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 disabled:opacity-50 flex items-center justify-center space-x-2"
-                >
-                  {placingOrder ? (
-                    <span>Sending to Kitchen...</span>
-                  ) : (
-                    <>
-                      <span>Place Order Now</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
+
+              <div className="mt-1.5 flex items-center justify-between">
+                <p className="text-[10px] text-slate-400">
+                  Tell the kitchen about your preferences.
+                </p>
+
+                <span className="text-[10px] text-slate-400">
+                  {specialInstructions.length}/250
+                </span>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+            </div>
+          </div>
+
+          {/* Order Summary */}
+          <div className="mb-6 space-y-2 rounded-2xl border border-slate-100 bg-slate-50 p-4 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+              <span className="font-bold text-slate-700">
+                Order Summary
+              </span>
+
+              <span className="font-mono text-slate-400">
+                {cart.getItemCount()} items
+              </span>
+            </div>
+
+            {cart.items.map((item) => (
+              <div
+                key={item.foodItemId}
+                className="flex justify-between gap-3 text-slate-600"
+              >
+                <span>
+                  {item.quantity}x {item.name}
+                </span>
+
+                <span className="shrink-0 font-mono">
+                  ₹{item.price * item.quantity}
+                </span>
+              </div>
+            ))}
+
+            <div className="flex items-center justify-between border-t border-slate-200/60 pt-2 text-sm font-extrabold text-slate-900">
+              <span>Total Payable</span>
+
+              <span className="font-mono text-base text-primary">
+                ₹{total.toFixed(0)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div className="flex gap-3 border-t border-slate-100 bg-white px-6 py-4">
+          <button
+            type="button"
+            onClick={() => setShowCheckout(false)}
+            className="rounded-2xl bg-slate-100 px-4 py-3 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-200"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePlaceOrder}
+            disabled={placingOrder}
+            className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-xs font-bold text-white shadow-md shadow-primary/20 transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {placingOrder ? (
+              <span>Sending to Kitchen...</span>
+            ) : (
+              <>
+                <span>Place Order Now</span>
+                <ArrowRight className="h-4 w-4" />
+              </>
+            )}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
+</div>
   );
-};
+}

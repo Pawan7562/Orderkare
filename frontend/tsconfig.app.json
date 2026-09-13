@@ -27,5 +27,5 @@
     },
     "ignoreDeprecations": "6.0"
   },
-  "include": ["src"]
+  "include": ["src", "src/pages/.PromoBanner.tsx"]
 }

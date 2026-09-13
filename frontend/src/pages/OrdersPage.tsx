@@ -11,9 +11,17 @@ interface Order {
   status: string;
   createdAt: string;
   phoneNumber: string | null;
-  items: { foodItem: { name: string; price: number }; quantity: number; price: number }[];
-}
+  specialInstructions: string | null;
 
+  items: {
+    foodItem: {
+      name: string;
+      price: number;
+    };
+    quantity: number;
+    price: number;
+  }[];
+}
 const statusConfig: Record<string, { label: string; bg: string; icon: any }> = {
   PENDING: { label: 'Pending', bg: 'bg-amber-50 text-amber-700 border-amber-200', icon: Clock },
   ACCEPTED: { label: 'Accepted', bg: 'bg-blue-50 text-blue-700 border-blue-200', icon: Package },
@@ -47,6 +55,7 @@ export const OrdersPage = () => {
     try {
       const statusQuery = activeFilter === 'ALL' ? '' : `?status=${activeFilter}`;
       const res = await api.get(`/orders${statusQuery}`);
+      console.log("FRONTEND ORDER DATA:", res.data.orders);
       setOrders(res.data.orders || []);
     } catch (err) {
       // silent
@@ -196,6 +205,7 @@ export const OrdersPage = () => {
                                   <th className="text-center p-3 font-semibold">Qty</th>
                                   <th className="text-right p-3 font-semibold">Price</th>
                                   <th className="text-right p-3 font-semibold">Total</th>
+                                  <th className="p-3 font-semibold">Special Instructions</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
@@ -205,6 +215,16 @@ export const OrdersPage = () => {
                                     <td className="p-3 text-center text-slate-500">{item.quantity}</td>
                                     <td className="p-3 text-right text-slate-500 font-mono">₹{item.price}</td>
                                     <td className="p-3 text-right font-bold font-mono">₹{item.price * item.quantity}</td>
+                                    
+                 <td className="w-64 px-4 py-3 text-center align-top">
+  {order.specialInstructions ? (
+    <p className="whitespace-pre-wrap break-words text-center text-sm font-semibold leading-5 text-gray-800">
+      {order.specialInstructions}
+    </p>
+  ) : (
+    <span className="text-sm text-gray-400">—</span>
+  )}
+</td>
                                   </tr>
                                 ))}
                               </tbody>

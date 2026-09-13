@@ -70,17 +70,19 @@ model FoodItem {
 }
 
 model Order {
-  id           String      @id @default(uuid())
-  customerName String
-  tableNumber  String
-  phoneNumber  String?
-  status       OrderStatus @default(PENDING)
-  totalAmount  Float
-  restaurantId String
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @default(now()) @updatedAt
-  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  items        OrderItem[]
+  id                 String      @id @default(uuid())
+  customerName       String
+  tableNumber        String
+  phoneNumber        String?
+  specialInstructions String?
+  status             OrderStatus @default(PENDING)
+  totalAmount        Float
+  restaurantId       String
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @default(now()) @updatedAt
+
+  restaurant         Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  items              OrderItem[]
 }
 
 model OrderItem {

@@ -38,6 +38,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+
+
 export const LandingPage = () => {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [activeTab, setActiveTab] = useState<'customer' | 'admin'>('customer');
@@ -170,8 +172,11 @@ export const LandingPage = () => {
   ];
 
   return (
+    
     <div className="min-h-screen bg-slate-50 text-slate-800 selection:bg-primary/20 selection:text-primary font-sans overflow-x-hidden">
       
+     
+        
       {/* Decorative background glows */}
       <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-primary/10 rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute top-1/3 right-10 w-[500px] h-[500px] bg-rose-500/10 rounded-full blur-[140px] pointer-events-none" />

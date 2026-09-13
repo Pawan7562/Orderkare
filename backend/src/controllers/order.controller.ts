@@ -11,11 +11,17 @@ const fallbackOrders: any[] = [
     customerName: 'Aarav Patel',
     tableNumber: '04',
     phoneNumber: '+91 98765 43210',
+    specialInstructions: 'Less spicy',
     totalAmount: 440,
     status: 'PENDING',
     createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
     items: [
-      { id: 'oi-1', quantity: 2, price: 220, foodItem: { name: 'Paneer Tikka' } }
+      {
+        id: 'oi-1',
+        quantity: 2,
+        price: 220,
+        foodItem: { name: 'Paneer Tikka' }
+      }
     ]
   },
   {
@@ -23,12 +29,23 @@ const fallbackOrders: any[] = [
     customerName: 'Priya Sharma',
     tableNumber: '02',
     phoneNumber: '+91 98111 22233',
+    specialInstructions: 'No onions',
     totalAmount: 600,
     status: 'PREPARING',
     createdAt: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
     items: [
-      { id: 'oi-2', quantity: 1, price: 340, foodItem: { name: 'Butter Chicken' } },
-      { id: 'oi-3', quantity: 1, price: 260, foodItem: { name: 'Dal Makhani' } }
+      {
+        id: 'oi-2',
+        quantity: 1,
+        price: 340,
+        foodItem: { name: 'Butter Chicken' }
+      },
+      {
+        id: 'oi-3',
+        quantity: 1,
+        price: 260,
+        foodItem: { name: 'Dal Makhani' }
+      }
     ]
   },
   {
@@ -36,11 +53,17 @@ const fallbackOrders: any[] = [
     customerName: 'Rohan Gupta',
     tableNumber: '07',
     phoneNumber: '+91 99000 11223',
+    specialInstructions: null,
     totalAmount: 240,
     status: 'READY',
     createdAt: new Date(Date.now() - 22 * 60 * 1000).toISOString(),
     items: [
-      { id: 'oi-4', quantity: 2, price: 120, foodItem: { name: 'Mango Lassi' } }
+      {
+        id: 'oi-4',
+        quantity: 2,
+        price: 120,
+        foodItem: { name: 'Mango Lassi' }
+      }
     ]
   }
 ];
@@ -56,10 +79,328 @@ const fallbackFoodItems = new Map<string, any>([
 
 const feedbackStore: any[] = [];
 
-export const createOrder = async (req: Request, res: Response): Promise<void> => {
+export const createOrder = async (
+ 
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
     const slug = req.params.slug as string;
-    const { customerName, tableNumber, phoneNumber, items } = req.body;
+
+    const {
+      customerName,
+      tableNumber,
+      phoneNumber,
+      items,
+      specialInstructions,
+    } = req.body;
+     console.log("📥 SPECIAL INSTRUCTIONS RECEIVED:", {
+  value: specialInstructions,
+  type: typeof specialInstructions,
+});
+
+    const cleanedInstructions =
+      typeof specialInstructions === "string"
+        ? specialInstructions.trim()
+        : "";
+
+    console.log("📥 RECEIVED ORDER DATA:", {
+      customerName,
+      tableNumber,
+      phoneNumber,
+      specialInstructions: cleanedInstructions,
+      items,
+    });
+
+    if (!customerName || !tableNumber || !Array.isArray(items) || !items.length) {
+      res.status(400).json({
+        message: "Customer name, table number, and items are required",
+      });
+      return;
+    }
+
+    try {
+      const restaurant = await prisma.restaurant.findUnique({
+        where: {
+          slug,
+        },
+      });
+
+      if (!restaurant || !restaurant.isActive) {
+        res.status(404).json({
+          message: "Restaurant not found or inactive",
+        });
+        return;
+      }
+
+      const foodIds = items.map((item: any) => item.foodItemId);
+
+      const foodItems = await prisma.foodItem.findMany({
+        where: {
+          id: {
+            in: foodIds,
+          },
+          restaurantId: restaurant.id,
+          isAvailable: true,
+        },
+      });
+
+      if (foodItems.length !== foodIds.length) {
+        res.status(400).json({
+          message: "Some items are unavailable or invalid",
+        });
+        return;
+      }
+
+      const foodMap = new Map(
+        foodItems.map((foodItem) => [foodItem.id, foodItem])
+      );
+
+      let totalAmount = 0;
+
+      const orderItemsData = items.map((item: any) => {
+        const food = foodMap.get(item.foodItemId);
+
+        if (!food) {
+          throw new Error(`Food item not found: ${item.foodItemId}`);
+        }
+
+        const quantity = Number(item.quantity);
+
+        if (!quantity || quantity <= 0) {
+          throw new Error(`Invalid quantity: ${item.quantity}`);
+        }
+
+        totalAmount += food.price * quantity;
+
+        // Do not include item.specialInstruction here unless
+        // your OrderItem Prisma model actually has that field.
+        return {
+          foodItemId: item.foodItemId,
+          quantity,
+          price: food.price,
+        };
+      });
+
+      const openOrder = await prisma.order.findFirst({
+        where: {
+          restaurantId: restaurant.id,
+          customerName,
+          tableNumber,
+          status: {
+            notIn: ["PAID", "COMPLETED", "REJECTED"],
+          },
+        },
+        include: {
+          items: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      let order;
+
+      if (openOrder) {
+        const existingItems = new Map(
+          openOrder.items.map((item) => [item.foodItemId, item])
+        );
+
+        await prisma.$transaction(
+          orderItemsData.map((item) => {
+            const existing = existingItems.get(item.foodItemId);
+
+            if (existing) {
+              return prisma.orderItem.update({
+                where: {
+                  id: existing.id,
+                },
+                data: {
+                  quantity: existing.quantity + item.quantity,
+                },
+              });
+            }
+
+            return prisma.orderItem.create({
+              data: {
+                ...item,
+                orderId: openOrder.id,
+              },
+            });
+          })
+        );
+
+        order = await prisma.order.update({
+          where: {
+            id: openOrder.id,
+          },
+          data: {
+            totalAmount: openOrder.totalAmount + totalAmount,
+
+            phoneNumber:
+              phoneNumber || openOrder.phoneNumber || null,
+
+            specialInstructions:
+              cleanedInstructions ||
+              openOrder.specialInstructions ||
+              null,
+          },
+          include: {
+            items: {
+              include: {
+                foodItem: true,
+              },
+            },
+          },
+        });
+      } else {
+        order = await prisma.order.create({
+          data: {
+            customerName,
+            tableNumber,
+            phoneNumber: phoneNumber || null,
+
+            // This is the important field
+            specialInstructions: cleanedInstructions || null,
+
+            totalAmount,
+            restaurantId: restaurant.id,
+            status: "PENDING",
+
+            items: {
+              create: orderItemsData,
+            },
+          },
+          include: {
+            items: {
+              include: {
+                foodItem: true,
+              },
+            },
+          },
+        });
+      }
+
+      console.log("✅ CREATED/UPDATED ORDER:", {
+        id: order.id,
+        customerName: order.customerName,
+        tableNumber: order.tableNumber,
+        phoneNumber: order.phoneNumber,
+        specialInstructions: order.specialInstructions,
+        totalAmount: order.totalAmount,
+        status: order.status,
+      });
+
+      notifyNewOrder(restaurant.id, order);
+
+      res.status(201).json({
+        order,
+      });
+    } catch (dbError) {
+      console.warn(
+        "⚠️ Database offline during order creation. Simulating order placement.",
+        dbError
+      );
+
+      let totalAmount = 0;
+
+      const hydratedItems = items.map((item: any) => {
+        const food = fallbackFoodItems.get(item.foodItemId) || {
+          name: "Special Item",
+          price: 150,
+        };
+
+        const quantity = Number(item.quantity) || 1;
+
+        totalAmount += food.price * quantity;
+
+        return {
+          id: `oi-${Date.now()}-${Math.random()
+            .toString(36)
+            .substring(2, 6)}`,
+          quantity,
+          price: food.price,
+          foodItem: {
+            name: food.name,
+            price: food.price,
+          },
+        };
+      });
+
+      const openOrder = fallbackOrders.find(
+        (order) =>
+          order.customerName === customerName &&
+          order.tableNumber === tableNumber &&
+          !["PAID", "COMPLETED", "REJECTED"].includes(order.status)
+      );
+
+      if (openOrder) {
+        hydratedItems.forEach((item) => {
+          const existingItem = openOrder.items.find(
+            (existingItem: any) =>
+              existingItem.foodItem.name === item.foodItem.name
+          );
+
+          if (existingItem) {
+            existingItem.quantity += item.quantity;
+          } else {
+            openOrder.items.push(item);
+          }
+        });
+
+        openOrder.totalAmount += totalAmount;
+
+        if (phoneNumber) {
+          openOrder.phoneNumber = phoneNumber;
+        }
+
+        if (cleanedInstructions) {
+          openOrder.specialInstructions = cleanedInstructions;
+        }
+
+        notifyNewOrder("demo-restaurant-id", openOrder);
+
+        res.status(201).json({
+          order: openOrder,
+        });
+
+        return;
+      }
+
+      const newOrder = {
+        id: `ord-${Date.now()}`,
+        customerName,
+        tableNumber,
+        phoneNumber: phoneNumber || null,
+        specialInstructions: cleanedInstructions || null,
+        totalAmount,
+        status: "PENDING",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        items: hydratedItems,
+      };
+
+      fallbackOrders.push(newOrder);
+
+      notifyNewOrder("demo-restaurant-id", newOrder);
+
+      res.status(201).json({
+        order: newOrder,
+      });
+    }
+  } catch (error) {
+    console.error("❌ createOrder error:", error);
+
+    res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
+/*export const createOrder = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const slug = req.params.slug as string;
+    const { customerName, tableNumber, phoneNumber, items, specialInstructions } = req.body;
 
     if (!customerName || !tableNumber || !items || !items.length) {
       res.status(400).json({ message: 'Customer name, table number, and items are required' });
@@ -92,6 +433,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
           foodItemId: item.foodItemId,
           quantity: item.quantity,
           price: food.price,
+          specialInstruction: item.specialInstruction || null,
         };
       });
 
@@ -126,6 +468,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
           data: {
             totalAmount: openOrder.totalAmount + totalAmount,
             phoneNumber: phoneNumber || openOrder.phoneNumber,
+            specialInstructions: specialInstructions || openOrder.specialInstructions,
           },
           include: { items: { include: { foodItem: true } } },
         });
@@ -135,6 +478,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
             customerName,
             tableNumber,
             phoneNumber,
+            specialInstructions,
             totalAmount,
             restaurantId: restaurant.id,
             status: 'PENDING',
@@ -190,6 +534,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         customerName,
         tableNumber,
         phoneNumber,
+        specialInstructions,
         totalAmount,
         status: 'PENDING',
         createdAt: new Date().toISOString(),
@@ -204,7 +549,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     console.error('createOrder error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
-};
+}; */
 
 export const getOrderStatus = async (req: Request, res: Response): Promise<void> => {
   try {
