@@ -293,7 +293,7 @@ export const LandingPage: React.FC = () => {
           <div className="relative min-w-0 flex-1 overflow-hidden">
             <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-orange-500 via-orange-500/70 to-transparent z-10 pointer-events-none" />
             <div className="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-amber-500 via-amber-500/70 to-transparent z-10 pointer-events-none" />
-            <div className="animate-marquee-ltr whitespace-nowrap">
+            <div className="animate-marquee whitespace-nowrap">
               {[1, 2].map((copy) => (
                 <div key={copy} className="flex items-center shrink-0">
                   <span className="px-6">Real-time kitchen display and instant UPI QR ordering are now live</span>
