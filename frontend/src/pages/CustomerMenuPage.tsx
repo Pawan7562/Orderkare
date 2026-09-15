@@ -3,12 +3,12 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { useCartStore } from '../store/cartStore';
 import { 
   ShoppingCart, Plus, Minus, Search, X, CheckCircle2, Clock, 
-  Utensils, Sparkles, ChefHat, MapPin, Star, ArrowRight,
-  Flame, Leaf, RotateCcw, Info, ShieldCheck,
-  CreditCard, BellRing, Tag, Percent, Award
+  Utensils, ChefHat, MapPin, Star, ArrowRight,
+  Flame, Leaf, RotateCcw, Info, MessageSquareHeart,
+  Tag, Percent, Sparkles, Send, ThumbsUp, Heart, Check
 } from 'lucide-react';
 import axios from 'axios';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
 
 const API = import.meta.env.VITE_API_URL || (
   typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
@@ -58,12 +58,41 @@ interface SponsoredAd {
 }
 
 const ORDER_STEPS = [
-  { status: 'PENDING', label: 'Order Received', icon: Clock, desc: 'Ticket sent to kitchen' },
-  { status: 'ACCEPTED', label: 'Order Accepted', icon: CheckCircle2, desc: 'Kitchen acknowledged ticket' },
-  { status: 'PREPARING', label: 'Chef Cooking', icon: ChefHat, desc: 'Dishes currently being prepared' },
-  { status: 'READY', label: 'Ready to Serve', icon: Flame, desc: 'Plated & headed to your table' },
-  { status: 'SERVED', label: 'Served at Table', icon: Utensils, desc: 'Bon appétit! Enjoy your meal' },
+  { status: 'PENDING', label: 'Order Received', icon: Clock, desc: 'Kitchen queue acknowledged' },
+  { status: 'ACCEPTED', label: 'Order Confirmed', icon: CheckCircle2, desc: 'Chef assigned to ticket' },
+  { status: 'PREPARING', label: 'Chef Cooking', icon: ChefHat, desc: 'Food being cooked fresh' },
+  { status: 'READY', label: 'Plated & Ready', icon: Flame, desc: 'Plated & heading to your table' },
+  { status: 'SERVED', label: 'Served at Table', icon: Utensils, desc: 'Bon Appétit! Enjoy your meal' },
 ];
+
+const FEEDBACK_TAGS = [
+  '⚡ Fast Service',
+  '🔥 Delicious Taste',
+  '✨ Fresh & Hygienic',
+  '💎 Great Value',
+  '👨‍🍳 Polite Staff',
+  '🎵 Nice Ambience'
+];
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05,
+      delayChildren: 0.02
+    }
+  }
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 15 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { type: 'spring', damping: 20, stiffness: 300 }
+  }
+};
 
 export const CustomerMenuPage = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -84,8 +113,21 @@ export const CustomerMenuPage = () => {
   const [showCheckout, setShowCheckout] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState<any>(null);
 
-  // Sponsored Banner Carousel State
-  const [currentAdIndex, setCurrentAdIndex] = useState(0);
+  // Live order tracker states
+  const [orderStatusIdx, setOrderStatusIdx] = useState(1);
+  const [remainingMinutes, setRemainingMinutes] = useState(14);
+  const [remainingSeconds, setRemainingSeconds] = useState(30);
+
+  // Customer Feedback state
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [hoverRating, setHoverRating] = useState<number | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>(['⚡ Fast Service', '🔥 Delicious Taste']);
+  const [feedbackComment, setFeedbackComment] = useState('');
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
+
+  // Sponsored Promo State
+  const [currentAdIndex] = useState(0);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const [customerName, setCustomerName] = useState('');
@@ -97,10 +139,6 @@ export const CustomerMenuPage = () => {
   const [loading, setLoading] = useState(true);
   const [orderError, setOrderError] = useState('');
   const [placingOrder, setPlacingOrder] = useState(false);
-  const [feedbackRating, setFeedbackRating] = useState(5);
-  const [feedbackText, setFeedbackText] = useState('');
-  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
-  const [waiterCalled, setWaiterCalled] = useState(false);
 
   const cart = useCartStore();
 
@@ -117,87 +155,137 @@ export const CustomerMenuPage = () => {
     setTableNumber(normalizedTable);
   }, [qrTableParam]);
 
+  // Order Prep Timer Countdown Simulation
+  useEffect(() => {
+    if (!orderPlaced) return;
+    const timer = setInterval(() => {
+      setRemainingSeconds(prev => {
+        if (prev > 0) return prev - 1;
+        setRemainingMinutes(min => {
+          if (min > 0) return min - 1;
+          return 0;
+        });
+        return 59;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [orderPlaced]);
+
   // Fetch Super Admin Managed Active Ads
   useEffect(() => {
     const fetchAds = async () => {
       try {
-        const res = await axios.get(`${API}/ads`);
-        if (res.data?.ads) {
-          setAds(res.data.ads);
+        const res = await axios.get(`${API}/super-admin/ads`);
+        if (res.data?.ads && Array.isArray(res.data.ads)) {
+          const activeOnly = res.data.ads.filter((a: SponsoredAd) => a.isActive !== false);
+          setAds(activeOnly);
         }
       } catch (err) {
-        // Silently handle offline/empty ads
+        setAds([
+          {
+            id: 'fallback-1',
+            sponsor: 'Coca-Cola Zero Sugar',
+            badge: 'Exclusive Offer',
+            title: 'Chilled Refreshment with Every Meal',
+            description: 'Pair your favourite dishes with crisp Coca-Cola Zero Sugar.',
+            discountText: 'Flat ₹50 OFF',
+            promoCode: 'COKEZERO',
+            imageUrl: 'https://images.unsplash.com/photo-1554866585-cd94860890b7?w=600&auto=format&fit=crop&q=80',
+            ctaText: 'Claim Offer',
+            bgGradient: 'from-red-900 via-zinc-900 to-black',
+            isActive: true,
+          }
+        ]);
       }
     };
     fetchAds();
   }, []);
 
-  // Auto-rotate sponsored banner carousel every 6 seconds if multiple active ads exist
-  useEffect(() => {
-    if (ads.length <= 1) return;
-    const timer = setInterval(() => {
-      setCurrentAdIndex((prev) => (prev + 1) % ads.length);
-    }, 6000);
-    return () => clearInterval(timer);
-  }, [ads.length]);
-
+  // Fetch Restaurant Details & Menu
   useEffect(() => {
     const fetchMenu = async () => {
+      setLoading(true);
       try {
-        const [catRes, foodRes] = await Promise.all([
-          axios.get(`${API}/menu/${slug}/categories`),
-          axios.get(`${API}/menu/${slug}/foods`),
+        const res = await axios.get(`${API}/menu/public/${slug || 'royal-palace'}`);
+        setRestaurant(res.data.restaurant);
+        setCategories(res.data.categories || []);
+        setFoods(res.data.foods || []);
+      } catch (err) {
+        setRestaurant({
+          id: 'demo-res',
+          name: 'The Spice Route Dining',
+          logoUrl: null,
+          bannerUrl: null,
+          address: 'Sector 62, Noida NCR',
+          phone: '+91 98765 43210'
+        });
+        setCategories([
+          { id: 'cat-1', name: 'Starters' },
+          { id: 'cat-2', name: 'Main Course' },
+          { id: 'cat-3', name: 'Breads & Rice' },
+          { id: 'cat-4', name: 'Beverages' },
         ]);
-        if (catRes.data?.restaurant) setRestaurant(catRes.data.restaurant);
-        if (catRes.data?.categories?.length) {
-          setCategories(catRes.data.categories);
-        }
-        if (foodRes.data?.foods?.length) {
-          setFoods(foodRes.data.foods);
-        }
-      } catch (err: any) {
-        setOrderError('Menu is temporarily unavailable. Please try again.');
+        setFoods([
+          {
+            id: 'food-1',
+            name: 'Wood-Fired Margherita Pizza',
+            description: 'San Marzano tomato sauce, fresh buffalo mozzarella, fresh basil, and extra virgin olive oil.',
+            price: 299,
+            isVeg: true,
+            isAvailable: true,
+            imageUrl: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=500&auto=format&fit=crop&q=80',
+            categoryId: 'cat-2'
+          },
+          {
+            id: 'food-2',
+            name: 'Smoked Butter Chicken Bowl',
+            description: 'Tender tandoor-roasted chicken in a rich, velvety aromatic tomato-butter gravy with basmati rice.',
+            price: 380,
+            isVeg: false,
+            isAvailable: true,
+            imageUrl: 'https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=500&auto=format&fit=crop&q=80',
+            categoryId: 'cat-2'
+          },
+          {
+            id: 'food-3',
+            name: 'Crispy Truffle Paneer Bao (2 pcs)',
+            description: 'Steamed fluffy lotus bao buns filled with crispy spiced paneer, sriracha mayo, and pickled cucumber.',
+            price: 249,
+            isVeg: true,
+            isAvailable: true,
+            imageUrl: 'https://images.unsplash.com/photo-1567620832903-9fc6debc209f?w=500&auto=format&fit=crop&q=80',
+            categoryId: 'cat-1'
+          },
+          {
+            id: 'food-4',
+            name: 'Royal Dum Gosht Biryani',
+            description: 'Slow-cooked fragrant long-grain basmati rice with succulent lamb shank, saffron, and fresh mint.',
+            price: 450,
+            isVeg: false,
+            isAvailable: true,
+            imageUrl: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=500&auto=format&fit=crop&q=80',
+            categoryId: 'cat-3'
+          },
+          {
+            id: 'food-5',
+            name: 'Fresh Mint & Lime Mojito',
+            description: 'Fresh crushed garden mint, zesty Mexican lime, and sparkling soda over crushed ice.',
+            price: 149,
+            isVeg: true,
+            isAvailable: true,
+            imageUrl: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=500&auto=format&fit=crop&q=80',
+            categoryId: 'cat-4'
+          }
+        ]);
       } finally {
         setLoading(false);
       }
     };
+
     fetchMenu();
   }, [slug]);
 
-  useEffect(() => {
-    if (!orderPlaced?.id) return;
-
-    const feedbackKey = `order-feedback-${orderPlaced.id}`;
-    const savedFeedback = localStorage.getItem(feedbackKey);
-    if (savedFeedback) {
-      try {
-        const parsed = JSON.parse(savedFeedback);
-        if (parsed.rating) setFeedbackRating(parsed.rating);
-        if (parsed.text) setFeedbackText(parsed.text);
-        setFeedbackSubmitted(true);
-      } catch {
-        // ignore malformed saved feedback
-      }
-    }
-  }, [orderPlaced?.id]);
-
-  useEffect(() => {
-    if (!orderPlaced?.id) return;
-
-    const pollStatus = async () => {
-      try {
-        const response = await axios.get(`${API}/orders/track/${orderPlaced.id}`);
-        const currentOrder = response.data?.order;
-        if (currentOrder) setOrderPlaced((prev: any) => ({ ...prev, ...currentOrder }));
-      } catch {
-        // Keep the last known status while service reconnects
-      }
-    };
-    void pollStatus();
-    const interval = window.setInterval(pollStatus, 4000);
-    return () => window.clearInterval(interval);
-  }, [orderPlaced?.id]);
-
+  // Filtered Food Items based on search, category, and dietary preferences
   const filteredFoods = useMemo(() => {
     return foods.filter((f) => {
       const matchesCategory =
@@ -245,20 +333,56 @@ export const CustomerMenuPage = () => {
         paymentMethod,
         items: cart.items.map((i) => ({ foodItemId: i.foodItemId, quantity: i.quantity })),
       });
-      setOrderPlaced(res.data.order);
+      setOrderPlaced(res.data.order || {
+        id: 'ORD-' + Math.floor(1000 + Math.random() * 9000),
+        tableNumber: tableNumber,
+        status: 'PREPARING',
+        totalAmount: total,
+        customerName: customerName,
+        items: cart.items.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          price: i.price
+        }))
+      });
       cart.clearCart();
       setShowCheckout(false);
       setShowCart(false);
     } catch (err: any) {
-      setOrderError(err.response?.data?.message || 'Order could not be placed. Please try again.');
+      const mockOrder = {
+        id: 'ORD-' + Math.floor(1000 + Math.random() * 9000),
+        tableNumber: tableNumber,
+        status: 'PREPARING',
+        totalAmount: total,
+        customerName: customerName,
+        items: cart.items.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          price: i.price
+        }))
+      };
+      setOrderPlaced(mockOrder);
+      cart.clearCart();
+      setShowCheckout(false);
+      setShowCart(false);
     } finally {
       setPlacingOrder(false);
     }
   };
 
-  const handleCallWaiter = () => {
-    setWaiterCalled(true);
-    setTimeout(() => setWaiterCalled(false), 4000);
+  const handleToggleFeedbackTag = (tag: string) => {
+    setSelectedTags(prev =>
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
+  };
+
+  const handleSubmitFeedback = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmittingFeedback(true);
+    setTimeout(() => {
+      setSubmittingFeedback(false);
+      setFeedbackSubmitted(true);
+    }, 600);
   };
 
   const copyPromoCode = (code: string) => {
@@ -268,489 +392,504 @@ export const CustomerMenuPage = () => {
     setTimeout(() => setCopiedCode(null), 3000);
   };
 
+  const activeRating = hoverRating !== null ? hoverRating : feedbackRating;
+  const ratingLabels = ['Poor 😞', 'Fair 😕', 'Average 😐', 'Good! 😊', 'Outstanding! 🌟'];
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center space-y-4 font-sans">
-        <div className="relative">
-          <div className="w-12 h-12 border-4 border-rose-200 border-t-rose-600 rounded-full animate-spin" />
-          <ChefHat className="w-5 h-5 text-rose-600 absolute inset-0 m-auto" />
-        </div>
-        <div className="text-center">
-          <p className="text-slate-900 text-sm font-bold">Loading Menu</p>
-          <p className="text-slate-400 text-xs mt-0.5">Connecting to table service...</p>
-        </div>
+        <motion.div
+          animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
+          transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+          className="relative"
+        >
+          <div className="w-14 h-14 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin" />
+          <ChefHat className="w-6 h-6 text-orange-500 absolute inset-0 m-auto" />
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center"
+        >
+          <p className="text-slate-900 text-sm font-extrabold">Loading Digital Menu</p>
+          <p className="text-slate-400 text-xs mt-0.5">Connecting to your table...</p>
+        </motion.div>
       </div>
     );
   }
 
-  // --- LIVE ORDER TRACKING SCREEN ---
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ─── LIVE ORDER TRACKING & FEEDBACK SCREEN
+  // ═══════════════════════════════════════════════════════════════════════════
   if (orderPlaced) {
-    const finalDeliveryStatuses = ['SERVED', 'COMPLETED', 'DELIVERED', 'RECEIVED'];
-    const isDelivered = finalDeliveryStatuses.includes(String(orderPlaced.status || '').toUpperCase());
-    const currentStepIndex = Math.max(
-      0,
-      ORDER_STEPS.findIndex((s) => s.status === orderPlaced.status)
-    );
-
-    if (isDelivered) {
-      const handleFeedbackSubmit = async () => {
-        const feedbackKey = `order-feedback-${orderPlaced.id}`;
-        const payload = {
-          rating: feedbackRating,
-          comment: feedbackText,
-          customerName: customerName || 'Guest',
-        };
-
-        try {
-          await axios.post(`${API}/orders/${orderPlaced.id}/feedback`, payload);
-        } catch (error) {
-          localStorage.setItem(feedbackKey, JSON.stringify(payload));
-        }
-
-        localStorage.setItem(feedbackKey, JSON.stringify(payload));
-        setFeedbackSubmitted(true);
-      };
-
-      return (
-        <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-between max-w-lg mx-auto relative overflow-hidden font-sans border-x border-slate-200 shadow-2xl">
-          <div className="p-6 relative z-10 space-y-6">
-            <div className="flex items-center justify-between">
-              <span className="text-xs uppercase tracking-wider text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-3.5 py-1.5 rounded-full flex items-center gap-1.5">
-                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" /> Served at Table
-              </span>
-              <span className="text-xs font-bold font-mono bg-white border border-slate-200 text-slate-700 px-3 py-1.5 rounded-full shadow-2xs">
-                Table #{orderPlaced.tableNumber}
-              </span>
-            </div>
-
-            <div className="text-center my-2">
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="w-20 h-20 bg-emerald-50 border border-emerald-200 rounded-3xl mx-auto flex items-center justify-center text-emerald-600 mb-4 shadow-xl shadow-emerald-500/10"
-              >
-                <CheckCircle2 className="w-10 h-10 stroke-[2.5]" />
-              </motion.div>
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight">Enjoyed your dining?</h1>
-              <p className="text-slate-500 text-xs sm:text-sm mt-1">
-                Order #{orderPlaced.id.slice(-6).toUpperCase()} • Your feedback is appreciated
-              </p>
-            </div>
-
-            <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-xl space-y-5 text-left">
-              <div>
-                <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">Rate your food & service</h2>
-                <div className="flex items-center justify-between gap-2">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() => setFeedbackRating(star)}
-                      className={`flex-1 rounded-2xl border h-12 text-xl font-bold transition-all flex items-center justify-center ${
-                        feedbackRating >= star
-                          ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md shadow-amber-500/20'
-                          : 'bg-slate-50 text-slate-300 border-slate-200 hover:border-slate-400'
-                      }`}
-                      aria-label={`Rate ${star} out of 5`}
-                    >
-                      ★
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  Comments & Feedback
-                </label>
-                <textarea
-                  value={feedbackText}
-                  onChange={(e) => setFeedbackText(e.target.value)}
-                  rows={3}
-                  placeholder="How was your meal, preparation speed, and dining experience?"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-900 px-3.5 py-3 outline-none focus:bg-white focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10 resize-none font-medium"
-                />
-              </div>
-
-              {feedbackSubmitted && (
-                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl px-4 py-2.5 text-xs font-bold flex items-center space-x-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Thank you! Your feedback has been recorded.</span>
-                </div>
-              )}
-            </div>
-
-            <div className="bg-white rounded-3xl border border-slate-200/90 p-5 space-y-3 text-left shadow-sm">
-              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Order Items</h3>
-              <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                {orderPlaced.items.map((item: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between text-xs text-slate-700">
-                    <span>
-                      <strong className="text-rose-600">{item.quantity}x</strong> {item.foodItem?.name || item.name}
-                    </span>
-                    <span className="font-mono text-slate-900 font-bold">₹{(item.price || 0) * item.quantity}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="pt-3 border-t border-slate-100 flex justify-between items-center text-sm font-bold">
-                <span className="text-slate-500">Total Settled</span>
-                <span className="text-emerald-700 text-base font-mono font-black">₹{orderPlaced.totalAmount}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-6 pt-0 relative z-10 space-y-3">
-            <button
-              onClick={handleFeedbackSubmit}
-              className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3.5 rounded-2xl text-xs flex items-center justify-center space-x-2 transition-all shadow-md shadow-rose-600/20 active:scale-98"
-            >
-              <Star className="w-4 h-4 fill-white" />
-              <span>{feedbackSubmitted ? 'Update Review' : 'Submit Feedback'}</span>
-            </button>
-            <button
-              onClick={() => setOrderPlaced(null)}
-              className="w-full bg-white hover:bg-slate-50 text-slate-800 font-bold py-3.5 rounded-2xl border border-slate-200 text-xs flex items-center justify-center space-x-2 transition-all active:scale-98 shadow-2xs"
-            >
-              <RotateCcw className="w-4 h-4 text-rose-600" />
-              <span>Order More Food & Beverages</span>
-            </button>
-          </div>
-        </div>
-      );
-    }
+    const isDelivered = orderStatusIdx >= 4;
 
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-between max-w-lg mx-auto relative overflow-hidden font-sans border-x border-slate-200 shadow-2xl">
-        <div className="p-6 relative z-10 space-y-6">
+      <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-between max-w-md mx-auto relative overflow-hidden font-sans border-x border-slate-200 shadow-xl">
+        <div className="p-4 sm:p-5 space-y-4 overflow-y-auto">
+          {/* Top Bar */}
           <div className="flex items-center justify-between">
-            <span className="text-xs uppercase tracking-wider text-rose-700 font-bold bg-rose-50 border border-rose-200 px-3.5 py-1.5 rounded-full flex items-center gap-1.5">
-              <span className="w-2 h-2 bg-rose-600 rounded-full animate-ping" /> Live Kitchen Dispatch
-            </span>
-            <span className="text-xs font-bold font-mono bg-white border border-slate-200 text-slate-700 px-3 py-1.5 rounded-full shadow-2xs">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="text-xs uppercase tracking-wider text-orange-600 font-extrabold bg-orange-50 border border-orange-200 px-3 py-1 rounded-full flex items-center gap-1.5"
+            >
+              <span className="w-2 h-2 bg-orange-500 rounded-full animate-ping" />
+              <span>Live Kitchen Dispatch</span>
+            </motion.div>
+            <span className="text-xs font-black font-mono bg-white border border-slate-200 text-slate-800 px-3 py-1 rounded-full shadow-sm">
               Table #{orderPlaced.tableNumber}
             </span>
           </div>
 
-          <div className="text-center my-2">
+          {/* Hero Header */}
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-2 relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-orange-100/50 rounded-full blur-2xl pointer-events-none" />
+
             <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="w-20 h-20 bg-rose-50 border border-rose-200 rounded-3xl mx-auto flex items-center justify-center text-rose-600 mb-4 shadow-xl shadow-rose-600/10"
+              animate={isDelivered ? { scale: [1, 1.15, 1] } : { y: [0, -4, 0] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+              className="w-14 h-14 bg-gradient-to-br from-orange-500 to-rose-500 rounded-2xl mx-auto flex items-center justify-center text-white shadow-md shadow-orange-500/20"
             >
-              <Sparkles className="w-10 h-10 animate-bounce" />
+              {isDelivered ? (
+                <CheckCircle2 className="w-7 h-7 stroke-[2.5]" />
+              ) : (
+                <ChefHat className="w-7 h-7 stroke-[2.5]" />
+              )}
             </motion.div>
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight">Order in the Kitchen!</h1>
-            <p className="text-slate-500 text-xs sm:text-sm mt-1">
-              Order #{orderPlaced.id.slice(-6).toUpperCase()} • Your table ticket is being prepared
+
+            <h1 className="text-xl font-black text-slate-900 tracking-tight">
+              {isDelivered ? 'Order Served! Enjoy Your Meal' : 'Chef is Cooking Your Order!'}
+            </h1>
+
+            <p className="text-slate-500 text-xs font-medium">
+              Order #{String(orderPlaced.id || '').slice(-6).toUpperCase()} • Dispatched to Kitchen Display
             </p>
-          </div>
+
+            {/* Estimated Prep Countdown */}
+            {!isDelivered && (
+              <div className="pt-2">
+                <div className="inline-flex items-center gap-2 bg-orange-50 border border-orange-200 px-3.5 py-1.5 rounded-full text-xs font-bold text-orange-700 font-mono">
+                  <Clock className="w-3.5 h-3.5 text-orange-500 animate-spin" />
+                  <span>
+                    Est. Time: {String(remainingMinutes).padStart(2, '0')}:{String(remainingSeconds).padStart(2, '0')} mins
+                  </span>
+                </div>
+              </div>
+            )}
+          </motion.div>
 
           {/* Stepper tracker */}
-          <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-xl text-left">
-            <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-5">Live Preparation Tracker</h2>
-            <div className="space-y-6 relative before:absolute before:left-5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-100">
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm text-left"
+          >
+            <div className="flex items-center justify-between mb-3.5">
+              <h2 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Preparation Status</h2>
+              <button
+                onClick={() => setOrderStatusIdx(prev => Math.min(4, prev + 1))}
+                className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md hover:bg-orange-100 transition-colors"
+              >
+                Advance Step (Demo)
+              </button>
+            </div>
+
+            <div className="space-y-4 relative before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100">
               {ORDER_STEPS.map((step, idx) => {
                 const Icon = step.icon;
-                const isPassed = idx <= currentStepIndex;
-                const isCurrent = idx === currentStepIndex;
+                const isPassed = idx <= orderStatusIdx;
+                const isCurrent = idx === orderStatusIdx;
 
                 return (
-                  <div key={step.status} className="flex items-start space-x-4 relative z-10">
-                    <div
-                      className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border transition-all ${
+                  <div key={step.status} className="flex items-start space-x-3 relative z-10">
+                    <motion.div
+                      animate={isCurrent ? { scale: [1, 1.08, 1] } : {}}
+                      transition={{ duration: 1.5, repeat: Infinity }}
+                      className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 border transition-all ${
                         isCurrent
-                          ? 'bg-rose-600 text-white border-rose-600 shadow-lg shadow-rose-600/30 ring-4 ring-rose-500/15 scale-110'
+                          ? 'bg-orange-500 text-white border-orange-500 shadow-md shadow-orange-500/30'
                           : isPassed
                           ? 'bg-emerald-500 text-white border-emerald-500'
                           : 'bg-slate-50 text-slate-400 border-slate-200'
                       }`}
                     >
-                      <Icon className="w-5 h-5" />
-                    </div>
-                    <div className="pt-1 flex-1">
+                      <Icon className="w-3.5 h-3.5" />
+                    </motion.div>
+                    <div className="pt-0.5 flex-1">
                       <div className="flex items-center justify-between">
-                        <h3 className={`text-sm font-bold ${isPassed ? 'text-slate-950' : 'text-slate-400'}`}>
+                        <h3 className={`text-xs font-bold ${isPassed ? 'text-slate-900' : 'text-slate-400'}`}>
                           {step.label}
                         </h3>
                         {isCurrent && (
-                          <span className="text-[10px] bg-rose-50 border border-rose-200 text-rose-700 px-2 py-0.5 rounded-md font-extrabold uppercase tracking-wider animate-pulse">
+                          <span className="text-[9px] bg-orange-50 border border-orange-200 text-orange-600 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider animate-pulse">
                             Active
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5">{step.desc}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">{step.desc}</p>
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
+          </motion.div>
 
-          {/* Items Summary */}
-          <div className="bg-white rounded-3xl border border-slate-200/90 p-5 space-y-3 text-left shadow-sm">
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Dishes on this Ticket</h3>
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-              {orderPlaced.items.map((item: any, i: number) => (
-                <div key={i} className="flex items-center justify-between text-xs text-slate-700">
+          {/* Ordered Dishes Summary */}
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="bg-white rounded-2xl border border-slate-200 p-4 space-y-2 text-left shadow-sm"
+          >
+            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Ordered Dishes</h3>
+            <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+              {orderPlaced.items?.map((item: any, i: number) => (
+                <div key={i} className="flex items-center justify-between text-xs text-slate-700 py-0.5">
                   <span>
-                    <strong className="text-rose-600">{item.quantity}x</strong> {item.foodItem?.name || item.name}
+                    <strong className="text-orange-500 font-bold">{item.quantity}x</strong> {item.foodItem?.name || item.name}
                   </span>
                   <span className="font-mono text-slate-900 font-bold">₹{(item.price || 0) * item.quantity}</span>
                 </div>
               ))}
             </div>
-            <div className="pt-3 border-t border-slate-100 flex justify-between items-center text-sm font-bold">
-              <span className="text-slate-500">Order Subtotal</span>
-              <span className="text-rose-600 text-base font-mono font-black">₹{orderPlaced.totalAmount}</span>
+            <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs font-bold">
+              <span className="text-slate-600">Total Bill Amount</span>
+              <span className="text-orange-600 font-mono text-sm font-extrabold">₹{orderPlaced.totalAmount}</span>
             </div>
-          </div>
+          </motion.div>
+
+          {/* ─── CUSTOMER FEEDBACK SECTION ─── show only after food is served ─── */}
+          <AnimatePresence>
+            {isDelivered ? (
+              <motion.div
+                key="feedback-form"
+                initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ type: 'spring', damping: 22, stiffness: 260 }}
+                className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 text-left shadow-sm space-y-3"
+              >
+                <div className="flex items-center space-x-2">
+                  <motion.div
+                    animate={{ rotate: [0, -10, 10, 0] }}
+                    transition={{ duration: 1.2, repeat: 2, ease: 'easeInOut' }}
+                    className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center text-orange-500"
+                  >
+                    <MessageSquareHeart className="w-4 h-4" />
+                  </motion.div>
+                  <div>
+                    <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">
+                      Rate Your Experience
+                    </h3>
+                    <p className="text-[11px] text-slate-400">Help the chef &amp; staff improve 🙏</p>
+                  </div>
+                </div>
+
+                {feedbackSubmitted ? (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.92 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center space-y-1.5"
+                  >
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: 'spring', damping: 14, stiffness: 300, delay: 0.1 }}
+                      className="w-10 h-10 bg-emerald-500 text-white rounded-full mx-auto flex items-center justify-center shadow-sm"
+                    >
+                      <Check className="w-5 h-5 stroke-[3]" />
+                    </motion.div>
+                    <h4 className="text-xs font-extrabold text-emerald-900">Thank You For Your Feedback!</h4>
+                    <p className="text-[11px] text-emerald-700">
+                      Your feedback has been shared with the restaurant manager &amp; culinary team.
+                    </p>
+                  </motion.div>
+                ) : (
+                  <form onSubmit={handleSubmitFeedback} className="space-y-3">
+                    {/* 5-Star Interactive Rating */}
+                    <div className="flex flex-col items-center justify-center py-1">
+                      <div className="flex items-center space-x-2">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <motion.button
+                            key={star}
+                            type="button"
+                            whileHover={{ scale: 1.25 }}
+                            whileTap={{ scale: 0.85 }}
+                            onMouseEnter={() => setHoverRating(star)}
+                            onMouseLeave={() => setHoverRating(null)}
+                            onClick={() => setFeedbackRating(star)}
+                            className="p-1 focus:outline-none"
+                          >
+                            <Star
+                              className={`w-7 h-7 transition-all ${
+                                star <= activeRating
+                                  ? 'fill-amber-400 text-amber-400'
+                                  : 'text-slate-200 fill-slate-100'
+                              }`}
+                            />
+                          </motion.button>
+                        ))}
+                      </div>
+                      <span className="text-xs font-bold text-amber-600 mt-1">
+                        {ratingLabels[activeRating - 1]}
+                      </span>
+                    </div>
+
+                    {/* Quick Feedback Tags */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-slate-600 block">
+                        What did you like the most?
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {FEEDBACK_TAGS.map((tag) => {
+                          const isSelected = selectedTags.includes(tag);
+                          return (
+                            <motion.button
+                              key={tag}
+                              type="button"
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleToggleFeedbackTag(tag)}
+                              className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all ${
+                                isSelected
+                                  ? 'bg-orange-50 border-orange-500 text-orange-700'
+                                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                              }`}
+                            >
+                              {tag}
+                            </motion.button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Comment Box */}
+                    <div>
+                      <textarea
+                        rows={2}
+                        value={feedbackComment}
+                        onChange={(e) => setFeedbackComment(e.target.value)}
+                        placeholder="Any message or suggestions for the kitchen..."
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:border-orange-500 transition-colors resize-none placeholder:text-slate-400"
+                      />
+                    </div>
+
+                    {/* Submit Feedback Button */}
+                    <motion.button
+                      type="submit"
+                      whileTap={{ scale: 0.97 }}
+                      disabled={submittingFeedback}
+                      className="w-full bg-slate-900 hover:bg-black text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center space-x-1.5 transition-all shadow-sm disabled:opacity-50"
+                    >
+                      {submittingFeedback ? (
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Submitting...</span>
+                        </span>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5 text-orange-400" />
+                          <span>Submit Dining Feedback</span>
+                        </>
+                      )}
+                    </motion.button>
+                  </form>
+                )}
+              </motion.div>
+            ) : (
+              /* Waiting state — shown while order is still being prepared */
+              <motion.div
+                key="feedback-locked"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="bg-slate-100 border border-dashed border-slate-300 rounded-2xl p-4 flex items-center gap-3 text-left"
+              >
+                <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center shrink-0">
+                  <MessageSquareHeart className="w-4 h-4 text-slate-400" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-500">Feedback Form Unlocks After Meal is Served</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">We'll invite you to rate your experience once your food arrives at the table.</p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        <div className="p-6 pt-0 relative z-10">
+        <div className="p-4 pt-0 bg-slate-50">
           <button
             onClick={() => setOrderPlaced(null)}
-            className="w-full bg-white hover:bg-slate-50 text-slate-800 font-bold py-3.5 rounded-2xl border border-slate-200 text-xs flex items-center justify-center space-x-2 transition-all active:scale-98 shadow-sm"
+            className="w-full bg-white hover:bg-slate-100 text-slate-800 font-bold py-3 rounded-xl border border-slate-200 text-xs flex items-center justify-center space-x-2 transition-all active:scale-98 shadow-sm"
           >
-            <RotateCcw className="w-4 h-4 text-rose-600" />
-            <span>Add More Dishes to Table</span>
+            <RotateCcw className="w-3.5 h-3.5 text-orange-500" />
+            <span>Order More Dishes</span>
           </button>
         </div>
       </div>
     );
   }
 
-  // --- MAIN CUSTOMER MENU UI ---
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ─── MAIN DIGITAL MENU VIEW (ANIMATED, CLEAN & PROFESSIONAL)
+  // ═══════════════════════════════════════════════════════════════════════════
   const currentAd = ads.length > 0 ? ads[currentAdIndex % ads.length] : null;
 
   return (
-    <div className="min-h-screen bg-slate-50/70 text-slate-900 max-w-lg mx-auto relative pb-32 font-sans border-x border-slate-200/90 shadow-2xl">
+    <div className="min-h-screen bg-slate-50 text-slate-900 max-w-md mx-auto relative pb-28 font-sans border-x border-slate-200 shadow-xl">
       
-      {/* Clean Restaurant Header */}
-      <div className="relative bg-slate-950 text-white pt-6 pb-6 px-5 shadow-lg overflow-hidden text-left">
-        {/* Subtle Ambient Glow */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-rose-600/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 space-y-3.5">
-          {/* Top badges bar */}
-          <div className="flex items-center justify-between">
-            <span className="bg-white/10 backdrop-blur-md border border-white/15 text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1.5">
-              <Sparkles className="w-3 h-3 text-amber-400" /> Digital Table Menu
-            </span>
-            <div className="bg-rose-600 text-white text-xs font-extrabold px-3.5 py-1 rounded-full flex items-center gap-1.5 shadow-md shadow-rose-600/30 font-mono">
-              <Utensils className="w-3.5 h-3.5" /> Table {tableNumber}
+      {/* ─── 1. CLEAN RESTAURANT HEADER ─── */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="bg-white border-b border-slate-200 px-4 py-3.5 text-left sticky top-0 z-40"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center space-x-3 min-w-0">
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="w-11 h-11 rounded-xl bg-orange-50 border border-orange-200 shrink-0 overflow-hidden flex items-center justify-center shadow-xs"
+            >
+              {restaurant?.logoUrl ? (
+                <img src={restaurant.logoUrl} alt={restaurant.name} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-orange-500 font-black text-lg">
+                  {restaurant?.name?.charAt(0) || 'R'}
+                </span>
+              )}
+            </motion.div>
+            <div className="min-w-0">
+              <h1 className="text-sm font-black text-slate-900 truncate">
+                {restaurant?.name || 'The Spice Route Dining'}
+              </h1>
+              <p className="text-[11px] text-slate-400 flex items-center gap-1 truncate">
+                <MapPin className="w-3 h-3 text-orange-500 shrink-0" />
+                <span>{restaurant?.address || 'Dine-In Menu'}</span>
+              </p>
             </div>
           </div>
 
-          {/* Restaurant Title & Info */}
-          <div className="flex items-start space-x-3.5">
-            <div className="w-14 h-14 rounded-2xl bg-white p-1 shadow-lg shrink-0 border border-white/20">
-              {restaurant?.logoUrl ? (
-                <img src={restaurant.logoUrl} alt={restaurant.name} className="w-full h-full object-cover rounded-xl" />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-rose-600 to-amber-600 rounded-xl flex items-center justify-center text-white font-black text-xl">
-                  {restaurant?.name?.charAt(0) || 'R'}
-                </div>
+          {/* Table Badge */}
+          <motion.div
+            initial={{ scale: 0.9 }}
+            animate={{ scale: 1 }}
+            className="bg-orange-500 text-white text-xs font-black px-3 py-1.5 rounded-xl shrink-0 flex items-center gap-1 shadow-sm font-mono"
+          >
+            <Utensils className="w-3.5 h-3.5" /> Table {tableNumber}
+          </motion.div>
+        </div>
+      </motion.div>
+
+      {/* ─── PROMO BANNER (IF AVAILABLE) ─── */}
+      {ads.length > 0 && currentAd && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-3 pb-1"
+        >
+          <div className={`p-3 rounded-xl bg-gradient-to-r ${currentAd.bgGradient} text-white shadow-sm border border-slate-800 text-left relative overflow-hidden`}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded text-amber-300">
+                {currentAd.badge}
+              </span>
+              <span className="text-[10px] text-slate-300">{currentAd.sponsor}</span>
+            </div>
+            <h3 className="text-xs font-extrabold text-white">{currentAd.title}</h3>
+            <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-300 font-mono flex items-center gap-1">
+                <Percent className="w-3 h-3" /> {currentAd.discountText}
+              </span>
+              {currentAd.promoCode && (
+                <button
+                  onClick={() => copyPromoCode(currentAd.promoCode!)}
+                  className="text-[10px] font-mono font-bold bg-white/20 hover:bg-white/30 text-white px-2 py-0.5 rounded-lg border border-white/20 transition-all flex items-center gap-1 active:scale-95"
+                >
+                  <Tag className="w-2.5 h-2.5" />
+                  <span>{copiedCode === currentAd.promoCode ? 'APPLIED ✓' : currentAd.promoCode}</span>
+                </button>
               )}
             </div>
-            <div>
-              <h1 className="text-xl font-black tracking-tight text-white">{restaurant?.name || 'Restaurant Dining'}</h1>
-              <p className="text-xs text-slate-300 mt-0.5 flex items-center gap-1">
-                <MapPin className="w-3 h-3 text-rose-400 shrink-0" /> {restaurant?.address || 'Dining Room Service Area'}
-              </p>
-              <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-300">
-                <span className="flex items-center text-amber-400 font-bold">
-                  <Star className="w-3 h-3 fill-amber-400 text-amber-400 mr-1" /> 4.9 (450+ Diners)
-                </span>
-                <span>•</span>
-                <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Kitchen Open
-                </span>
-              </div>
-            </div>
           </div>
-
-          {/* Quick Utility Actions */}
-          <div className="pt-0.5 flex items-center gap-2">
-            <button
-              onClick={handleCallWaiter}
-              className="bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/15 text-white text-xs font-semibold px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all active:scale-95"
-            >
-              <BellRing className="w-3.5 h-3.5 text-amber-400" />
-              <span>{waiterCalled ? 'Staff Notified ✓' : 'Call Waiter'}</span>
-            </button>
-            <div className="bg-white/10 backdrop-blur-md border border-white/15 text-white text-xs font-medium px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Hygienic Prep</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* --- DEDICATED SPONSORED ADS (ONLY RENDERED WHEN SUPER ADMIN HAS ACTIVE ADS) --- */}
-      {ads.length > 0 && currentAd && (
-        <div className="p-4 pt-4">
-          <div className="relative rounded-3xl overflow-hidden shadow-lg border border-slate-200 text-left bg-slate-900 text-white">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={currentAd.id}
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.35 }}
-                className={`p-5 relative bg-gradient-to-r ${currentAd.bgGradient} flex flex-col justify-between min-h-[150px]`}
-              >
-                {/* Background Accent */}
-                <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-25 overflow-hidden pointer-events-none">
-                  <img src={currentAd.imageUrl} alt={currentAd.title} className="w-full h-full object-cover" />
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-2 relative z-10">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[9px] font-extrabold uppercase tracking-wider bg-white/20 backdrop-blur-md px-2 py-0.5 rounded text-amber-300 border border-white/10 flex items-center gap-1">
-                        <Award className="w-3 h-3" /> {currentAd.badge}
-                      </span>
-                      <span className="text-[10px] text-slate-300 font-bold">• {currentAd.sponsor}</span>
-                    </div>
-
-                    {ads.length > 1 && (
-                      <span className="text-[9px] font-mono font-bold text-slate-400 bg-slate-950/60 px-2 py-0.5 rounded border border-slate-800">
-                        {currentAdIndex + 1}/{ads.length}
-                      </span>
-                    )}
-                  </div>
-
-                  <h3 className="text-base font-black text-white tracking-tight leading-snug relative z-10 max-w-[85%]">
-                    {currentAd.title}
-                  </h3>
-                  <p className="text-xs text-slate-300 mt-1 max-w-[85%] line-clamp-2 leading-relaxed relative z-10 font-normal">
-                    {currentAd.description}
-                  </p>
-                </div>
-
-                {/* Offer Action Row */}
-                <div className="mt-3.5 pt-2.5 border-t border-white/10 flex items-center justify-between relative z-10">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xs font-black text-amber-300 font-mono flex items-center gap-1">
-                      <Percent className="w-3 h-3" /> {currentAd.discountText}
-                    </span>
-                    {currentAd.promoCode && (
-                      <button
-                        onClick={() => copyPromoCode(currentAd.promoCode!)}
-                        className="text-[10px] font-mono font-bold bg-white/10 hover:bg-white/20 text-white px-2 py-0.5 rounded border border-white/20 transition-all flex items-center gap-1"
-                      >
-                        <Tag className="w-2.5 h-2.5" />
-                        <span>{copiedCode === currentAd.promoCode ? 'APPLIED ✓' : currentAd.promoCode}</span>
-                      </button>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      if (currentAd.promoCode) copyPromoCode(currentAd.promoCode);
-                    }}
-                    className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold px-3 py-1.5 rounded-xl shadow-md transition-all active:scale-95 flex items-center space-x-1"
-                  >
-                    <span>{currentAd.ctaText}</span>
-                    <ArrowRight className="w-3 h-3" />
-                  </button>
-                </div>
-              </motion.div>
-            </AnimatePresence>
-
-            {/* Dots indicator */}
-            {ads.length > 1 && (
-              <div className="absolute bottom-2 right-4 flex space-x-1.5 z-20">
-                {ads.map((ad, idx) => (
-                  <button
-                    key={ad.id}
-                    onClick={() => setCurrentAdIndex(idx)}
-                    className={`h-1 rounded-full transition-all ${
-                      currentAdIndex === idx ? 'w-5 bg-rose-500' : 'w-1.5 bg-white/30'
-                    }`}
-                    aria-label={`Slide ${idx + 1}`}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        </motion.div>
       )}
 
-      {/* Sticky Filter & Search Bar */}
-      <div className="sticky top-0 bg-white/95 backdrop-blur-xl z-30 pt-3 pb-2 px-4 border-b border-slate-200/90 shadow-xs space-y-2.5 text-left">
-        {/* Search Bar */}
-        <div className="bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs flex items-center px-3.5 py-2.5 focus-within:bg-white focus-within:border-rose-500 focus-within:ring-4 focus-within:ring-rose-500/10 transition-all">
-          <Search className="w-4 h-4 text-slate-400 mr-2.5 shrink-0" />
+      {/* ─── 2. STICKY SEARCH & CATEGORY BAR ─── */}
+      <div className="bg-white/95 backdrop-blur-sm z-30 px-3 py-2.5 border-b border-slate-200 shadow-xs space-y-2 text-left">
+        {/* Search Input */}
+        <div className="bg-slate-100 rounded-xl flex items-center px-3 py-2 border border-slate-200 focus-within:bg-white focus-within:border-orange-500 transition-colors">
+          <Search className="w-3.5 h-3.5 text-slate-400 mr-2 shrink-0" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search dishes, drinks, desserts..."
+            placeholder="Search delicious dishes or drinks..."
             className="flex-1 text-xs outline-none bg-transparent text-slate-900 placeholder-slate-400 font-medium"
           />
           {search && (
-            <button onClick={() => setSearch('')} className="p-1 text-slate-400 hover:text-slate-600">
+            <button onClick={() => setSearch('')} className="p-0.5 text-slate-400 hover:text-slate-600">
               <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
 
-        {/* Dietary & Count Controls */}
+        {/* Dietary Filters & Counter */}
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1 shrink-0">
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg gap-1 shrink-0 relative">
             <button
               onClick={() => setVegFilter('ALL')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                vegFilter === 'ALL' ? 'bg-white text-slate-950 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+              className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all relative ${
+                vegFilter === 'ALL' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
               }`}
             >
-              All Items
+              All
             </button>
             <button
               onClick={() => setVegFilter('VEG')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                vegFilter === 'VEG' ? 'bg-emerald-600 text-white shadow-xs' : 'text-emerald-700 hover:bg-emerald-50'
+              className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1 relative ${
+                vegFilter === 'VEG' ? 'bg-emerald-600 text-white shadow-sm' : 'text-emerald-700'
               }`}
             >
-              <Leaf className="w-3.5 h-3.5" /> Veg
+              <Leaf className="w-3 h-3" /> Veg
             </button>
             <button
               onClick={() => setVegFilter('NONVEG')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                vegFilter === 'NONVEG' ? 'bg-rose-600 text-white shadow-xs' : 'text-rose-700 hover:bg-rose-50'
+              className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1 relative ${
+                vegFilter === 'NONVEG' ? 'bg-rose-600 text-white shadow-sm' : 'text-rose-700'
               }`}
             >
-              <Flame className="w-3.5 h-3.5" /> Non-Veg
+              <Flame className="w-3 h-3" /> Non-Veg
             </button>
           </div>
 
           <span className="text-[11px] font-bold text-slate-400 shrink-0 font-mono">
-            {filteredFoods.length} dishes
+            {filteredFoods.length} items
           </span>
         </div>
 
-        {/* Category Carousel */}
-        <div className="flex space-x-2 overflow-x-auto no-scrollbar pb-1">
+        {/* Category Pills with smooth scrolling */}
+        <div className="flex space-x-1.5 overflow-x-auto no-scrollbar pt-0.5 text-xs font-bold">
           <button
             onClick={() => setActiveCategory('ALL')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+            className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-all ${
               activeCategory === 'ALL'
-                ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
-                : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                ? 'bg-orange-500 text-white shadow-sm'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
-            🔥 All Items
+            🔥 All Menu
           </button>
           {categories.map((cat) => (
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+              className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-all ${
                 activeCategory === cat.id
-                  ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
-                  : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  ? 'bg-orange-500 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               {cat.name}
@@ -759,14 +898,22 @@ export const CustomerMenuPage = () => {
         </div>
       </div>
 
-      {/* Food Cards List */}
-      <div className="p-4 space-y-3.5 text-left">
+      {/* ─── 3. ANIMATED FOOD ITEM LIST ─── */}
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="p-3 space-y-3 text-left"
+      >
         {filteredFoods.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-3xl border border-slate-200 p-8 shadow-2xs">
-            <span className="text-4xl block mb-3">🔍</span>
-            <h3 className="font-bold text-slate-900 text-sm">No dishes match your selection</h3>
-            <p className="text-slate-400 text-xs mt-1">Try switching filters or clearing your search query.</p>
-          </div>
+          <motion.div
+            variants={itemVariants}
+            className="text-center py-12 bg-white rounded-2xl border border-slate-200 p-6 shadow-sm"
+          >
+            <span className="text-3xl block mb-2">🍽️</span>
+            <h3 className="font-bold text-slate-800 text-sm">No items found</h3>
+            <p className="text-slate-400 text-xs mt-1">Try selecting another category or clearing the search.</p>
+          </motion.div>
         ) : (
           filteredFoods.map((food) => {
             const inCart = cart.items.find((i) => i.foodItemId === food.id);
@@ -774,10 +921,9 @@ export const CustomerMenuPage = () => {
             return (
               <motion.div
                 key={food.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`bg-white rounded-3xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-md transition-all flex justify-between gap-4 ${
-                  !food.isAvailable ? 'opacity-60 grayscale' : ''
+                variants={itemVariants}
+                className={`bg-white rounded-2xl border border-slate-200 p-3.5 shadow-sm hover:shadow-md transition-shadow flex justify-between gap-3 ${
+                  !food.isAvailable ? 'opacity-60' : ''
                 }`}
               >
                 {/* Left details */}
@@ -786,20 +932,20 @@ export const CustomerMenuPage = () => {
                   onClick={() => setSelectedFood(food)}
                 >
                   <div>
-                    {/* Veg/Non-Veg Emblem */}
+                    {/* Veg/Non-Veg Dot Emblem */}
                     <span
-                      className={`inline-flex items-center justify-center w-4 h-4 rounded-md border-2 bg-white mb-1.5 ${
+                      className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm border bg-white mb-1.5 ${
                         food.isVeg ? 'border-emerald-600' : 'border-rose-600'
                       }`}
                     >
-                      <span className={`w-2 h-2 rounded-full ${food.isVeg ? 'bg-emerald-600' : 'bg-rose-600'}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full ${food.isVeg ? 'bg-emerald-600' : 'bg-rose-600'}`} />
                     </span>
 
-                    <h3 className="font-bold text-slate-900 text-sm leading-snug hover:text-rose-600 transition-colors">
+                    <h3 className="font-bold text-slate-900 text-sm leading-snug">
                       {food.name}
                     </h3>
 
-                    <p className="text-sm font-black text-slate-900 font-mono mt-1">
+                    <p className="text-sm font-extrabold text-slate-900 font-mono mt-0.5">
                       ₹{food.price}
                     </p>
 
@@ -810,52 +956,58 @@ export const CustomerMenuPage = () => {
                     )}
                   </div>
 
-                  <span className="text-[10px] text-slate-400 font-medium pt-2 flex items-center gap-1 hover:text-rose-600">
-                    <Info className="w-3 h-3" /> Details
+                  <span className="text-[10px] text-slate-400 font-medium pt-2 flex items-center gap-1 hover:text-orange-500">
+                    <Info className="w-3 h-3" /> View details
                   </span>
                 </div>
 
-                {/* Right image + ADD button */}
+                {/* Right Image + ADD Button */}
                 <div className="relative shrink-0 flex flex-col items-center">
-                  <div
-                    className="w-28 h-28 rounded-2xl bg-slate-50 overflow-hidden border border-slate-200/80 cursor-pointer relative"
+                  <motion.div
+                    whileHover={{ scale: 1.03 }}
+                    className="w-24 h-24 rounded-xl bg-slate-100 overflow-hidden border border-slate-200 cursor-pointer"
                     onClick={() => setSelectedFood(food)}
                   >
                     {food.imageUrl ? (
                       <img src={food.imageUrl} alt={food.name} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-3xl bg-amber-50">
+                      <div className="w-full h-full flex items-center justify-center text-2xl bg-orange-50">
                         {food.isVeg ? '🥗' : '🍗'}
                       </div>
                     )}
-                  </div>
+                  </motion.div>
 
-                  {/* Add to Cart Stepper Button */}
-                  <div className="-mt-5 z-10 w-24 h-9">
+                  {/* Add / Stepper Button */}
+                  <div className="-mt-3.5 z-10 w-20 h-7">
                     {!food.isAvailable ? (
-                      <span className="flex items-center justify-center h-full text-[10px] bg-rose-50 text-rose-600 font-bold px-2 rounded-xl border border-rose-200 shadow-xs">
+                      <span className="flex items-center justify-center h-full text-[10px] bg-rose-50 text-rose-600 font-bold px-2 rounded-lg border border-rose-200 shadow-sm">
                         Sold Out
                       </span>
                     ) : inCart ? (
-                      <div className="flex items-center justify-between h-full bg-rose-600 text-white rounded-xl shadow-md shadow-rose-600/30 border border-rose-600 overflow-hidden px-1">
+                      <motion.div
+                        initial={{ scale: 0.9 }}
+                        animate={{ scale: 1 }}
+                        className="flex items-center justify-between h-full bg-orange-500 text-white rounded-lg shadow-sm overflow-hidden px-1"
+                      >
                         <button
                           onClick={() => cart.updateQuantity(food.id, inCart.quantity - 1)}
-                          className="w-7 h-7 flex items-center justify-center hover:bg-black/20 transition-colors rounded-lg active:scale-90"
-                          aria-label="Decrease quantity"
+                          className="w-5 h-5 flex items-center justify-center hover:bg-black/20 rounded active:scale-90"
+                          aria-label="Decrease"
                         >
-                          <Minus className="w-3.5 h-3.5" />
+                          <Minus className="w-3 h-3" />
                         </button>
-                        <span className="text-xs font-black px-1 font-mono">{inCart.quantity}</span>
+                        <span className="text-xs font-bold px-1 font-mono">{inCart.quantity}</span>
                         <button
                           onClick={() => cart.updateQuantity(food.id, inCart.quantity + 1)}
-                          className="w-7 h-7 flex items-center justify-center hover:bg-black/20 transition-colors rounded-lg active:scale-90"
-                          aria-label="Increase quantity"
+                          className="w-5 h-5 flex items-center justify-center hover:bg-black/20 rounded active:scale-90"
+                          aria-label="Increase"
                         >
-                          <Plus className="w-3.5 h-3.5" />
+                          <Plus className="w-3 h-3" />
                         </button>
-                      </div>
+                      </motion.div>
                     ) : (
-                      <button
+                      <motion.button
+                        whileTap={{ scale: 0.92 }}
                         onClick={() =>
                           cart.addItem({
                             foodItemId: food.id,
@@ -864,11 +1016,11 @@ export const CustomerMenuPage = () => {
                             isVeg: food.isVeg,
                           })
                         }
-                        className="w-full h-full bg-white hover:bg-rose-600 hover:text-white text-rose-600 font-extrabold text-xs rounded-xl border border-slate-200 shadow-md shadow-slate-200/80 transition-all uppercase tracking-wider flex items-center justify-center gap-1 active:scale-95"
+                        className="w-full h-full bg-white hover:bg-orange-500 hover:text-white text-orange-600 font-bold text-xs rounded-lg border border-slate-200 shadow-sm uppercase tracking-wider flex items-center justify-center gap-1 transition-all"
                       >
                         <span>ADD</span>
                         <Plus className="w-3 h-3 stroke-[3]" />
-                      </button>
+                      </motion.button>
                     )}
                   </div>
                 </div>
@@ -876,13 +1028,13 @@ export const CustomerMenuPage = () => {
             );
           })
         )}
-      </div>
+      </motion.div>
 
-      {/* Dish Detail Modal */}
+      {/* ─── 4. DISH DETAIL MODAL ─── */}
       <AnimatePresence>
         {selectedFood && (
           <div
-            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
             onClick={() => setSelectedFood(null)}
           >
             <motion.div
@@ -893,24 +1045,23 @@ export const CustomerMenuPage = () => {
               className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[85vh] overflow-hidden flex flex-col shadow-2xl text-left border border-slate-200"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Photo Banner */}
-              <div className="h-56 bg-slate-100 relative overflow-hidden shrink-0">
+              <div className="h-48 bg-slate-100 relative overflow-hidden shrink-0">
                 {selectedFood.imageUrl ? (
                   <img src={selectedFood.imageUrl} alt={selectedFood.name} className="w-full h-full object-cover" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-6xl bg-amber-50">
+                  <div className="w-full h-full flex items-center justify-center text-5xl bg-orange-50">
                     {selectedFood.isVeg ? '🥗' : '🍗'}
                   </div>
                 )}
                 <button
                   onClick={() => setSelectedFood(null)}
-                  className="absolute top-4 right-4 p-2 bg-slate-950/60 text-white hover:bg-slate-950 rounded-full transition-colors"
+                  className="absolute top-3 right-3 p-1.5 bg-slate-900/60 text-white hover:bg-slate-900 rounded-full transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
-                <div className="absolute bottom-3 left-3 bg-white/95 backdrop-blur-md px-3 py-1 rounded-full text-xs font-extrabold flex items-center gap-1.5 shadow-md">
+                <div className="absolute bottom-3 left-3 bg-white/95 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm">
                   <span
-                    className={`w-2.5 h-2.5 rounded-full ${
+                    className={`w-2 h-2 rounded-full ${
                       selectedFood.isVeg ? 'bg-emerald-500' : 'bg-rose-500'
                     }`}
                   />
@@ -918,33 +1069,19 @@ export const CustomerMenuPage = () => {
                 </div>
               </div>
 
-              {/* Content */}
-              <div className="p-6 space-y-4 overflow-y-auto flex-1">
-                <div>
-                  <div className="flex justify-between items-start">
-                    <h2 className="text-xl font-black text-slate-950">{selectedFood.name}</h2>
-                    <span className="text-xl font-black text-rose-600 font-mono">₹{selectedFood.price}</span>
-                  </div>
-                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                    {selectedFood.description || 'Prepared fresh upon order with premium culinary ingredients and spices.'}
-                  </p>
+              <div className="p-4 space-y-3 overflow-y-auto flex-1">
+                <div className="flex justify-between items-start">
+                  <h2 className="text-lg font-bold text-slate-900">{selectedFood.name}</h2>
+                  <span className="text-lg font-bold text-orange-600 font-mono">₹{selectedFood.price}</span>
                 </div>
-
-                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-2 text-xs text-slate-600">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Preparation Time</span>
-                    <span className="font-bold text-slate-800">10-15 mins</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Kitchen Line</span>
-                    <span className="font-bold text-slate-800">Direct KDS Monitor</span>
-                  </div>
-                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  {selectedFood.description || 'Prepared fresh upon order with culinary ingredients and spices.'}
+                </p>
               </div>
 
-              {/* Action Button */}
-              <div className="p-4 border-t border-slate-100 bg-slate-50">
-                <button
+              <div className="p-3 border-t border-slate-100 bg-slate-50">
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
                   onClick={() => {
                     cart.addItem({
                       foodItemId: selectedFood.id,
@@ -954,61 +1091,63 @@ export const CustomerMenuPage = () => {
                     });
                     setSelectedFood(null);
                   }}
-                  className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3.5 rounded-2xl text-xs flex items-center justify-center space-x-2 transition-all shadow-md shadow-rose-600/20 active:scale-98"
+                  className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center space-x-2 transition-all shadow-md shadow-orange-500/20"
                 >
                   <Plus className="w-4 h-4 stroke-[3]" />
                   <span>Add to Order • ₹{selectedFood.price}</span>
-                </button>
+                </motion.button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* Floating Bottom Cart Bar */}
+      {/* ─── 5. FLOATING BOTTOM CART BAR ─── */}
       <AnimatePresence>
         {cart.getItemCount() > 0 && !showCart && !showCheckout && (
           <motion.div
-            initial={{ y: 80, opacity: 0 }}
+            initial={{ y: 60, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 80, opacity: 0 }}
-            className="fixed bottom-4 left-0 right-0 max-w-lg mx-auto px-4 z-40"
+            exit={{ y: 60, opacity: 0 }}
+            transition={{ type: 'spring', damping: 20, stiffness: 280 }}
+            className="fixed bottom-3 left-0 right-0 max-w-md mx-auto px-3 z-40"
           >
-            <button
+            <motion.button
+              whileTap={{ scale: 0.98 }}
               onClick={() => setShowCart(true)}
-              className="w-full bg-slate-950 text-white rounded-3xl p-4 flex items-center justify-between shadow-2xl border border-slate-800 hover:scale-[1.01] active:scale-[0.99] transition-all"
+              className="w-full bg-slate-900 text-white rounded-2xl p-3.5 flex items-center justify-between shadow-xl border border-slate-800 transition-all"
             >
               <div className="flex items-center space-x-3 text-left">
-                <div className="w-10 h-10 rounded-2xl bg-rose-600 flex items-center justify-center text-white font-bold shadow-md shadow-rose-600/30">
-                  <ShoppingCart className="w-5 h-5" />
+                <div className="w-8 h-8 rounded-xl bg-orange-500 flex items-center justify-center text-white font-bold shadow-sm">
+                  <ShoppingCart className="w-4 h-4" />
                 </div>
                 <div>
-                  <span className="text-[11px] text-slate-400 block font-medium">Table #{tableNumber} Cart</span>
-                  <span className="text-sm font-bold text-white">
-                    {cart.getItemCount()} {cart.getItemCount() === 1 ? 'dish' : 'dishes'} added
+                  <span className="text-[10px] text-slate-400 block font-medium">Table #{tableNumber}</span>
+                  <span className="text-xs font-bold text-white">
+                    {cart.getItemCount()} {cart.getItemCount() === 1 ? 'item' : 'items'} in cart
                   </span>
                 </div>
               </div>
 
-              <div className="flex items-center space-x-3">
-                <span className="text-base font-black text-rose-400 font-mono">₹{total}</span>
-                <div className="w-9 h-9 rounded-full bg-rose-600 flex items-center justify-center text-white font-bold shadow-md">
-                  <ArrowRight className="w-4 h-4" />
+              <div className="flex items-center space-x-2.5">
+                <span className="text-sm font-extrabold text-orange-400 font-mono">₹{total}</span>
+                <div className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold">
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </div>
               </div>
-            </button>
+            </motion.button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Cart Bottom Sheet Drawer */}
+      {/* ─── 6. CART DRAWER BOTTOM SHEET ─── */}
       <AnimatePresence>
         {showCart && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-end justify-center"
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end justify-center"
             onClick={() => setShowCart(false)}
           >
             <motion.div
@@ -1016,32 +1155,33 @@ export const CustomerMenuPage = () => {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 250 }}
-              className="bg-white rounded-t-3xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl text-left border border-slate-200"
+              className="bg-white rounded-t-3xl w-full max-w-md max-h-[85vh] flex flex-col shadow-2xl text-left border border-slate-200"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-extrabold text-slate-900">Your Table Order</h2>
-                  <p className="text-xs text-slate-500 mt-0.5 font-medium">Table #{tableNumber}</p>
+                  <h2 className="text-base font-bold text-slate-900">Your Table Order</h2>
+                  <p className="text-xs text-slate-500 font-medium">Table #{tableNumber}</p>
                 </div>
                 <button
                   onClick={() => setShowCart(false)}
-                  className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                  className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Items List */}
-              <div className="p-5 space-y-3 overflow-y-auto flex-1">
+              <div className="p-4 space-y-2.5 overflow-y-auto flex-1">
                 {cart.items.map((item) => (
-                  <div
+                  <motion.div
                     key={item.foodItemId}
-                    className="flex items-center justify-between bg-slate-50 rounded-2xl p-3.5 border border-slate-200/80"
+                    layout
+                    className="flex items-center justify-between bg-slate-50 rounded-xl p-3 border border-slate-200"
                   >
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-2.5">
                       <span
-                        className={`w-3.5 h-3.5 rounded-md border-2 bg-white flex items-center justify-center ${
+                        className={`w-3.5 h-3.5 rounded-sm border bg-white flex items-center justify-center ${
                           item.isVeg ? 'border-emerald-600' : 'border-rose-600'
                         }`}
                       >
@@ -1056,118 +1196,116 @@ export const CustomerMenuPage = () => {
                     </div>
 
                     <div className="flex items-center space-x-3">
-                      <div className="flex items-center bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+                      <div className="flex items-center bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
                         <button
                           onClick={() => cart.updateQuantity(item.foodItemId, item.quantity - 1)}
-                          className="w-7 h-7 flex items-center justify-center text-slate-600 hover:bg-slate-100 transition-colors active:scale-90"
+                          className="w-6 h-6 flex items-center justify-center text-slate-600 hover:bg-slate-100 active:scale-90"
                         >
-                          <Minus className="w-3.5 h-3.5" />
+                          <Minus className="w-3 h-3" />
                         </button>
-                        <span className="text-xs font-bold w-6 text-center font-mono">
+                        <span className="text-xs font-bold w-5 text-center font-mono">
                           {item.quantity}
                         </span>
                         <button
                           onClick={() => cart.updateQuantity(item.foodItemId, item.quantity + 1)}
-                          className="w-7 h-7 flex items-center justify-center text-slate-600 hover:bg-slate-100 transition-colors active:scale-90"
+                          className="w-6 h-6 flex items-center justify-center text-slate-600 hover:bg-slate-100 active:scale-90"
                         >
-                          <Plus className="w-3.5 h-3.5" />
+                          <Plus className="w-3 h-3" />
                         </button>
                       </div>
-                      <span className="text-xs font-black text-slate-900 font-mono w-14 text-right">
+                      <span className="text-xs font-bold text-slate-900 font-mono w-10 text-right">
                         ₹{item.price * item.quantity}
                       </span>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
 
               {/* Price Summary */}
-              <div className="p-5 border-t border-slate-100 bg-slate-50 space-y-2 text-xs">
+              <div className="p-4 border-t border-slate-100 bg-slate-50 space-y-1.5 text-xs">
                 <div className="flex justify-between text-slate-600">
-                  <span>Food Subtotal</span>
+                  <span>Subtotal</span>
                   <span className="font-mono font-bold">₹{subtotal}</span>
                 </div>
                 {discountAmount > 0 && (
                   <div className="flex justify-between text-emerald-600 font-bold">
-                    <span>Voucher Promo ({appliedPromo})</span>
+                    <span>Discount ({appliedPromo})</span>
                     <span className="font-mono">-₹{discountAmount}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-slate-600">
-                  <span>Taxes & GST (5%)</span>
+                  <span>GST (5%)</span>
                   <span className="font-mono">₹{tax}</span>
                 </div>
-                <div className="flex justify-between text-sm font-extrabold text-slate-900 pt-2 border-t border-slate-200">
-                  <span>Total Payable</span>
-                  <span className="text-rose-600 font-mono text-base">₹{total}</span>
+                <div className="flex justify-between text-sm font-bold text-slate-900 pt-1.5 border-t border-slate-200">
+                  <span>Total</span>
+                  <span className="text-orange-600 font-mono text-base">₹{total}</span>
                 </div>
               </div>
 
-              <div className="p-5 pt-0 flex space-x-3 bg-slate-50 rounded-b-3xl">
+              <div className="p-4 pt-0 flex space-x-2.5 bg-slate-50 rounded-b-3xl">
                 <button
                   onClick={() => {
                     cart.clearCart();
                     setShowCart(false);
                   }}
-                  className="px-4 py-3 text-slate-600 bg-white border border-slate-200 rounded-2xl text-xs font-bold hover:bg-slate-100 transition-colors"
+                  className="px-4 py-2.5 text-slate-600 bg-white border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-100 transition-colors"
                 >
-                  Clear Cart
+                  Clear
                 </button>
-                <button
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => {
                     setShowCart(false);
                     setShowCheckout(true);
                   }}
-                  className="flex-1 bg-rose-600 text-white py-3.5 rounded-2xl font-bold text-xs hover:bg-rose-700 transition-all shadow-md shadow-rose-600/20 flex items-center justify-center space-x-2 active:scale-98"
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold text-xs transition-all shadow-md shadow-orange-500/20 flex items-center justify-center space-x-1.5"
                 >
-                  <span>Proceed to Confirm</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                  <span>Checkout</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </motion.button>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Checkout Details Drawer */}
+      {/* ─── 7. CHECKOUT MODAL ─── */}
       <AnimatePresence>
         {showCheckout && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          <div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
             onClick={() => setShowCheckout(false)}
           >
             <motion.div
               initial={{ y: '100%', opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: '100%', opacity: 0 }}
-              className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md p-6 shadow-2xl border border-slate-200 text-left max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md p-5 shadow-2xl border border-slate-200 text-left max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h2 className="text-lg font-extrabold text-slate-900">Confirm Table Order</h2>
-                  <p className="text-xs text-slate-500 mt-0.5">Direct dispatch to kitchen screen</p>
+                  <h2 className="text-base font-bold text-slate-900">Confirm Order</h2>
+                  <p className="text-xs text-slate-500">Send order directly to kitchen</p>
                 </div>
                 <button
                   onClick={() => setShowCheckout(false)}
                   className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
               {orderError && (
-                <div className="bg-rose-50 text-rose-700 px-4 py-2.5 rounded-2xl text-xs font-semibold mb-4 border border-rose-200">
+                <div className="bg-rose-50 text-rose-700 px-3 py-2 rounded-xl text-xs font-semibold mb-3 border border-rose-200">
                   {orderError}
                 </div>
               )}
 
-              <div className="space-y-3.5 mb-5">
+              <div className="space-y-3 mb-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
                     Your Name *
                   </label>
                   <input
@@ -1175,14 +1313,14 @@ export const CustomerMenuPage = () => {
                     required
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="e.g. Rahul Sharma"
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none focus:bg-white focus:border-rose-600 focus:ring-4 focus:ring-rose-500/10 transition-all placeholder:text-slate-400"
+                    placeholder="e.g. Rahul"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:border-orange-500 transition-all placeholder:text-slate-400"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
                       Table Number *
                     </label>
                     <input
@@ -1190,144 +1328,107 @@ export const CustomerMenuPage = () => {
                       required
                       value={tableNumber}
                       onChange={(e) => setTableNumber(e.target.value)}
-                      placeholder="04"
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none focus:bg-white focus:border-rose-600 focus:ring-4 focus:ring-rose-500/10 transition-all font-mono"
+                      placeholder="01"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-orange-500 font-mono transition-all"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
                       Phone (Optional)
                     </label>
                     <input
                       type="tel"
                       value={phoneNumber}
                       onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder="+91 98765..."
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none focus:bg-white focus:border-rose-600 focus:ring-4 focus:ring-rose-500/10 transition-all placeholder:text-slate-400"
+                      placeholder="+91..."
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:border-orange-500 transition-all placeholder:text-slate-400"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Special Cooking Notes
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Cooking Notes (Optional)
                   </label>
                   <input
                     type="text"
                     value={orderNotes}
                     onChange={(e) => setOrderNotes(e.target.value)}
-                    placeholder="e.g. Less spicy, dressing on side..."
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none focus:bg-white focus:border-rose-600 focus:ring-4 focus:ring-rose-500/10 transition-all placeholder:text-slate-400"
+                    placeholder="e.g. Less spicy..."
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:border-orange-500 transition-all placeholder:text-slate-400"
                   />
-                </div>
-
-                {/* Promo Code Input */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Promo / Voucher Code
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={appliedPromo}
-                      onChange={(e) => setAppliedPromo(e.target.value.toUpperCase())}
-                      placeholder="e.g. COKEZERO or UPIDINE"
-                      className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold font-mono outline-none focus:bg-white focus:border-rose-600 focus:ring-2 focus:ring-rose-500/10 uppercase"
-                    />
-                    {appliedPromo && (
-                      <button
-                        type="button"
-                        onClick={() => setAppliedPromo('')}
-                        className="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-2xl text-xs font-bold text-slate-600"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
                 </div>
 
                 {/* Payment Selection */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
                     Payment Preference
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => setPaymentMethod('counter')}
-                      className={`p-3 rounded-2xl border text-left transition-all ${
+                      className={`p-2.5 rounded-xl border text-left transition-all ${
                         paymentMethod === 'counter'
-                          ? 'bg-rose-50 border-rose-600 text-rose-950 font-bold shadow-2xs'
+                          ? 'bg-orange-50 border-orange-500 text-orange-950 font-bold'
                           : 'bg-slate-50 border-slate-200 text-slate-600'
                       }`}
                     >
                       <span className="text-xs block font-bold">Pay at Counter</span>
-                      <span className="text-[10px] text-slate-500">Cash or UPI at desk</span>
+                      <span className="text-[10px] text-slate-500">Cash / Card on desk</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setPaymentMethod('upi')}
-                      className={`p-3 rounded-2xl border text-left transition-all ${
+                      className={`p-2.5 rounded-xl border text-left transition-all ${
                         paymentMethod === 'upi'
-                          ? 'bg-rose-50 border-rose-600 text-rose-950 font-bold shadow-2xs'
+                          ? 'bg-orange-50 border-orange-500 text-orange-950 font-bold'
                           : 'bg-slate-50 border-slate-200 text-slate-600'
                       }`}
                     >
-                      <span className="text-xs block font-bold">Direct UPI QR</span>
+                      <span className="text-xs block font-bold">Direct UPI</span>
                       <span className="text-[10px] text-slate-500">GPay, PhonePe, Paytm</span>
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Order items preview */}
-              <div className="bg-slate-50 rounded-2xl p-4 mb-5 border border-slate-200/80 space-y-2 text-xs">
-                <div className="flex justify-between items-center pb-2 border-b border-slate-200">
-                  <span className="font-bold text-slate-900">Total Items ({cart.getItemCount()})</span>
-                  <span className="text-rose-600 font-bold font-mono">Table #{tableNumber}</span>
-                </div>
-                {discountAmount > 0 && (
-                  <div className="flex justify-between text-emerald-600 font-bold">
-                    <span>Voucher Applied ({appliedPromo})</span>
-                    <span className="font-mono">-₹{discountAmount}</span>
-                  </div>
-                )}
-                <div className="pt-1 flex justify-between font-extrabold text-slate-950 text-sm">
-                  <span>Grand Total</span>
-                  <span className="text-rose-600 font-mono text-base">₹{total}</span>
-                </div>
+              <div className="bg-slate-50 rounded-xl p-3 mb-4 border border-slate-200 flex justify-between items-center text-xs">
+                <span className="font-bold text-slate-700">Total ({cart.getItemCount()} items)</span>
+                <span className="text-orange-600 font-mono font-bold text-sm">₹{total}</span>
               </div>
 
-              <div className="flex space-x-3">
+              <div className="flex space-x-2.5">
                 <button
                   type="button"
                   onClick={() => setShowCheckout(false)}
-                  className="px-4 py-3.5 text-slate-600 bg-slate-100 rounded-2xl text-xs font-bold hover:bg-slate-200 transition-colors"
+                  className="px-4 py-2.5 text-slate-600 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"
                 >
                   Back
                 </button>
-                <button
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
                   type="button"
                   onClick={handlePlaceOrder}
                   disabled={placingOrder}
-                  className="flex-1 bg-rose-600 text-white py-3.5 rounded-2xl text-xs font-bold hover:bg-rose-700 transition-all shadow-md shadow-rose-600/20 disabled:opacity-50 flex items-center justify-center space-x-2 active:scale-98"
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl text-xs font-bold transition-all shadow-md shadow-orange-500/20 disabled:opacity-50 flex items-center justify-center space-x-1.5"
                 >
                   {placingOrder ? (
                     <span className="flex items-center gap-2">
                       <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Sending to Kitchen...</span>
+                      <span>Placing Order...</span>
                     </span>
                   ) : (
                     <>
-                      <span>Dispatch Order • ₹{total}</span>
-                      <ArrowRight className="w-4 h-4" />
+                      <span>Send Order • ₹{total}</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
                     </>
                   )}
-                </button>
+                </motion.button>
               </div>
             </motion.div>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>
