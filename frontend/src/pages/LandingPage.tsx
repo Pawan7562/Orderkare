@@ -1220,7 +1220,15 @@ export const LandingPage: React.FC = () => {
               <span className="text-slate-400">Made with ❤️ for modern restaurants</span>
               <span className="hidden sm:inline text-slate-300">·</span>
               <span className="text-slate-400">
-                Developed by <span className="font-bold text-orange-600">Nexify Forge</span>
+                Developed by{' '}
+                <a
+                  href="https://www.nexifyforge.in"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-bold text-orange-600 hover:text-orange-700 transition-colors"
+                >
+                  Nexify Forge
+                </a>
               </span>
             </div>
           </div>
