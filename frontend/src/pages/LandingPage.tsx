@@ -1210,14 +1210,18 @@ export const LandingPage: React.FC = () => {
           </div>
 
           {/* Bottom Copyright Bar */}
-          <div className="pt-6 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+          <div className="pt-6 border-t border-slate-200/80 flex flex-col lg:flex-row items-center justify-between gap-4 text-xs text-slate-500">
             <p>© 2026 OrderKare Technologies Pvt. Ltd. All rights reserved.</p>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
               <button onClick={() => setLegalModal('privacy')} className="hover:text-slate-900 transition-colors font-medium">Privacy</button>
               <span className="text-slate-300">·</span>
               <button onClick={() => setLegalModal('terms')} className="hover:text-slate-900 transition-colors font-medium">Terms</button>
               <span className="text-slate-300">·</span>
-              <span className="text-slate-400">Made with ❤️ for Modern Restaurants</span>
+              <span className="text-slate-400">Made with ❤️ for modern restaurants</span>
+              <span className="hidden sm:inline text-slate-300">·</span>
+              <span className="text-slate-400">
+                Developed by <span className="font-bold text-orange-600">Nexify Forge</span>
+              </span>
             </div>
           </div>
         </div>
