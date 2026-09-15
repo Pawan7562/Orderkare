@@ -287,11 +287,24 @@ export const LandingPage: React.FC = () => {
     <div className="min-h-screen bg-[#fafbfe] text-slate-900 font-sans antialiased overflow-x-hidden selection:bg-orange-500 selection:text-white">
 
       {/* ═══════════════════════════════ TOP ANNOUNCEMENT BAR ═══════════════════════════════ */}
-      <div className="bg-gradient-to-r from-orange-500 via-rose-500 to-amber-500 text-white text-xs py-2 px-4 text-center font-medium tracking-wide shadow-xs">
-        <div className="max-w-7xl mx-auto flex items-center justify-center gap-2">
-          <span className="bg-white/20 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">New</span>
-          <span>⚡ Real-Time Kitchen Display & Instant UPI QR Ordering now live!</span>
-          <a href="#features" className="underline font-semibold hover:text-orange-100 transition-colors hidden sm:inline">Explore features →</a>
+      <div className="bg-gradient-to-r from-orange-500 via-rose-500 to-amber-500 text-white text-xs py-2.5 px-4 font-medium tracking-wide shadow-xs overflow-hidden">
+        <div className="max-w-7xl mx-auto flex items-center gap-3">
+          <span className="relative z-20 shrink-0 bg-white/20 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">New</span>
+          <div className="relative min-w-0 flex-1 overflow-hidden">
+            <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-orange-500 via-orange-500/70 to-transparent z-10 pointer-events-none" />
+            <div className="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-amber-500 via-amber-500/70 to-transparent z-10 pointer-events-none" />
+            <div className="animate-marquee-ltr whitespace-nowrap">
+              {[1, 2].map((copy) => (
+                <div key={copy} className="flex items-center shrink-0">
+                  <span className="px-6">Real-time kitchen display and instant UPI QR ordering are now live</span>
+                  <span className="text-white/60">✦</span>
+                  <span className="px-6">Serve faster with OrderKare restaurant operations</span>
+                  <span className="text-white/60">✦</span>
+                  <a href="#features" className="px-6 underline font-semibold hover:text-orange-100 transition-colors">Explore platform features →</a>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
