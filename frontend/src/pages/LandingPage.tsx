@@ -5,7 +5,8 @@ import {
   QrCode, Utensils, BarChart3, Shield, ArrowRight, CheckCircle2,
   ChevronDown, Smartphone, Zap, Star, Check, Menu, X, ChefHat,
   Clock, CreditCard, Layers, ArrowUpRight, Globe, Bell, PieChart,
-  Users, TrendingUp, Sparkles, ShoppingCart, CheckCircle, ShieldCheck
+  Users, TrendingUp, Sparkles, ShoppingCart, CheckCircle, ShieldCheck,
+  ArrowUp, Phone, Mail, MapPin, ExternalLink, Lock, Headphones, Award, Activity, Heart, MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence, useInView, useMotionValue, useSpring } from 'framer-motion';
 import type { Variants } from 'framer-motion';
@@ -1148,15 +1149,81 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* ═══════════════════════════════ PROFESSIONAL SAAS FOOTER ═══════════════════════════════ */}
-      <footer className="bg-slate-50 border-t border-slate-200/80 pt-16 pb-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+      {/* ═══════════════════════════════ ULTRA-PREMIUM SAAS FOOTER ═══════════════════════════════ */}
+      <footer className="relative bg-slate-900 text-slate-300 pt-20 pb-12 border-t border-slate-800 overflow-hidden font-sans">
+        {/* Subtle Ambient Background Gradients */}
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-rose-500/10 rounded-full blur-3xl pointer-events-none" />
 
-          {/* Newsletter Box */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xs">
-            <div className="text-left">
-              <h4 className="font-extrabold text-base text-slate-900 tracking-tight">Stay updated with restaurant technology</h4>
-              <p className="text-slate-500 text-xs sm:text-sm mt-0.5">Join 1,000+ restaurant owners receiving our monthly hospitality tech & growth insights.</p>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16 relative z-10">
+
+          {/* 1. High-Converting Pre-Footer Banner */}
+          <div className="relative rounded-3xl p-8 sm:p-12 overflow-hidden border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 shadow-2xl">
+            <div className="absolute inset-0 bg-radial from-orange-500/10 via-transparent to-transparent pointer-events-none" />
+            <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8 text-left">
+              <div className="space-y-3 max-w-2xl">
+                <div className="inline-flex items-center gap-2 bg-orange-500/10 border border-orange-500/20 px-3 py-1 rounded-full text-xs font-black text-orange-400 uppercase tracking-wider">
+                  <Sparkles className="w-3.5 h-3.5 text-orange-400" />
+                  <span>Start Free In 5 Minutes</span>
+                </div>
+                <h3 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight">
+                  Ready to Supercharge Your Restaurant's Revenue & Table Turnaround?
+                </h3>
+                <p className="text-slate-400 text-xs sm:text-sm leading-relaxed">
+                  Join 1,200+ top restaurants, cafes, and food courts eliminating order delays and keeping 100% of their profits with 0% commission direct ordering.
+                </p>
+
+                {/* Key Value Badges */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>0% Commission</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>14-Day Free Trial</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Instant Setup</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>24/7 Support</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row lg:flex-col gap-3.5 w-full sm:w-auto shrink-0">
+                <Link
+                  to="/register"
+                  className="px-8 py-4 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold text-sm rounded-2xl shadow-lg shadow-orange-500/25 transition-all text-center flex items-center justify-center gap-2 active:scale-95 group"
+                >
+                  <span>Start 14-Day Free Trial</span>
+                  <ArrowRight className="w-4 h-4 text-white group-hover:translate-x-1 transition-transform" />
+                </Link>
+                <a
+                  href="#demo"
+                  className="px-8 py-3.5 bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-white font-bold text-xs rounded-2xl transition-all text-center flex items-center justify-center gap-2 active:scale-95"
+                >
+                  <span>View Live Menu Demo</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Newsletter & Industry Insights Box */}
+          <div className="bg-slate-800/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 sm:p-8 flex flex-col lg:flex-row items-center justify-between gap-6 shadow-xl">
+            <div className="text-left space-y-1 max-w-xl">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+                <h4 className="font-extrabold text-base text-white tracking-tight">OrderKare Hospitality Digest</h4>
+              </div>
+              <p className="text-slate-400 text-xs sm:text-sm">
+                Get monthly restaurant growth strategies, digital menu optimization tips, and feature releases delivered to your inbox.
+              </p>
             </div>
             <form
               onSubmit={(e) => {
@@ -1167,123 +1234,203 @@ export const LandingPage: React.FC = () => {
                   setTimeout(() => setSubscribed(false), 4000);
                 }
               }}
-              className="w-full sm:w-auto"
+              className="w-full lg:w-auto"
             >
               {subscribed ? (
-                <span className="text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-4 py-2.5 rounded-full text-xs inline-block">
-                  Subscribed successfully ✓
+                <span className="text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/30 px-5 py-3 rounded-xl text-xs inline-flex items-center gap-2 shadow-sm">
+                  <CheckCircle className="w-4 h-4 text-emerald-400" />
+                  <span>Thank you for subscribing! Check your inbox soon.</span>
                 </span>
               ) : (
-                <div className="flex gap-2 w-full sm:w-84">
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="manager@restaurant.com"
-                    className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-full text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-orange-500 focus:bg-white transition-all"
-                  />
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-96">
+                  <div className="relative flex-1">
+                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="manager@restaurant.com"
+                      className="w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder:text-slate-500 outline-none focus:border-orange-500 transition-all"
+                    />
+                  </div>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-full transition-all text-xs shrink-0"
+                    className="px-6 py-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold rounded-xl transition-all text-xs shrink-0 shadow-md active:scale-95"
                   >
-                    Subscribe
+                    Subscribe Free
                   </button>
                 </div>
               )}
             </form>
           </div>
 
-          {/* 5-Column Navigation Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-8 text-xs text-left">
-            {/* Brand Information */}
-            <div className="col-span-2 md:col-span-1 space-y-3.5">
-              <div className="flex items-center gap-2">
-                <img src="/logo.jpg" alt="OrderKare" className="h-7 w-7 object-cover rounded-lg border border-slate-200 shadow-xs" />
-                <span className="font-black text-slate-900 text-base">Order<span className="text-orange-600">Kare</span></span>
+          {/* 3. 5-Column Navigation Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-8 lg:gap-10 text-xs text-left">
+            {/* Column 1: Brand & Direct Contacts */}
+            <div className="col-span-2 md:col-span-1 space-y-4">
+              <div className="flex items-center gap-2.5">
+                <img src="/logo.jpg" alt="OrderKare" className="h-8 w-8 object-cover rounded-xl border border-slate-700 shadow-md" />
+                <span className="font-black text-white text-lg tracking-tight">Order<span className="text-orange-500">Kare</span></span>
               </div>
-              <p className="text-slate-500 leading-relaxed text-xs">
-                Next-generation QR table ordering, sub-second kitchen display (KDS), and 0% commission direct UPI payments for modern restaurants.
+              <p className="text-slate-400 leading-relaxed text-xs">
+                Empowering modern restaurants with sub-second QR table ordering, real-time kitchen displays (KDS), and 0% commission direct UPI payments.
               </p>
-              <div className="pt-1 text-[11px] text-slate-400 space-y-1">
-                <p>📍 Sector 62, Noida NCR, India</p>
-                <p>✉️ <a href={`mailto:${supportEmail}`} className="text-slate-600 hover:text-orange-600 font-medium">{supportEmail}</a></p>
-                <p>📞 <a href={`tel:${supportPhone}`} className="text-slate-600 hover:text-orange-600 font-medium">{supportPhone}</a></p>
+
+              {/* Live System Status Pill */}
+              <div className="inline-flex items-center gap-2 bg-emerald-950/60 border border-emerald-500/30 px-3 py-1.5 rounded-full text-[11px] font-bold text-emerald-300">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span>All Systems Operational (99.99%)</span>
+              </div>
+
+              {/* Direct Contacts */}
+              <div className="pt-2 text-[11px] text-slate-400 space-y-2">
+                <p className="flex items-start gap-2">
+                  <MapPin className="w-3.5 h-3.5 text-orange-400 shrink-0 mt-0.5" />
+                  <span>Sector 62, Noida NCR, India</span>
+                </p>
+                <p className="flex items-center gap-2">
+                  <Mail className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                  <a href={`mailto:${supportEmail}`} className="text-slate-300 hover:text-orange-400 font-medium transition-colors">{supportEmail}</a>
+                </p>
+                <p className="flex items-center gap-2">
+                  <Phone className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                  <a href={`tel:${supportPhone}`} className="text-slate-300 hover:text-orange-400 font-medium transition-colors">{supportPhone}</a>
+                </p>
               </div>
             </div>
 
-            {/* Column 2: Product */}
-            <div className="space-y-3">
-              <h5 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">Product</h5>
-              <ul className="space-y-2 text-slate-600 font-medium">
-                <li><a href="#features" className="hover:text-orange-600 transition-colors">QR Table Ordering</a></li>
-                <li><a href="#platform" className="hover:text-orange-600 transition-colors">Kitchen Display (KDS)</a></li>
-                <li><a href="#features" className="hover:text-orange-600 transition-colors">Digital Menu Builder</a></li>
-                <li><a href="#platform" className="hover:text-orange-600 transition-colors">UPI Soundbox Sync</a></li>
-                <li><a href="#pricing" className="hover:text-orange-600 transition-colors">Pricing & Plans</a></li>
+            {/* Column 2: Core Platform (Product) */}
+            <div className="space-y-3.5">
+              <h5 className="font-extrabold text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-orange-400" />
+                <span>Product</span>
+              </h5>
+              <ul className="space-y-2.5 text-slate-400 font-medium">
+                <li>
+                  <a href="#features" className="hover:text-white transition-colors flex items-center justify-between">
+                    <span>QR Table Ordering</span>
+                    <span className="text-[9px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded font-bold">Popular</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="#platform" className="hover:text-white transition-colors flex items-center justify-between">
+                    <span>Kitchen Display (KDS)</span>
+                    <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-bold">Live Sync</span>
+                  </a>
+                </li>
+                <li><a href="#features" className="hover:text-white transition-colors">Digital Menu Builder</a></li>
+                <li><a href="#platform" className="hover:text-white transition-colors">UPI Soundbox Sync</a></li>
+                <li><a href="#pricing" className="hover:text-white transition-colors">Pricing & Plans</a></li>
+                <li><a href="#features" className="hover:text-white transition-colors">Live Feedback Manager</a></li>
               </ul>
             </div>
 
-            {/* Column 3: Solutions */}
-            <div className="space-y-3">
-              <h5 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">Solutions</h5>
-              <ul className="space-y-2 text-slate-600 font-medium">
-                <li><span className="hover:text-orange-600 cursor-default transition-colors">Fine Dining & Bistros</span></li>
-                <li><span className="hover:text-orange-600 cursor-default transition-colors">Quick Service (QSR)</span></li>
-                <li><span className="hover:text-orange-600 cursor-default transition-colors">Cafes & Bakeries</span></li>
-                <li><span className="hover:text-orange-600 cursor-default transition-colors">Food Courts & Bars</span></li>
-                <li><span className="hover:text-orange-600 cursor-default transition-colors">Multi-Branch Chains</span></li>
+            {/* Column 3: Industry Solutions */}
+            <div className="space-y-3.5">
+              <h5 className="font-extrabold text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <Utensils className="w-3.5 h-3.5 text-orange-400" />
+                <span>Solutions</span>
+              </h5>
+              <ul className="space-y-2.5 text-slate-400 font-medium">
+                <li><span className="hover:text-white cursor-default transition-colors">Fine Dining & Bistros</span></li>
+                <li><span className="hover:text-white cursor-default transition-colors">Quick Service (QSR)</span></li>
+                <li><span className="hover:text-white cursor-default transition-colors">Cafes & Bakeries</span></li>
+                <li><span className="hover:text-white cursor-default transition-colors">Food Courts & Bars</span></li>
+                <li><span className="hover:text-white cursor-default transition-colors">Cloud Kitchens</span></li>
+                <li><span className="hover:text-white cursor-default transition-colors">Multi-Branch Chains</span></li>
               </ul>
             </div>
 
             {/* Column 4: Portals & Access */}
-            <div className="space-y-3">
-              <h5 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">Portals</h5>
-              <ul className="space-y-2 text-slate-600 font-medium">
-                <li><Link to="/login" className="hover:text-orange-600 transition-colors">Restaurant Sign In</Link></li>
-                <li><Link to="/register" className="hover:text-orange-600 transition-colors">Create Account</Link></li>
-                <li><Link to="/login" className="hover:text-orange-600 transition-colors">Kitchen KDS Login</Link></li>
-                <li><Link to="/login" className="hover:text-orange-600 transition-colors">Staff Access</Link></li>
-                <li><a href="#faq" className="hover:text-orange-600 transition-colors">Help & FAQ</a></li>
+            <div className="space-y-3.5">
+              <h5 className="font-extrabold text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-orange-400" />
+                <span>Portals</span>
+              </h5>
+              <ul className="space-y-2.5 text-slate-400 font-medium">
+                <li><Link to="/login" className="hover:text-white transition-colors">Restaurant Admin Sign In</Link></li>
+                <li><Link to="/register" className="hover:text-white transition-colors">Create Free Account</Link></li>
+                <li><Link to="/login" className="hover:text-white transition-colors">Kitchen KDS Login</Link></li>
+                <li><Link to="/login" className="hover:text-white transition-colors">Staff & Waiter Access</Link></li>
+                <li><a href="#demo" className="hover:text-white transition-colors">Interactive Menu Demo</a></li>
+                <li><a href="#faq" className="hover:text-white transition-colors">Help & FAQ</a></li>
               </ul>
             </div>
 
-            {/* Column 5: Trust & Legal */}
-            <div className="space-y-3">
-              <h5 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">Company</h5>
-              <ul className="space-y-2 text-slate-600 font-medium">
-                <li><button onClick={() => setLegalModal('privacy')} className="hover:text-orange-600 transition-colors text-left">Privacy Policy</button></li>
-                <li><button onClick={() => setLegalModal('terms')} className="hover:text-orange-600 transition-colors text-left">Terms of Service</button></li>
-                <li><span className="text-slate-500">0% Commission Model</span></li>
-                <li><span className="text-slate-500">256-bit TLS Security</span></li>
-                <li><a href={`mailto:${supportEmail}`} className="hover:text-orange-600 transition-colors">Contact Support</a></li>
+            {/* Column 5: Trust & Company */}
+            <div className="space-y-3.5">
+              <h5 className="font-extrabold text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-orange-400" />
+                <span>Company</span>
+              </h5>
+              <ul className="space-y-2.5 text-slate-400 font-medium">
+                <li><button onClick={() => setLegalModal('privacy')} className="hover:text-white transition-colors text-left">Privacy Policy</button></li>
+                <li><button onClick={() => setLegalModal('terms')} className="hover:text-white transition-colors text-left">Terms of Service</button></li>
+                <li><span className="text-slate-400">0% Commission Guarantee</span></li>
+                <li><span className="text-slate-400">256-Bit TLS Encryption</span></li>
+                <li><a href={`mailto:${supportEmail}`} className="hover:text-white transition-colors">Contact Support</a></li>
               </ul>
             </div>
           </div>
 
-          {/* Bottom Copyright Bar */}
-          <div className="pt-6 border-t border-slate-200/80 flex flex-col lg:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+          {/* 4. Trust & Security Badges Bar */}
+          <div className="pt-8 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400">
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+              <span className="inline-flex items-center gap-1.5 text-slate-300 font-medium">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>256-Bit Bank-Grade TLS</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-slate-300 font-medium">
+                <Zap className="w-4 h-4 text-amber-400" />
+                <span>Sub-Second Real-Time Sync</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-slate-300 font-medium">
+                <CreditCard className="w-4 h-4 text-orange-400" />
+                <span>0% Commission Direct UPI</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-slate-300 font-medium">
+                <Award className="w-4 h-4 text-rose-400" />
+                <span>99.99% Guaranteed Uptime</span>
+              </span>
+            </div>
+
+            {/* Back to Top Quick Action */}
+            <button
+              type="button"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-all text-xs font-bold cursor-pointer"
+            >
+              <span>Back to top</span>
+              <ArrowUp className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* 5. Bottom Copyright Bar */}
+          <div className="pt-6 border-t border-slate-800/80 flex flex-col lg:flex-row items-center justify-between gap-4 text-xs text-slate-500">
             <p>© 2026 OrderKare Technologies Pvt. Ltd. All rights reserved.</p>
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
-              <button onClick={() => setLegalModal('privacy')} className="hover:text-slate-900 transition-colors font-medium">Privacy</button>
-              <span className="text-slate-300">·</span>
-              <button onClick={() => setLegalModal('terms')} className="hover:text-slate-900 transition-colors font-medium">Terms</button>
-              <span className="text-slate-300">·</span>
+              <button onClick={() => setLegalModal('privacy')} className="hover:text-slate-300 transition-colors font-medium">Privacy Policy</button>
+              <span className="text-slate-700">·</span>
+              <button onClick={() => setLegalModal('terms')} className="hover:text-slate-300 transition-colors font-medium">Terms of Service</button>
+              <span className="text-slate-700">·</span>
               <span className="text-slate-400">Made with ❤️ for modern restaurants</span>
-              <span className="hidden sm:inline text-slate-300">·</span>
+              <span className="hidden sm:inline text-slate-700">·</span>
               <span className="text-slate-400">
-                Developed by{' '}
+                Designed & Developed by{' '}
                 <a
                   href="https://www.nexifyforge.in"
                   target="_blank"
                   rel="noreferrer"
-                  className="font-bold text-orange-600 hover:text-orange-700 transition-colors"
+                  className="font-bold text-orange-400 hover:text-orange-300 transition-colors inline-flex items-center gap-0.5"
                 >
-                  Nexify Forge
+                  <span>Nexify Forge</span>
+                  <ExternalLink className="w-3 h-3 ml-0.5" />
                 </a>
               </span>
             </div>
           </div>
+
         </div>
       </footer>
 
