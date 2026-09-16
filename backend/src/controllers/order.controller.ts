@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
-import { notifyNewOrder, notifyOrderStatusUpdate } from '../utils/socket';
+import { notifyNewOrder, notifyOrderStatusUpdate, notifyNewFeedback } from '../utils/socket';
 import { prisma } from '../lib/prisma';
 import { OrderStatus } from '@prisma/client';
 
@@ -8,49 +8,84 @@ const feedbackStore: any[] = [];
 
 export const createOrder = async (req: Request, res: Response): Promise<void> => {
   try {
-    const slug = req.params.slug as string;
-    const { customerName, tableNumber, phoneNumber, items } = req.body;
+    const rawSlug = (req.params.slug as string || '').trim();
+    const { customerName, tableNumber, phoneNumber, items, notes, specialInstructions } = req.body;
 
-    if (!customerName || !tableNumber || !items || !items.length) {
+    if (!customerName || !tableNumber || !items || !Array.isArray(items) || items.length === 0) {
       res.status(400).json({ message: 'Customer name, table number, and items are required' });
       return;
     }
 
     try {
-      const restaurant = await prisma.restaurant.findUnique({ where: { slug } });
+      // Find restaurant by slug or id
+      let restaurant = await prisma.restaurant.findFirst({
+        where: {
+          OR: [
+            { slug: rawSlug },
+            { id: rawSlug },
+            { slug: rawSlug.toLowerCase() },
+          ],
+        },
+      });
+
+      if (!restaurant) {
+        // Fallback: try finding first active restaurant if demo
+        if (rawSlug === 'demo' || rawSlug === 'royal-palace') {
+          restaurant = await prisma.restaurant.findFirst({ where: { isActive: true } });
+        }
+      }
+
       if (!restaurant || !restaurant.isActive) {
-        res.status(404).json({ message: 'Restaurant not found or inactive' });
+        res.status(404).json({ message: `Restaurant "${rawSlug}" not found or currently inactive` });
         return;
       }
 
-      const foodIds = items.map((i: any) => i.foodItemId);
+      const foodIds = items.map((i: any) => i.foodItemId || i.id).filter(Boolean);
       const foodItems = await prisma.foodItem.findMany({
-        where: { id: { in: foodIds }, restaurantId: restaurant.id, isAvailable: true },
+        where: { id: { in: foodIds }, restaurantId: restaurant.id },
       });
 
-      if (foodItems.length !== foodIds.length) {
-        res.status(400).json({ message: 'Some items are unavailable or invalid' });
+      if (foodItems.length === 0) {
+        res.status(400).json({ message: 'No valid food items found for this restaurant' });
         return;
       }
 
       const foodMap = new Map(foodItems.map(f => [f.id, f]));
       let totalAmount = 0;
-      const orderItemsData = items.map((item: any) => {
-        const food = foodMap.get(item.foodItemId)!;
-        totalAmount += food.price * item.quantity;
-        return {
-          foodItemId: item.foodItemId,
-          quantity: item.quantity,
-          price: food.price,
-        };
-      });
+      const orderItemsData: { foodItemId: string; quantity: number; price: number }[] = [];
+
+      for (const item of items) {
+        const itemId = item.foodItemId || item.id;
+        const food = foodMap.get(itemId);
+        if (food) {
+          const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+          const price = Number(food.price) || 0;
+          totalAmount += price * qty;
+          orderItemsData.push({
+            foodItemId: food.id,
+            quantity: qty,
+            price: price,
+          });
+        }
+      }
+
+      if (orderItemsData.length === 0) {
+        res.status(400).json({ message: 'Could not match any valid items for this order' });
+        return;
+      }
+
+      const cleanCustomerName = String(customerName).trim();
+      const cleanTableNumber = String(tableNumber).replace(/^Table\s*#?/i, '').trim() || '1';
+      const cleanPhone = phoneNumber ? String(phoneNumber).trim() : null;
+      const cleanNotes = (notes || specialInstructions) ? String(notes || specialInstructions).trim() : null;
 
       const order = await prisma.order.create({
         data: {
-          customerName,
-          tableNumber,
-          phoneNumber,
-          totalAmount,
+          customerName: cleanCustomerName,
+          tableNumber: cleanTableNumber,
+          phoneNumber: cleanPhone,
+          notes: cleanNotes,
+          totalAmount: Math.round(totalAmount * 100) / 100,
           restaurantId: restaurant.id,
           status: 'PENDING',
           items: {
@@ -64,10 +99,15 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         },
       });
 
+      console.log(`✅ Order created successfully: ID=${order.id}, Table=${order.tableNumber}, Notes="${order.notes || ''}", Restaurant=${restaurant.name} (${restaurant.id})`);
+
+      // Dispatch real-time notifications to hotel admin
       notifyNewOrder(restaurant.id, order);
-      res.status(201).json({ order });
+
+      res.status(201).json({ order, message: 'Order placed successfully' });
     } catch (dbError) {
-      res.status(503).json({ message: 'Database temporarily unavailable' });
+      console.error('Database error in createOrder:', dbError);
+      res.status(503).json({ message: 'Database temporarily unavailable. Please try again in a moment.' });
     }
   } catch (error) {
     console.error('createOrder error:', error);
@@ -85,11 +125,14 @@ export const getOrderStatus = async (req: Request, res: Response): Promise<void>
           id: true,
           customerName: true,
           tableNumber: true,
+          phoneNumber: true,
+          notes: true,
           totalAmount: true,
           status: true,
           createdAt: true,
-          restaurant: { select: { name: true } },
-          items: { include: { foodItem: { select: { name: true, price: true } } } },
+          restaurantId: true,
+          restaurant: { select: { id: true, name: true, slug: true } },
+          items: { include: { foodItem: { select: { id: true, name: true, price: true, imageUrl: true } } } },
         },
       });
       if (!order) { res.status(404).json({ message: 'Order not found' }); return; }
@@ -113,8 +156,8 @@ export const getOrders = async (req: AuthRequest, res: Response): Promise<void> 
       const skip = ((parseInt(page as string) || 1) - 1) * take;
 
       const where: any = { restaurantId };
-      if (status) {
-        const statusArray = (status as string).split(',');
+      if (status && status !== 'ALL') {
+        const statusArray = (status as string).split(',').map(s => s.trim().toUpperCase());
         where.status = { in: statusArray };
       }
 
@@ -148,7 +191,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response): Promis
     const restaurantId: string = req.user?.restaurantId as string;
     const id = req.params.id as string;
     const rawStatus = req.body.status;
-    const status = typeof rawStatus === 'string' ? rawStatus : Array.isArray(rawStatus) ? rawStatus[0] : '';
+    const status = typeof rawStatus === 'string' ? rawStatus.toUpperCase() : Array.isArray(rawStatus) ? rawStatus[0].toUpperCase() : '';
 
     if (!status) {
       res.status(400).json({ message: 'Order status is required' });
@@ -159,9 +202,20 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response): Promis
       const order = await prisma.order.findFirst({ where: { id, restaurantId } });
       if (!order) { res.status(404).json({ message: 'Order not found' }); return; }
 
-      const updated = await prisma.order.update({ where: { id }, data: { status: status as OrderStatus } });
-      notifyOrderStatusUpdate(id, status);
-      res.json({ order: updated });
+      const updated = await prisma.order.update({
+        where: { id },
+        data: { status: status as OrderStatus },
+        include: {
+          items: {
+            include: { foodItem: true },
+          },
+        },
+      });
+
+      // Dispatch order status update to customer and hotel screens
+      notifyOrderStatusUpdate(id, status, restaurantId);
+
+      res.json({ order: updated, message: `Order status updated to ${status}` });
     } catch (dbError) {
       res.status(503).json({ message: 'Database temporarily unavailable' });
     }
@@ -175,11 +229,11 @@ export const submitOrderFeedback = async (req: Request, res: Response): Promise<
   try {
     const idParam = req.params.id;
     const id = typeof idParam === 'string' ? idParam : Array.isArray(idParam) ? idParam[0] : '';
-    const { rating, comment, customerName } = req.body || {};
+    const { rating, comment, customerName, tags, favoriteDishes } = req.body || {};
     const parsedRating = Number(rating);
 
     if (!id || Number.isNaN(parsedRating) || parsedRating < 1 || parsedRating > 5) {
-      res.status(400).json({ message: 'Valid rating is required.' });
+      res.status(400).json({ message: 'Valid rating (1-5) is required.' });
       return;
     }
 
@@ -194,22 +248,30 @@ export const submitOrderFeedback = async (req: Request, res: Response): Promise<
     }
 
     const restaurantId = order.restaurantId;
-    const foodSummary = order.items.map((item: any) => item.foodItem?.name || item.name).join(', ');
+    const foodSummary = order.items.map((item: any) => item.foodItem?.name || item.name).filter(Boolean).join(', ') || 'Custom Dining Order';
 
     const payload = {
       id: `fb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       orderId: id,
       restaurantId,
       customerName: customerName || order.customerName || 'Guest',
+      tableNumber: order.tableNumber || '',
       foodName: foodSummary,
       rating: parsedRating,
-      comment: comment || '',
+      tags: Array.isArray(tags) ? tags : [],
+      favoriteDishes: Array.isArray(favoriteDishes) ? favoriteDishes : [],
+      comment: comment ? String(comment).trim() : '',
       createdAt: new Date().toISOString(),
     };
 
-    feedbackStore.push(payload);
+    feedbackStore.unshift(payload);
+    // Keep max 200 feedback entries in memory
+    if (feedbackStore.length > 200) feedbackStore.pop();
 
-    res.status(201).json({ feedback: payload, message: 'Feedback submitted successfully.' });
+    // Broadcast in real-time to Hotel Admin dashboard
+    notifyNewFeedback(restaurantId, payload);
+
+    res.status(201).json({ feedback: payload, message: 'Thank you! Your feedback has been received.' });
   } catch (error) {
     console.error('submitOrderFeedback error:', error);
     res.status(500).json({ message: 'Internal server error' });

@@ -106,6 +106,9 @@ app.use('/restaurants', restaurantRoutes);
 app.use('/api/v1/ads', adRoutes);
 app.use('/api/ads', adRoutes);
 app.use('/ads', adRoutes);
+app.use('/api/v1/super-admin/ads', adRoutes);
+app.use('/api/super-admin/ads', adRoutes);
+app.use('/super-admin/ads', adRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

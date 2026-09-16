@@ -27,17 +27,24 @@ export const initSocket = async (server: HttpServer): Promise<Server> => {
 
   io.use((socket, next) => {
     try {
-      const token = socket.handshake.auth?.token;
-      if (!token || typeof token !== 'string') return next(new Error('Authentication required'));
-      socket.data.user = verifyToken(token);
+      const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, '');
+      if (token && typeof token === 'string') {
+        try {
+          socket.data.user = verifyToken(token);
+        } catch {
+          console.warn(`[Socket] Token verification failed for client ${socket.id}, proceeding as guest`);
+        }
+      }
+      // Allow connection to proceed (both authenticated admins and guest customers)
       next();
-    } catch {
-      next(new Error('Invalid or expired token'));
+    } catch (err) {
+      console.warn(`[Socket] Auth middleware error:`, err);
+      next();
     }
   });
 
   io.on('connection', (socket: Socket) => {
-    console.log(`🔌 Client connected: ${socket.id}`);
+    console.log(`🔌 Client connected: ${socket.id} (user: ${socket.data?.user?.email || 'guest'})`);
 
     // Auto-join room based on token restaurant ID
     if (socket.data.user?.restaurantId) {
@@ -47,19 +54,28 @@ export const initSocket = async (server: HttpServer): Promise<Server> => {
 
     // Join room based on restaurant ID to receive scoped updates
     socket.on('join_restaurant', (restaurantId: string) => {
-      if (restaurantId) {
+      if (restaurantId && typeof restaurantId === 'string') {
         socket.join(restaurantId);
         console.log(`🔌 Client ${socket.id} joined restaurant room: ${restaurantId}`);
       }
     });
 
-    socket.on('disconnect', () => {
-      console.log(`🔌 Client disconnected: ${socket.id}`);
+    // Join room based on order ID for customer live order tracking
+    socket.on('join_order', (orderId: string) => {
+      if (orderId && typeof orderId === 'string') {
+        socket.join(`order:${orderId}`);
+        console.log(`🔌 Client ${socket.id} joined order room: order:${orderId}`);
+      }
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log(`🔌 Client disconnected: ${socket.id} (${reason})`);
     });
   });
 
   return io;
 };
+
 
 export const getIO = (): Server => {
   if (!io) {
@@ -67,7 +83,6 @@ export const getIO = (): Server => {
   }
   return io;
 };
-
 import { sendOrderPushNotification } from './push';
 
 export const notifyNewOrder = (restaurantId: string, order: any) => {
@@ -81,8 +96,27 @@ export const notifyNewOrder = (restaurantId: string, order: any) => {
   sendOrderPushNotification(restaurantId, order).catch(() => {});
 };
 
-export const notifyOrderStatusUpdate = (orderId: string, status: string) => {
+export const notifyOrderStatusUpdate = (orderId: string, status: string, restaurantId?: string) => {
   if (io) {
-    io.emit(`order_status_${orderId}`, { status });
+    // 1. Emit legacy individual event for direct listeners
+    io.emit(`order_status_${orderId}`, { orderId, status });
+    // 2. Emit to scoped order room
+    io.to(`order:${orderId}`).emit('order_status_update', { orderId, status });
+    // 3. Emit order_updated to restaurant room & globally so admin views refresh live
+    if (restaurantId) {
+      io.to(restaurantId).emit('order_updated', { orderId, status, restaurantId });
+    }
+    io.emit('order_updated', { orderId, status, restaurantId });
+    console.log(`🔌 Emitted order status update: order=${orderId}, status=${status}`);
   }
 };
+
+export const notifyNewFeedback = (restaurantId: string, feedback: any) => {
+  if (io) {
+    io.to(restaurantId).emit('new_feedback', feedback);
+    io.emit('global_new_feedback', { ...feedback, restaurantId });
+    console.log(`⭐ Emitted new_feedback for restaurant: ${restaurantId}`);
+  }
+};
+
+

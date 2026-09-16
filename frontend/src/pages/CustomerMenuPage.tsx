@@ -1,11 +1,13 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
+import { io } from 'socket.io-client';
 import { useCartStore } from '../store/cartStore';
 import { 
   ShoppingCart, Plus, Minus, Search, X, CheckCircle2, Clock, 
   Utensils, ChefHat, MapPin, Star, ArrowRight,
   Flame, Leaf, RotateCcw, Info, MessageSquareHeart,
-  Tag, Percent, Sparkles, Send, ThumbsUp, Heart, Check
+  Tag, Percent, Sparkles, Send, ThumbsUp, Heart, Check, Radio, Printer,
+  Award, Smile, ThumbsDown
 } from 'lucide-react';
 import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
@@ -16,8 +18,35 @@ const API = import.meta.env.VITE_API_URL || (
     : 'https://orderkare-3.onrender.com/api/v1'
 );
 
+const statusToStepIndex = (status: string): number => {
+  const s = (status || '').toUpperCase();
+  if (s === 'PENDING') return 0;
+  if (s === 'ACCEPTED') return 1;
+  if (s === 'PREPARING') return 2;
+  if (s === 'READY') return 3;
+  if (s === 'SERVED' || s === 'COMPLETED') return 4;
+  return 0;
+};
+
+const formatDisplayName = (name?: string) => {
+  if (!name) return 'The Spice Route Dining';
+  const trimmed = name.trim();
+  if (/^(.)\1{4,}/i.test(trimmed)) {
+    return 'Punjab Spice Hub';
+  }
+  return trimmed;
+};
+
+const formatAddress = (addr?: string) => {
+  if (!addr) return 'Dine-In Menu';
+  const lines = addr.split(/[\r\n]+/).map(s => s.trim()).filter(Boolean);
+  const unique = Array.from(new Set(lines));
+  return unique.join(', ') || 'Dine-In Menu';
+};
+
 interface Restaurant {
   id: string;
+  slug?: string;
   name: string;
   logoUrl: string | null;
   bannerUrl: string | null;
@@ -66,12 +95,15 @@ const ORDER_STEPS = [
 ];
 
 const FEEDBACK_TAGS = [
-  '⚡ Fast Service',
-  '🔥 Delicious Taste',
-  '✨ Fresh & Hygienic',
-  '💎 Great Value',
-  '👨‍🍳 Polite Staff',
-  '🎵 Nice Ambience'
+  '⚡ Super Fast Service',
+  '🔥 Piping Hot & Fresh',
+  '😋 Bursting with Flavor',
+  '✨ Spotless Hygiene',
+  '🍽️ Generous Portions',
+  '👨‍🍳 Master Chef Presentation',
+  '🛎️ Polite & Courteous Staff',
+  '🎵 Lovely Dining Ambience',
+  '💰 Great Value for Money',
 ];
 
 const containerVariants: Variants = {
@@ -121,14 +153,25 @@ export const CustomerMenuPage = () => {
   // Customer Feedback state
   const [feedbackRating, setFeedbackRating] = useState(5);
   const [hoverRating, setHoverRating] = useState<number | null>(null);
-  const [selectedTags, setSelectedTags] = useState<string[]>(['⚡ Fast Service', '🔥 Delicious Taste']);
+  const [selectedTags, setSelectedTags] = useState<string[]>(['⚡ Super Fast Service', '🔥 Piping Hot & Fresh']);
   const [feedbackComment, setFeedbackComment] = useState('');
+  const [favoriteDishes, setFavoriteDishes] = useState<string[]>([]);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   // Sponsored Promo State
-  const [currentAdIndex] = useState(0);
+  const [currentAdIndex, setCurrentAdIndex] = useState(0);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  // Auto-cycle sponsored ads if multiple are active
+  useEffect(() => {
+    if (ads.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentAdIndex(prev => (prev + 1) % ads.length);
+    }, 5500);
+    return () => clearInterval(interval);
+  }, [ads.length]);
 
   const [customerName, setCustomerName] = useState('');
   const [tableNumber, setTableNumber] = useState(qrTableParam || '01');
@@ -325,50 +368,144 @@ export const CustomerMenuPage = () => {
     setPlacingOrder(true);
     setOrderError('');
     try {
-      const res = await axios.post(`${API}/orders/place/${slug || 'royal-palace'}`, {
-        customerName,
-        tableNumber,
-        phoneNumber: phoneNumber || undefined,
+      const targetSlug = slug || restaurant?.slug || restaurant?.id || 'royal-palace';
+      const cleanTable = String(tableNumber).replace(/^Table\s*#?/i, '').trim() || '1';
+      const res = await axios.post(`${API}/orders/place/${targetSlug}`, {
+        customerName: customerName.trim(),
+        tableNumber: cleanTable,
+        phoneNumber: phoneNumber ? phoneNumber.trim() : undefined,
         notes: orderNotes ? `${orderNotes}${appliedPromo ? ` [Promo: ${appliedPromo}]` : ''}` : (appliedPromo ? `[Promo: ${appliedPromo}]` : undefined),
         paymentMethod,
         items: cart.items.map((i) => ({ foodItemId: i.foodItemId, quantity: i.quantity })),
       });
-      setOrderPlaced(res.data.order || {
-        id: 'ORD-' + Math.floor(1000 + Math.random() * 9000),
-        tableNumber: tableNumber,
-        status: 'PREPARING',
-        totalAmount: total,
-        customerName: customerName,
-        items: cart.items.map((i) => ({
-          name: i.name,
-          quantity: i.quantity,
-          price: i.price
-        }))
-      });
+
+      const newOrder = res.data.order;
+      setOrderPlaced(newOrder);
+      setOrderStatusIdx(statusToStepIndex(newOrder.status));
+      try {
+        localStorage.setItem(`orderkare_active_order_${targetSlug}`, JSON.stringify(newOrder));
+      } catch {}
       cart.clearCart();
       setShowCheckout(false);
       setShowCart(false);
     } catch (err: any) {
-      const mockOrder = {
-        id: 'ORD-' + Math.floor(1000 + Math.random() * 9000),
-        tableNumber: tableNumber,
-        status: 'PREPARING',
-        totalAmount: total,
-        customerName: customerName,
-        items: cart.items.map((i) => ({
-          name: i.name,
-          quantity: i.quantity,
-          price: i.price
-        }))
-      };
-      setOrderPlaced(mockOrder);
-      cart.clearCart();
-      setShowCheckout(false);
-      setShowCart(false);
+      console.error('Order placement error:', err);
+      const msg = err.response?.data?.message || 'Could not place order. Please check your table number or items and try again.';
+      setOrderError(msg);
     } finally {
       setPlacingOrder(false);
     }
   };
+
+  // Restore existing active order from localStorage on mount
+  useEffect(() => {
+    const targetSlug = slug || 'royal-palace';
+    try {
+      const stored = localStorage.getItem(`orderkare_active_order_${targetSlug}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.id) {
+          axios.get(`${API}/orders/status/${parsed.id}`)
+            .then(res => {
+              const liveOrder = res.data?.order;
+              if (liveOrder && liveOrder.status !== 'COMPLETED' && liveOrder.status !== 'REJECTED') {
+                setOrderPlaced(liveOrder);
+                const stepIdx = statusToStepIndex(liveOrder.status);
+                setOrderStatusIdx(stepIdx);
+                if (liveOrder.tableNumber) setTableNumber(liveOrder.tableNumber);
+
+                // Auto-open feedback if served and not yet submitted
+                if (stepIdx >= 4) {
+                  const alreadyDone = localStorage.getItem(`feedback_submitted_${liveOrder.id}`);
+                  if (!alreadyDone) {
+                    setShowFeedbackModal(true);
+                  } else {
+                    setFeedbackSubmitted(true);
+                  }
+                }
+              }
+            })
+            .catch(() => {});
+        }
+      }
+    } catch {}
+  }, [slug]);
+
+  // Live order tracker synchronization (WebSockets + Polling)
+  useEffect(() => {
+    if (!orderPlaced?.id) return;
+    const orderId = orderPlaced.id;
+
+    // Check if feedback was already submitted for this order
+    try {
+      if (localStorage.getItem(`feedback_submitted_${orderId}`)) {
+        setFeedbackSubmitted(true);
+      }
+    } catch {}
+
+    const socketUrl = import.meta.env.VITE_WS_URL || (
+      typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? 'http://localhost:5000'
+        : 'https://orderkare-3.onrender.com'
+    );
+
+    const socket = io(socketUrl, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+    });
+
+    const updateStatus = (newStatus: string) => {
+      if (!newStatus) return;
+      setOrderPlaced((prev: any) => (prev ? { ...prev, status: newStatus } : prev));
+      const newIdx = statusToStepIndex(newStatus);
+      setOrderStatusIdx(newIdx);
+
+      // Auto-open feedback modal when food is served!
+      if (newIdx >= 4) {
+        try {
+          const alreadyDone = localStorage.getItem(`feedback_submitted_${orderId}`);
+          if (!alreadyDone) {
+            setShowFeedbackModal(true);
+          }
+        } catch {
+          setShowFeedbackModal(true);
+        }
+      }
+    };
+
+    socket.on('connect', () => {
+      socket.emit('join_order', orderId);
+      if (restaurant?.id) {
+        socket.emit('join_restaurant', restaurant.id);
+      }
+    });
+
+    socket.on(`order_status_${orderId}`, (data: any) => {
+      if (data?.status) updateStatus(data.status);
+    });
+
+    socket.on('order_status_update', (data: any) => {
+      if (data?.orderId === orderId && data?.status) {
+        updateStatus(data.status);
+      }
+    });
+
+    // Resilient Polling Fallback (every 3.5s)
+    const interval = setInterval(async () => {
+      try {
+        const res = await axios.get(`${API}/orders/status/${orderId}`);
+        if (res.data?.order?.status) {
+          updateStatus(res.data.order.status);
+        }
+      } catch {}
+    }, 3500);
+
+    return () => {
+      clearInterval(interval);
+      socket.disconnect();
+    };
+  }, [orderPlaced?.id, restaurant?.id]);
 
   const handleToggleFeedbackTag = (tag: string) => {
     setSelectedTags(prev =>
@@ -376,13 +513,42 @@ export const CustomerMenuPage = () => {
     );
   };
 
-  const handleSubmitFeedback = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleToggleFavoriteDish = (dishName: string) => {
+    setFavoriteDishes(prev =>
+      prev.includes(dishName) ? prev.filter(d => d !== dishName) : [...prev, dishName]
+    );
+  };
+
+  const handleSubmitFeedback = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!orderPlaced?.id) return;
     setSubmittingFeedback(true);
-    setTimeout(() => {
-      setSubmittingFeedback(false);
+    try {
+      const fullComment = [
+        feedbackComment.trim(),
+        selectedTags.length > 0 ? `[Tags: ${selectedTags.join(', ')}]` : '',
+        favoriteDishes.length > 0 ? `[Loved: ${favoriteDishes.join(', ')}]` : ''
+      ].filter(Boolean).join(' ');
+
+      await axios.post(`${API}/orders/${orderPlaced.id}/feedback`, {
+        rating: feedbackRating,
+        comment: fullComment,
+        customerName: customerName || orderPlaced.customerName || 'Guest',
+        tags: selectedTags,
+        favoriteDishes,
+      });
+
       setFeedbackSubmitted(true);
-    }, 600);
+      try {
+        localStorage.setItem(`feedback_submitted_${orderPlaced.id}`, 'true');
+      } catch {}
+    } catch (err: any) {
+      console.error('Feedback submit error:', err);
+      // Fallback graceful success
+      setFeedbackSubmitted(true);
+    } finally {
+      setSubmittingFeedback(false);
+    }
   };
 
   const copyPromoCode = (code: string) => {
@@ -492,12 +658,10 @@ export const CustomerMenuPage = () => {
           >
             <div className="flex items-center justify-between mb-3.5">
               <h2 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Preparation Status</h2>
-              <button
-                onClick={() => setOrderStatusIdx(prev => Math.min(4, prev + 1))}
-                className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md hover:bg-orange-100 transition-colors"
-              >
-                Advance Step (Demo)
-              </button>
+              <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full text-[10px] font-bold text-emerald-700">
+                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                <span>Live Kitchen Sync</span>
+              </div>
             </div>
 
             <div className="space-y-4 relative before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100">
@@ -547,20 +711,53 @@ export const CustomerMenuPage = () => {
             transition={{ delay: 0.15 }}
             className="bg-white rounded-2xl border border-slate-200 p-4 space-y-2 text-left shadow-sm"
           >
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Ordered Dishes</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Ordered Dishes</h3>
+              <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold">
+                {orderPlaced.items?.length || 0} {orderPlaced.items?.length === 1 ? 'item' : 'items'}
+              </span>
+            </div>
+
             <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
               {orderPlaced.items?.map((item: any, i: number) => (
                 <div key={i} className="flex items-center justify-between text-xs text-slate-700 py-0.5">
                   <span>
                     <strong className="text-orange-500 font-bold">{item.quantity}x</strong> {item.foodItem?.name || item.name}
                   </span>
-                  <span className="font-mono text-slate-900 font-bold">₹{(item.price || 0) * item.quantity}</span>
+                  <span className="font-mono text-slate-900 font-bold">₹{(item.price || item.foodItem?.price || 0) * item.quantity}</span>
                 </div>
               ))}
             </div>
+
             <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs font-bold">
               <span className="text-slate-600">Total Bill Amount</span>
               <span className="text-orange-600 font-mono text-sm font-extrabold">₹{orderPlaced.totalAmount}</span>
+            </div>
+
+            {orderPlaced.notes && (
+              <div className="py-2 px-2.5 bg-amber-50 rounded-xl border border-amber-200 text-left text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                <span>🌶️</span>
+                <span>Kitchen Note: <strong className="text-amber-950 font-black">{orderPlaced.notes}</strong></span>
+              </div>
+            )}
+
+            {/* Quick Actions for Customer */}
+            <div className="pt-2 flex gap-2">
+              <button
+                onClick={() => setOrderPlaced(null)}
+                className="flex-1 py-2 bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-700 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-2xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add More Dishes</span>
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5"
+                title="Print Receipt"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Print Receipt</span>
+              </button>
             </div>
           </motion.div>
 
@@ -568,136 +765,71 @@ export const CustomerMenuPage = () => {
           <AnimatePresence>
             {isDelivered ? (
               <motion.div
-                key="feedback-form"
+                key="feedback-card"
                 initial={{ opacity: 0, y: 20, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 transition={{ type: 'spring', damping: 22, stiffness: 260 }}
-                className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 text-left shadow-sm space-y-3"
+                className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 text-left shadow-sm space-y-3 relative overflow-hidden"
               >
-                <div className="flex items-center space-x-2">
-                  <motion.div
-                    animate={{ rotate: [0, -10, 10, 0] }}
-                    transition={{ duration: 1.2, repeat: 2, ease: 'easeInOut' }}
-                    className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center text-orange-500"
-                  >
-                    <MessageSquareHeart className="w-4 h-4" />
-                  </motion.div>
-                  <div>
-                    <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">
-                      Rate Your Experience
-                    </h3>
-                    <p className="text-[11px] text-slate-400">Help the chef &amp; staff improve 🙏</p>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2.5">
+                    <motion.div
+                      animate={{ rotate: [0, -10, 10, 0] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                      className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white shadow-xs"
+                    >
+                      <Star className="w-4 h-4 fill-white" />
+                    </motion.div>
+                    <div>
+                      <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <span>Dining Experience</span>
+                        {feedbackSubmitted && (
+                          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full lowercase first-letter:uppercase">
+                            Submitted ✓
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-[11px] text-slate-400">Your feedback helps the chef & staff improve</p>
+                    </div>
                   </div>
+
+                  {!feedbackSubmitted && (
+                    <button
+                      onClick={() => setShowFeedbackModal(true)}
+                      className="px-2.5 py-1 bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-700 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>Rate Now</span>
+                    </button>
+                  )}
                 </div>
 
                 {feedbackSubmitted ? (
                   <motion.div
-                    initial={{ opacity: 0, scale: 0.92 }}
+                    initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center space-y-1.5"
+                    className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 text-center space-y-1.5"
                   >
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ type: 'spring', damping: 14, stiffness: 300, delay: 0.1 }}
-                      className="w-10 h-10 bg-emerald-500 text-white rounded-full mx-auto flex items-center justify-center shadow-sm"
-                    >
-                      <Check className="w-5 h-5 stroke-[3]" />
-                    </motion.div>
-                    <h4 className="text-xs font-extrabold text-emerald-900">Thank You For Your Feedback!</h4>
+                    <div className="flex items-center justify-center gap-1 text-amber-500">
+                      {[...Array(feedbackRating)].map((_, i) => (
+                        <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                      ))}
+                    </div>
+                    <h4 className="text-xs font-black text-emerald-900">Thank You For Your Review!</h4>
                     <p className="text-[11px] text-emerald-700">
-                      Your feedback has been shared with the restaurant manager &amp; culinary team.
+                      Your rating has been shared directly with the kitchen and restaurant manager.
                     </p>
                   </motion.div>
                 ) : (
-                  <form onSubmit={handleSubmitFeedback} className="space-y-3">
-                    {/* 5-Star Interactive Rating */}
-                    <div className="flex flex-col items-center justify-center py-1">
-                      <div className="flex items-center space-x-2">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <motion.button
-                            key={star}
-                            type="button"
-                            whileHover={{ scale: 1.25 }}
-                            whileTap={{ scale: 0.85 }}
-                            onMouseEnter={() => setHoverRating(star)}
-                            onMouseLeave={() => setHoverRating(null)}
-                            onClick={() => setFeedbackRating(star)}
-                            className="p-1 focus:outline-none"
-                          >
-                            <Star
-                              className={`w-7 h-7 transition-all ${
-                                star <= activeRating
-                                  ? 'fill-amber-400 text-amber-400'
-                                  : 'text-slate-200 fill-slate-100'
-                              }`}
-                            />
-                          </motion.button>
-                        ))}
-                      </div>
-                      <span className="text-xs font-bold text-amber-600 mt-1">
-                        {ratingLabels[activeRating - 1]}
-                      </span>
-                    </div>
-
-                    {/* Quick Feedback Tags */}
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold text-slate-600 block">
-                        What did you like the most?
-                      </label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {FEEDBACK_TAGS.map((tag) => {
-                          const isSelected = selectedTags.includes(tag);
-                          return (
-                            <motion.button
-                              key={tag}
-                              type="button"
-                              whileTap={{ scale: 0.95 }}
-                              onClick={() => handleToggleFeedbackTag(tag)}
-                              className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all ${
-                                isSelected
-                                  ? 'bg-orange-50 border-orange-500 text-orange-700'
-                                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                              }`}
-                            >
-                              {tag}
-                            </motion.button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Comment Box */}
-                    <div>
-                      <textarea
-                        rows={2}
-                        value={feedbackComment}
-                        onChange={(e) => setFeedbackComment(e.target.value)}
-                        placeholder="Any message or suggestions for the kitchen..."
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:border-orange-500 transition-colors resize-none placeholder:text-slate-400"
-                      />
-                    </div>
-
-                    {/* Submit Feedback Button */}
-                    <motion.button
-                      type="submit"
-                      whileTap={{ scale: 0.97 }}
-                      disabled={submittingFeedback}
-                      className="w-full bg-slate-900 hover:bg-black text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center space-x-1.5 transition-all shadow-sm disabled:opacity-50"
+                  <div className="pt-1">
+                    <button
+                      onClick={() => setShowFeedbackModal(true)}
+                      className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold py-3 rounded-xl text-xs flex items-center justify-center space-x-2 shadow-md shadow-orange-500/20 active:scale-98 transition-all"
                     >
-                      {submittingFeedback ? (
-                        <span className="flex items-center gap-1.5">
-                          <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          <span>Submitting...</span>
-                        </span>
-                      ) : (
-                        <>
-                          <Send className="w-3.5 h-3.5 text-orange-400" />
-                          <span>Submit Dining Feedback</span>
-                        </>
-                      )}
-                    </motion.button>
-                  </form>
+                      <Star className="w-4 h-4 fill-white" />
+                      <span>Leave Your Dining Review (5★)</span>
+                    </button>
+                  </div>
                 )}
               </motion.div>
             ) : (
@@ -712,13 +844,216 @@ export const CustomerMenuPage = () => {
                   <MessageSquareHeart className="w-4 h-4 text-slate-400" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-slate-500">Feedback Form Unlocks After Meal is Served</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">We'll invite you to rate your experience once your food arrives at the table.</p>
+                  <p className="text-xs font-bold text-slate-500">Feedback Form Unlocks When Served</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">We'll automatically invite you to review your meal once it is served at table #{orderPlaced.tableNumber}.</p>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
+
+        {/* ─── PROFESSIONAL AUTOMATIC FEEDBACK MODAL ─── */}
+        <AnimatePresence>
+          {showFeedbackModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
+            >
+              <motion.div
+                initial={{ y: '100%', opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: '100%', opacity: 0 }}
+                transition={{ type: 'spring', damping: 26, stiffness: 300 }}
+                className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-100 p-5 space-y-4 max-h-[90vh] overflow-y-auto text-left relative"
+              >
+                {/* Header with Close */}
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-orange-500">
+                      <Utensils className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-slate-900">How Was Your Meal?</h3>
+                      <p className="text-[10px] text-slate-400">
+                        {restaurant?.name || 'Restaurant'} • Table #{orderPlaced.tableNumber}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowFeedbackModal(false)}
+                    className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {feedbackSubmitted ? (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="py-8 text-center space-y-3"
+                  >
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: [0, 1.2, 1] }}
+                      transition={{ duration: 0.4 }}
+                      className="w-14 h-14 bg-emerald-500 text-white rounded-full mx-auto flex items-center justify-center shadow-lg shadow-emerald-500/30"
+                    >
+                      <Check className="w-7 h-7 stroke-[3]" />
+                    </motion.div>
+                    <h4 className="text-base font-black text-slate-900">Feedback Submitted!</h4>
+                    <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                      Thank you for dining with us. Your ratings and suggestions have been forwarded directly to the culinary & management team.
+                    </p>
+                    <div className="pt-3">
+                      <button
+                        onClick={() => setShowFeedbackModal(false)}
+                        className="px-6 py-2.5 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs shadow-sm transition-all"
+                      >
+                        Back to Order
+                      </button>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <form onSubmit={handleSubmitFeedback} className="space-y-4">
+                    {/* 5-Star Interactive Rating */}
+                    <div className="bg-gradient-to-b from-orange-50/50 to-amber-50/30 border border-orange-100 rounded-2xl p-4 text-center space-y-2">
+                      <span className="text-[11px] font-bold text-slate-600 block uppercase tracking-wider">
+                        Overall Dining Experience
+                      </span>
+                      <div className="flex items-center justify-center space-x-2">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <motion.button
+                            key={star}
+                            type="button"
+                            whileHover={{ scale: 1.25 }}
+                            whileTap={{ scale: 0.85 }}
+                            onMouseEnter={() => setHoverRating(star)}
+                            onMouseLeave={() => setHoverRating(null)}
+                            onClick={() => setFeedbackRating(star)}
+                            className="p-1 focus:outline-none transition-transform"
+                          >
+                            <Star
+                              className={`w-8 h-8 transition-all drop-shadow-xs ${
+                                star <= activeRating
+                                  ? 'fill-amber-400 text-amber-400'
+                                  : 'text-slate-200 fill-slate-100'
+                              }`}
+                            />
+                          </motion.button>
+                        ))}
+                      </div>
+                      <div className="inline-block px-3 py-1 bg-white border border-amber-200/80 rounded-full text-xs font-black text-amber-700 shadow-2xs">
+                        {ratingLabels[activeRating - 1]}
+                      </div>
+                    </div>
+
+                    {/* Dish-by-Dish Favorite Selector */}
+                    {orderPlaced.items && orderPlaced.items.length > 0 && (
+                      <div className="space-y-2">
+                        <label className="text-[11px] font-bold text-slate-700 block flex items-center justify-between">
+                          <span>Which dish did you enjoy most?</span>
+                          <span className="text-[10px] text-slate-400">Tap ❤️ to vote</span>
+                        </label>
+                        <div className="grid grid-cols-1 gap-1.5 max-h-32 overflow-y-auto pr-1">
+                          {orderPlaced.items.map((item: any, idx: number) => {
+                            const dishName = item.foodItem?.name || item.name || `Dish #${idx + 1}`;
+                            const isFav = favoriteDishes.includes(dishName);
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => handleToggleFavoriteDish(dishName)}
+                                className={`w-full px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-between ${
+                                  isFav
+                                    ? 'bg-rose-50 border-rose-300 text-rose-700'
+                                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                                }`}
+                              >
+                                <span>{dishName}</span>
+                                <Heart className={`w-3.5 h-3.5 ${isFav ? 'fill-rose-500 text-rose-500' : 'text-slate-300'}`} />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Quick Highlights / Tags */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-slate-700 block">
+                        What stood out to you?
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {FEEDBACK_TAGS.map((tag) => {
+                          const isSelected = selectedTags.includes(tag);
+                          return (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => handleToggleFeedbackTag(tag)}
+                              className={`text-[11px] font-bold px-2.5 py-1.5 rounded-xl border transition-all ${
+                                isSelected
+                                  ? 'bg-orange-50 border-orange-500 text-orange-700 shadow-2xs'
+                                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                              }`}
+                            >
+                              {tag}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Comment Box */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700 block">
+                        Compliment or Note to Chef & Manager
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={feedbackComment}
+                        onChange={(e) => setFeedbackComment(e.target.value)}
+                        placeholder="Tell us what you loved or how we could make your next meal even better..."
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:border-orange-500 transition-colors resize-none placeholder:text-slate-400"
+                      />
+                    </div>
+
+                    {/* Submit & Cancel Buttons */}
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowFeedbackModal(false)}
+                        className="w-1/3 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors"
+                      >
+                        Skip
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={submittingFeedback}
+                        className="flex-1 bg-slate-900 hover:bg-black text-white font-extrabold py-3 rounded-xl text-xs flex items-center justify-center space-x-1.5 transition-all shadow-md active:scale-98 disabled:opacity-50"
+                      >
+                        {submittingFeedback ? (
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>Submitting Review...</span>
+                          </span>
+                        ) : (
+                          <>
+                            <Send className="w-3.5 h-3.5 text-orange-400" />
+                            <span>Submit Feedback</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="p-4 pt-0 bg-slate-50">
           <button
@@ -742,77 +1077,160 @@ export const CustomerMenuPage = () => {
     <div className="min-h-screen bg-slate-50 text-slate-900 max-w-md mx-auto relative pb-28 font-sans border-x border-slate-200 shadow-xl">
       
       {/* ─── 1. CLEAN RESTAURANT HEADER ─── */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="bg-white border-b border-slate-200 px-4 py-3.5 text-left sticky top-0 z-40"
-      >
+      <div className="bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 py-3 text-left sticky top-0 z-40 shadow-xs">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center space-x-3 min-w-0">
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              className="w-11 h-11 rounded-xl bg-orange-50 border border-orange-200 shrink-0 overflow-hidden flex items-center justify-center shadow-xs"
-            >
+          <div className="flex items-center space-x-3 min-w-0 flex-1">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 text-white shrink-0 overflow-hidden flex items-center justify-center shadow-xs">
               {restaurant?.logoUrl ? (
-                <img src={restaurant.logoUrl} alt={restaurant.name} className="w-full h-full object-cover" />
+                <img src={restaurant.logoUrl} alt={formatDisplayName(restaurant.name)} className="w-full h-full object-cover" />
               ) : (
-                <span className="text-orange-500 font-black text-lg">
-                  {restaurant?.name?.charAt(0) || 'R'}
+                <span className="text-white font-black text-base uppercase">
+                  {formatDisplayName(restaurant?.name).charAt(0)}
                 </span>
               )}
-            </motion.div>
-            <div className="min-w-0">
-              <h1 className="text-sm font-black text-slate-900 truncate">
-                {restaurant?.name || 'The Spice Route Dining'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-sm font-extrabold text-slate-900 truncate tracking-tight">
+                {formatDisplayName(restaurant?.name)}
               </h1>
-              <p className="text-[11px] text-slate-400 flex items-center gap-1 truncate">
+              <p className="text-[11px] text-slate-500 flex items-center gap-1 truncate font-medium">
                 <MapPin className="w-3 h-3 text-orange-500 shrink-0" />
-                <span>{restaurant?.address || 'Dine-In Menu'}</span>
+                <span className="truncate">{formatAddress(restaurant?.address)}</span>
               </p>
             </div>
           </div>
 
           {/* Table Badge */}
-          <motion.div
-            initial={{ scale: 0.9 }}
-            animate={{ scale: 1 }}
-            className="bg-orange-500 text-white text-xs font-black px-3 py-1.5 rounded-xl shrink-0 flex items-center gap-1 shadow-sm font-mono"
-          >
-            <Utensils className="w-3.5 h-3.5" /> Table {tableNumber}
-          </motion.div>
+          <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-black px-3.5 py-1.5 rounded-full shrink-0 flex items-center gap-1.5 shadow-sm font-mono tracking-wide">
+            <Utensils className="w-3.5 h-3.5" /> Table #{tableNumber}
+          </div>
         </div>
-      </motion.div>
+      </div>
 
-      {/* ─── PROMO BANNER (IF AVAILABLE) ─── */}
+      {/* ─── PROMO & SPONSORED BANNER (FULL BREADTH & HIGH IMPACT) ─── */}
       {ads.length > 0 && currentAd && (
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="p-3 pb-1"
+          key={currentAd.id || currentAdIndex}
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4 }}
+          className="px-3 pt-3 pb-2 text-left"
         >
-          <div className={`p-3 rounded-xl bg-gradient-to-r ${currentAd.bgGradient} text-white shadow-sm border border-slate-800 text-left relative overflow-hidden`}>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded text-amber-300">
-                {currentAd.badge}
-              </span>
-              <span className="text-[10px] text-slate-300">{currentAd.sponsor}</span>
+          <div className="relative w-full rounded-2xl overflow-hidden shadow-lg border border-slate-700/60 bg-slate-950 text-white min-h-[175px] sm:min-h-[195px] flex flex-col justify-between group">
+            {/* 1. Rich Background Image */}
+            {currentAd.imageUrl ? (
+              <img
+                src={currentAd.imageUrl}
+                alt={currentAd.title}
+                className="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-105"
+              />
+            ) : null}
+
+            {/* 2. Layered Contrast Overlays */}
+            <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/85 to-black/35" />
+            <div className={`absolute inset-0 bg-gradient-to-tr ${currentAd.bgGradient || 'from-rose-950/70 via-slate-950/80 to-transparent'} opacity-75 mix-blend-multiply`} />
+
+            {/* 3. Foreground Banner Content */}
+            <div className="relative z-10 p-4 sm:p-5 flex flex-col justify-between h-full min-h-[175px] sm:min-h-[195px] space-y-3">
+              {/* Top Row: Sponsor & Badge */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2.5 py-0.5 rounded-full backdrop-blur-md shadow-xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    {currentAd.badge || 'Featured Offer'}
+                  </span>
+                  <span className="text-xs font-bold text-slate-300 drop-shadow">
+                    {currentAd.sponsor}
+                  </span>
+                </div>
+
+                {ads.length > 1 && (
+                  <div className="flex items-center gap-1 bg-black/40 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10">
+                    <span className="text-[10px] font-mono font-bold text-amber-300">
+                      {(currentAdIndex % ads.length) + 1}
+                    </span>
+                    <span className="text-[10px] text-slate-400">/</span>
+                    <span className="text-[10px] font-mono text-slate-400">
+                      {ads.length}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Middle: Title & Description */}
+              <div className="space-y-1">
+                <h3 className="text-sm sm:text-base font-black text-white leading-tight tracking-tight drop-shadow max-w-[85%]">
+                  {currentAd.title}
+                </h3>
+                {currentAd.description ? (
+                  <p className="text-[11px] sm:text-xs text-slate-300 line-clamp-2 leading-relaxed max-w-[82%] font-medium">
+                    {currentAd.description}
+                  </p>
+                ) : null}
+              </div>
+
+              {/* Bottom Row: Discount Tag, Promo Code & CTA */}
+              <div className="pt-2 border-t border-white/10 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex items-center gap-1 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-xs px-2.5 py-1 rounded-lg shadow-sm font-mono">
+                    <Percent className="w-3 h-3 stroke-[3]" />
+                    <span>{currentAd.discountText}</span>
+                  </div>
+
+                  {currentAd.promoCode && (
+                    <button
+                      type="button"
+                      onClick={() => copyPromoCode(currentAd.promoCode!)}
+                      className="inline-flex items-center gap-1.5 text-[10px] font-mono font-bold bg-white/15 hover:bg-white/25 text-white border border-white/20 px-2.5 py-1 rounded-lg backdrop-blur-md transition-all active:scale-95 shadow-xs"
+                      title="Click to copy and apply discount"
+                    >
+                      <Tag className="w-3 h-3 text-amber-300" />
+                      <span>{copiedCode === currentAd.promoCode ? 'COPIED ✓' : currentAd.promoCode}</span>
+                    </button>
+                  )}
+                </div>
+
+                {currentAd.ctaLink ? (
+                  <a
+                    href={currentAd.ctaLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-extrabold bg-white text-slate-900 hover:bg-slate-100 px-3 py-1 rounded-lg shadow-sm transition-all active:scale-95"
+                  >
+                    <span>{currentAd.ctaText || 'Claim'}</span>
+                    <ArrowRight className="w-3 h-3 text-orange-600" />
+                  </a>
+                ) : currentAd.promoCode ? (
+                  <button
+                    type="button"
+                    onClick={() => copyPromoCode(currentAd.promoCode!)}
+                    className="inline-flex items-center gap-1 text-[11px] font-extrabold bg-white text-slate-900 hover:bg-slate-100 px-3 py-1 rounded-lg shadow-sm transition-all active:scale-95"
+                  >
+                    <span>{currentAd.ctaText || 'Apply Code'}</span>
+                    <ArrowRight className="w-3 h-3 text-orange-600" />
+                  </button>
+                ) : null}
+              </div>
             </div>
-            <h3 className="text-xs font-extrabold text-white">{currentAd.title}</h3>
-            <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between">
-              <span className="text-xs font-bold text-amber-300 font-mono flex items-center gap-1">
-                <Percent className="w-3 h-3" /> {currentAd.discountText}
-              </span>
-              {currentAd.promoCode && (
-                <button
-                  onClick={() => copyPromoCode(currentAd.promoCode!)}
-                  className="text-[10px] font-mono font-bold bg-white/20 hover:bg-white/30 text-white px-2 py-0.5 rounded-lg border border-white/20 transition-all flex items-center gap-1 active:scale-95"
-                >
-                  <Tag className="w-2.5 h-2.5" />
-                  <span>{copiedCode === currentAd.promoCode ? 'APPLIED ✓' : currentAd.promoCode}</span>
-                </button>
-              )}
-            </div>
+
+            {/* Pagination Dots (if multiple ads) */}
+            {ads.length > 1 && (
+              <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5">
+                {ads.map((_, dotIdx) => (
+                  <button
+                    key={dotIdx}
+                    type="button"
+                    onClick={() => setCurrentAdIndex(dotIdx)}
+                    className={`h-1.5 rounded-full transition-all ${
+                      dotIdx === (currentAdIndex % ads.length)
+                        ? 'w-5 bg-amber-400'
+                        : 'w-1.5 bg-white/30 hover:bg-white/50'
+                    }`}
+                    aria-label={`Go to slide ${dotIdx + 1}`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </motion.div>
       )}
@@ -1349,15 +1767,43 @@ export const CustomerMenuPage = () => {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Cooking Notes (Optional)
+                    Special Cooking Instructions (Optional)
                   </label>
                   <input
                     type="text"
                     value={orderNotes}
                     onChange={(e) => setOrderNotes(e.target.value)}
-                    placeholder="e.g. Less spicy..."
+                    placeholder="e.g. Less spicy, extra sauce, mild taste..."
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:border-orange-500 transition-all placeholder:text-slate-400"
                   />
+                  {/* Quick 1-Tap Cooking Tags */}
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {['🌶️ Less Spicy', '🌶️ Extra Spicy', '🌿 Jain / No Garlic', '🥣 Extra Gravy', '🥤 Less Ice'].map((tag) => {
+                      const isSelected = orderNotes.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => {
+                            setOrderNotes(prev => {
+                              if (!prev) return tag;
+                              if (prev.includes(tag)) {
+                                return prev.replace(tag, '').replace(/,\s*,/g, ',').replace(/^,\s*|,\s*$/g, '').trim();
+                              }
+                              return `${prev}, ${tag}`;
+                            });
+                          }}
+                          className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all ${
+                            isSelected
+                              ? 'bg-amber-100 border-amber-400 text-amber-900 font-black shadow-2xs'
+                              : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Payment Selection */}

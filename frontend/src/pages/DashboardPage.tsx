@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 interface DashboardStats {
   todayOrders: number;
   todaySales: number;
+  todayRevenue?: number;
   pendingOrders: number;
   activeTables: number;
   totalTables: number;
@@ -19,6 +20,7 @@ interface RecentOrder {
   tableNumber: string;
   totalAmount: number;
   status: string;
+  notes?: string | null;
   createdAt: string;
   items: { foodItem: { name: string }; quantity: number }[];
 }
@@ -26,8 +28,11 @@ interface RecentOrder {
 interface FeedbackItem {
   id: string;
   customerName: string;
+  tableNumber?: string;
   foodName: string;
   rating: number;
+  tags?: string[];
+  favoriteDishes?: string[];
   comment: string;
   createdAt: string;
 }
@@ -75,44 +80,102 @@ export const DashboardPage = () => {
       Notification.requestPermission().catch(() => undefined);
     }
 
+    const { token, user } = useAuthStore.getState();
     const socketUrl = import.meta.env.VITE_WS_URL || (import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/v1\/?$/, '').replace(/\/api\/?$/, '') : 'https://orderkare-3.onrender.com');
-    const socket = io(socketUrl);
-    const user = useAuthStore.getState().user;
+    const socket = io(socketUrl, {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+    });
 
-    if (user?.restaurantId) {
-      socket.emit('join_restaurant', user.restaurantId);
-    }
+    const restaurantId = user?.restaurantId || (user as any)?.restaurant?.id;
 
-    socket.on('new_order', (newOrder: RecentOrder) => {
+    const join = () => {
+      if (restaurantId) {
+        socket.emit('join_restaurant', restaurantId);
+      }
+    };
+
+    socket.on('connect', join);
+    if (socket.connected) join();
+
+    const handleNewOrder = (newOrder: RecentOrder) => {
+      if (!newOrder) return;
       try {
         const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-120.wav');
-        audio.play();
+        audio.play().catch(() => {});
       } catch (e) { /* empty */ }
 
       if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('New order received', {
-          body: `${newOrder.customerName} • Table ${newOrder.tableNumber} • ₹${newOrder.totalAmount}`,
-          tag: `order-${newOrder.id}`,
-        });
+        try {
+          new Notification('🚨 New Order Received!', {
+            body: `${newOrder.customerName || 'Guest'} • Table ${newOrder.tableNumber} • ₹${newOrder.totalAmount}`,
+            tag: `order-${newOrder.id}`,
+          });
+        } catch {}
       }
 
       setNotification({
         id: newOrder.id,
-        title: 'New order received',
-        message: `${newOrder.customerName} from table ${newOrder.tableNumber} just placed an order`,
+        title: 'New Order Received',
+        message: `${newOrder.customerName || 'Guest'} from Table #${newOrder.tableNumber} (₹${newOrder.totalAmount})`,
       });
 
       setTimeout(() => setNotification(null), 5000);
 
-      setPendingOrders((prev) => [newOrder, ...prev]);
+      setPendingOrders((prev) => {
+        if (prev.some(o => o.id === newOrder.id)) return prev;
+        return [newOrder, ...prev];
+      });
+
       setStats((prev) => ({
         ...prev,
         todayOrders: prev.todayOrders + 1,
         pendingOrders: prev.pendingOrders + 1,
+        todaySales: prev.todaySales + (Number(newOrder.totalAmount) || 0),
+        todayRevenue: (prev.todayRevenue || prev.todaySales || 0) + (Number(newOrder.totalAmount) || 0),
       }));
+    };
+
+    socket.on('new_order', handleNewOrder);
+    socket.on('global_new_order', (bOrder: any) => {
+      if (!restaurantId || bOrder?.restaurantId === restaurantId) {
+        handleNewOrder(bOrder);
+      }
     });
 
-    return () => { socket.disconnect(); };
+    const handleNewFeedback = (fb: any) => {
+      if (!fb) return;
+      setRecentFeedback((prev) => [fb, ...prev.filter(f => f.id !== fb.id)].slice(0, 20));
+      setNotification({
+        id: fb.id,
+        title: `⭐ ${fb.rating}★ Review from ${fb.customerName || 'Customer'}${fb.tableNumber ? ` (Table #${fb.tableNumber})` : ''}`,
+        message: fb.comment || fb.foodName || 'Customer submitted dining feedback.',
+      });
+      setTimeout(() => setNotification(null), 6000);
+    };
+
+    socket.on('new_feedback', handleNewFeedback);
+    socket.on('global_new_feedback', (bFeedback: any) => {
+      if (!restaurantId || bFeedback?.restaurantId === restaurantId) {
+        handleNewFeedback(bFeedback);
+      }
+    });
+
+    socket.on('order_updated', () => {
+      fetchData();
+    });
+
+    // Resilient Polling Fallback (every 6s)
+    const interval = setInterval(() => {
+      fetchData();
+    }, 6000);
+
+    return () => {
+      clearInterval(interval);
+      socket.disconnect();
+    };
   }, []);
 
   const updateOrderStatus = async (orderId: string, status: string) => {
@@ -248,9 +311,15 @@ export const DashboardPage = () => {
                   <p className="text-xs text-slate-600 font-medium">{order.customerName}</p>
                   <p className="text-xs text-slate-400">Table {order.tableNumber}</p>
                 </div>
-                <p className="text-[11px] text-slate-500 mb-3 line-clamp-1">
+                <p className="text-[11px] text-slate-500 mb-2 line-clamp-1">
                   {order.items.map(i => `${i.quantity}× ${i.foodItem.name}`).join(' • ')}
                 </p>
+                {order.notes && (
+                  <div className="mb-3 px-2 py-1 bg-amber-50 text-amber-900 border border-amber-200 rounded-lg text-[11px] font-bold flex items-center gap-1">
+                    <span>🌶️</span>
+                    <span className="truncate">Note: {order.notes}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-bold text-slate-900">₹{order.totalAmount}</span>
                   <div className="flex space-x-2">
@@ -304,9 +373,15 @@ export const DashboardPage = () => {
                   <p className="text-xs text-slate-600 font-medium">{order.customerName}</p>
                   <p className="text-xs text-slate-400">Table {order.tableNumber}</p>
                 </div>
-                <p className="text-[11px] text-slate-500 mb-3 line-clamp-1">
+                <p className="text-[11px] text-slate-500 mb-2 line-clamp-1">
                   {order.items.map(i => `${i.quantity}× ${i.foodItem.name}`).join(' • ')}
                 </p>
+                {order.notes && (
+                  <div className="mb-3 px-2 py-1 bg-amber-50 text-amber-900 border border-amber-200 rounded-lg text-[11px] font-bold flex items-center gap-1">
+                    <span>🌶️</span>
+                    <span className="truncate">Note: {order.notes}</span>
+                  </div>
+                )}
                 <button
                   onClick={() => updateOrderStatus(order.id, 'READY')}
                   className="w-full bg-emerald-500 text-white text-xs py-2.5 rounded-xl font-bold hover:bg-emerald-600 transition-colors shadow-sm shadow-emerald-500/10"
@@ -352,14 +427,34 @@ export const DashboardPage = () => {
                   <p className="text-slate-400 text-sm font-medium">No customer feedback yet</p>
                 </div>
               ) : recentFeedback.map((feedback) => (
-                <div key={feedback.id} className="bg-slate-50 rounded-2xl p-3 border border-slate-100">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-slate-800">{feedback.customerName}</span>
-                    <span className="text-[10px] text-amber-600 font-bold">{'★'.repeat(feedback.rating)}{feedback.rating < 5 ? '☆'.repeat(5 - feedback.rating) : ''}</span>
+                <div key={feedback.id} className="bg-slate-50 rounded-2xl p-3 border border-slate-100 text-left space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-xs font-bold text-slate-800 truncate">{feedback.customerName}</span>
+                      {feedback.tableNumber && (
+                        <span className="text-[10px] bg-white border border-slate-200 text-slate-600 px-1.5 py-0.2 rounded font-mono font-bold">
+                          T#{feedback.tableNumber}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-amber-500 font-bold shrink-0">
+                      {'★'.repeat(feedback.rating)}{feedback.rating < 5 ? '☆'.repeat(5 - feedback.rating) : ''}
+                    </span>
                   </div>
-                  <p className="text-[11px] text-slate-500 mb-1">{feedback.foodName}</p>
+                  {feedback.foodName && (
+                    <p className="text-[11px] text-slate-500 line-clamp-1">{feedback.foodName}</p>
+                  )}
+                  {feedback.tags && feedback.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 py-0.5">
+                      {feedback.tags.slice(0, 3).map((t, idx) => (
+                        <span key={idx} className="text-[9px] bg-orange-50 text-orange-700 font-bold px-1.5 py-0.5 rounded border border-orange-100">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <p className="text-[11px] text-slate-600 leading-relaxed">{feedback.comment || 'No comment provided.'}</p>
-                  <p className="text-[10px] text-slate-400 mt-1">{timeAgo(feedback.createdAt)}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{timeAgo(feedback.createdAt)}</p>
                 </div>
               ))}
             </div>

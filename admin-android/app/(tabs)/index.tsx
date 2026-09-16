@@ -27,6 +27,7 @@ export interface Order {
   customerName?: string;
   phoneNumber?: string;
   status: string;
+  notes?: string;
   totalAmount: number;
   items: OrderItem[];
   createdAt: string;
@@ -108,13 +109,29 @@ export default function DashboardScreen() {
       };
       const handleDisconnect = () => setIsSocketConnected(false);
       const handleNewOrder = (newOrder: Order) => {
+        if (!newOrder) return;
+        playOrderRingSound().catch(() => {});
         setOrders(prev => [newOrder, ...prev.filter(o => (o.id || o._id) !== (newOrder.id || newOrder._id))]);
+      };
+
+      const handleGlobalOrder = (bOrder: any) => {
+        if (!bOrder) return;
+        if (!restaurantId || bOrder.restaurantId === restaurantId) {
+          handleNewOrder(bOrder);
+        }
+      };
+
+      const handleOrderUpdated = (data: { orderId: string; status: string }) => {
+        if (!data?.orderId) return;
+        setOrders(prev => prev.map(o => ((o.id || o._id) === data.orderId ? { ...o, status: data.status } : o)));
       };
 
       socket.on('connect', joinRestaurant);
       socket.on('disconnect', handleDisconnect);
       socket.on('connect_error', handleDisconnect);
       socket.on('new_order', handleNewOrder);
+      socket.on('global_new_order', handleGlobalOrder);
+      socket.on('order_updated', handleOrderUpdated);
       if (socket.connected) joinRestaurant();
 
       return () => {
@@ -122,6 +139,8 @@ export default function DashboardScreen() {
         socket.off('disconnect', handleDisconnect);
         socket.off('connect_error', handleDisconnect);
         socket.off('new_order', handleNewOrder);
+        socket.off('global_new_order', handleGlobalOrder);
+        socket.off('order_updated', handleOrderUpdated);
       };
     }
   }, [token, restaurantId]);
@@ -343,6 +362,16 @@ export default function DashboardScreen() {
                       </View>
                       {order.phoneNumber ? <Text style={styles.customerPhone}>{order.phoneNumber}</Text> : null}
                     </View>
+
+                    {/* Notes (if any) */}
+                    {order.notes ? (
+                      <View style={styles.notesBox}>
+                        <MaterialIcons name="restaurant-menu" size={12} color={Colors.amber} />
+                        <Text style={styles.notesText} numberOfLines={2}>
+                          {order.notes}
+                        </Text>
+                      </View>
+                    ) : null}
 
                     {/* Items */}
                     <View style={styles.itemsBox}>
@@ -824,6 +853,24 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     maxWidth: '42%',
     textAlign: 'right',
+  },
+  notesBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.amberBg,
+    borderColor: Colors.amberBorder,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginBottom: 8,
+  },
+  notesText: {
+    flex: 1,
+    fontSize: 11,
+    color: Colors.amber,
+    fontWeight: '700',
   },
   itemsBox: {
     backgroundColor: Colors.bg,

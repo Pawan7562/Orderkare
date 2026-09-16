@@ -108,6 +108,7 @@ model Order {
   customerName String
   tableNumber  String
   phoneNumber  String?
+  notes        String?     @map("specialInstructions")
   status       OrderStatus @default(PENDING)
   totalAmount  Float
   restaurantId String

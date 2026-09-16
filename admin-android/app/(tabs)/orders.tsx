@@ -79,15 +79,41 @@ export default function OrdersScreen() {
     if (token) {
       const socket = getSocket(token);
       if (restaurantId) socket.emit('join_restaurant', restaurantId);
+
       const onNewOrder = (newOrder: Order) => {
+        if (!newOrder) return;
+        playOrderRingSound().catch(() => {});
         setOrders(prev => [newOrder, ...prev.filter(o => (o.id || o._id) !== (newOrder.id || newOrder._id))]);
       };
+
+      const onGlobalOrder = (broadcastOrder: any) => {
+        if (!broadcastOrder) return;
+        if (!restaurantId || broadcastOrder.restaurantId === restaurantId) {
+          onNewOrder(broadcastOrder);
+        }
+      };
+
+      const onOrderUpdated = (data: { orderId: string; status: string }) => {
+        if (!data?.orderId) return;
+        setOrders(prev => prev.map(o => ((o.id || o._id) === data.orderId ? { ...o, status: data.status } : o)));
+      };
+
       socket.on('new_order', onNewOrder);
+      socket.on('global_new_order', onGlobalOrder);
+      socket.on('order_updated', onOrderUpdated);
+
+      const interval = setInterval(() => {
+        fetchOrders();
+      }, 5000);
+
       return () => {
+        clearInterval(interval);
         socket.off('new_order', onNewOrder);
+        socket.off('global_new_order', onGlobalOrder);
+        socket.off('order_updated', onOrderUpdated);
       };
     }
-  }, [token, restaurantId]);
+  }, [token, restaurantId, fetchOrders]);
 
   const onRefresh = async () => {
     setRefreshing(true);

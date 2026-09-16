@@ -9,9 +9,11 @@ router.get('/', authenticateToken, requireRole(['RESTAURANT_ADMIN', 'STAFF', 'AD
 router.get('/feedback', authenticateToken, requireRole(['RESTAURANT_ADMIN', 'STAFF', 'ADMIN', 'SUPER_ADMIN']), getRestaurantFeedback);
 router.patch('/:id/status', authenticateToken, requireRole(['RESTAURANT_ADMIN', 'STAFF', 'ADMIN', 'SUPER_ADMIN']), updateOrderStatus);
 
-// Public routes (for customer ordering)
+// Public routes (for customer ordering and live tracking)
 router.post('/place/:slug', createOrder);
 router.post('/:id/feedback', submitOrderFeedback);
 router.get('/track/:id', getOrderStatus);
+router.get('/status/:id', getOrderStatus);
+router.get('/:id', getOrderStatus);
 
 export default router;
