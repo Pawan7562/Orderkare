@@ -159,6 +159,7 @@ export const CustomerMenuPage = () => {
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackToastMsg, setFeedbackToastMsg] = useState<string | null>(null);
 
   // Sponsored Promo State
   const [currentAdIndex, setCurrentAdIndex] = useState(0);
@@ -519,10 +520,34 @@ export const CustomerMenuPage = () => {
     );
   };
 
+  const handleReturnToMenu = (withToast?: boolean | any) => {
+    const showToast = typeof withToast === 'boolean' ? withToast : false;
+    try {
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('orderkare_active_order_') || key.startsWith('active_order_')) {
+          localStorage.removeItem(key);
+        }
+      });
+      const targetSlug = slug || restaurant?.slug || restaurant?.id || 'royal-palace';
+      localStorage.removeItem(`orderkare_active_order_${targetSlug}`);
+    } catch {}
+    setShowFeedbackModal(false);
+    setOrderPlaced(null);
+    setFeedbackSubmitted(false);
+    if (showToast) {
+      setFeedbackToastMsg('🎉 Thank you for your review! Enjoy your meal & visit again.');
+      setTimeout(() => setFeedbackToastMsg(null), 4000);
+    }
+  };
+
   const handleSubmitFeedback = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!orderPlaced?.id) return;
+    if (!orderPlaced?.id) {
+      handleReturnToMenu(true);
+      return;
+    }
     setSubmittingFeedback(true);
+    const orderId = orderPlaced.id;
     try {
       const fullComment = [
         feedbackComment.trim(),
@@ -530,7 +555,7 @@ export const CustomerMenuPage = () => {
         favoriteDishes.length > 0 ? `[Loved: ${favoriteDishes.join(', ')}]` : ''
       ].filter(Boolean).join(' ');
 
-      await axios.post(`${API}/orders/${orderPlaced.id}/feedback`, {
+      await axios.post(`${API}/orders/${orderId}/feedback`, {
         rating: feedbackRating,
         comment: fullComment,
         customerName: customerName || orderPlaced.customerName || 'Guest',
@@ -538,16 +563,15 @@ export const CustomerMenuPage = () => {
         favoriteDishes,
       });
 
-      setFeedbackSubmitted(true);
       try {
-        localStorage.setItem(`feedback_submitted_${orderPlaced.id}`, 'true');
+        localStorage.setItem(`feedback_submitted_${orderId}`, 'true');
       } catch {}
-    } catch (err: any) {
+    } catch (err) {
       console.error('Feedback submit error:', err);
-      // Fallback graceful success
-      setFeedbackSubmitted(true);
     } finally {
       setSubmittingFeedback(false);
+      // Immediately redirect customer back to the menu!
+      handleReturnToMenu(true);
     }
   };
 
@@ -744,7 +768,7 @@ export const CustomerMenuPage = () => {
             {/* Quick Actions for Customer */}
             <div className="pt-2 flex gap-2">
               <button
-                onClick={() => setOrderPlaced(null)}
+                onClick={handleReturnToMenu}
                 className="flex-1 py-2 bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-700 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-2xs"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -909,10 +933,11 @@ export const CustomerMenuPage = () => {
                     </p>
                     <div className="pt-3">
                       <button
-                        onClick={() => setShowFeedbackModal(false)}
-                        className="px-6 py-2.5 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs shadow-sm transition-all"
+                        onClick={handleReturnToMenu}
+                        className="w-full py-3 bg-slate-900 hover:bg-black text-white font-extrabold rounded-xl text-xs shadow-md transition-all flex items-center justify-center space-x-2 active:scale-98"
                       >
-                        Back to Order
+                        <RotateCcw className="w-3.5 h-3.5 text-orange-400" />
+                        <span>Return to Digital Menu</span>
                       </button>
                     </div>
                   </motion.div>
@@ -1057,7 +1082,7 @@ export const CustomerMenuPage = () => {
 
         <div className="p-4 pt-0 bg-slate-50">
           <button
-            onClick={() => setOrderPlaced(null)}
+            onClick={handleReturnToMenu}
             className="w-full bg-white hover:bg-slate-100 text-slate-800 font-bold py-3 rounded-xl border border-slate-200 text-xs flex items-center justify-center space-x-2 transition-all active:scale-98 shadow-sm"
           >
             <RotateCcw className="w-3.5 h-3.5 text-orange-500" />
@@ -1076,6 +1101,23 @@ export const CustomerMenuPage = () => {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 max-w-md mx-auto relative pb-28 font-sans border-x border-slate-200 shadow-xl">
       
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {feedbackToastMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 text-center sticky top-0 z-50 shadow-md flex items-center justify-between"
+          >
+            <span>{feedbackToastMsg}</span>
+            <button onClick={() => setFeedbackToastMsg(null)} className="p-1 hover:bg-white/20 rounded">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ─── 1. CLEAN RESTAURANT HEADER ─── */}
       <div className="bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 py-3 text-left sticky top-0 z-40 shadow-xs">
         <div className="flex items-center justify-between gap-3">
