@@ -1,3 +1,4 @@
+import axios from 'axios';
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -237,51 +238,82 @@ export const LandingPage: React.FC = () => {
     },
   ];
 
-  const plans = [
+  const [plans, setPlans] = useState<any[]>([
     {
-      name: 'Starter',
+      name: 'Starter Plan',
       price: { monthly: '₹999', yearly: '₹799' },
       desc: 'Ideal for small cafes, bakeries & food trucks',
       features: [
-        'Up to 15 Table QR Codes',
+        'Up to 30 Food Items',
+        'Custom Table QR Generator',
         'Real-time Digital Menu',
         'Kitchen Display Screen (KDS)',
         'Basic Daily Analytics',
         'Email & Chat Support'
       ],
       cta: 'Start Free Trial',
+      ctaLink: '/register',
       popular: false
     },
     {
-      name: 'Professional',
+      name: 'Professional Plan',
       price: { monthly: '₹1,999', yearly: '₹1,599' },
       desc: 'For busy restaurants & high-volume dining rooms',
       features: [
-        'Unlimited Table QR Codes',
+        'Unlimited Dishes & Categories',
         'Sub-second WebSocket KDS Feed',
-        'Staff & Waiter Management',
-        '1-Tap Sold-Out Inventory Toggle',
-        'Advanced Revenue Analytics & Export',
-        '24/7 Priority Support & Soundbox Sync'
+        'Real-Time Kitchen Audio Ringtone',
+        'Live Customer Feedback & Rating System',
+        'Staff & Waiter Operations Console',
+        '24/7 Priority Support'
       ],
       cta: 'Start 14-Day Free Trial',
+      ctaLink: '/register',
       popular: true
     },
     {
-      name: 'Enterprise',
-      price: { monthly: 'Custom', yearly: 'Custom' },
+      name: 'Enterprise Plan',
+      price: { monthly: '₹4,999', yearly: '₹3,999' },
       desc: 'Multi-branch restaurant chains & hotel groups',
       features: [
         'Multi-Branch Centralized Console',
+        'White-Label Custom Domain Branding',
         'Dedicated Account Manager',
-        'Custom POS / ERP Integrations',
-        'Centralized Menu & Recipe Sync',
-        'Custom Domain & 99.99% Uptime SLA'
+        'Custom Direct UPI Zero Fee Setup',
+        '99.99% Uptime SLA'
       ],
-      cta: 'Contact Sales',
+      cta: 'Talk to Enterprise Sales',
+      ctaLink: '/register',
       popular: false
-    },
-  ];
+    }
+  ]);
+
+  useEffect(() => {
+    const API = import.meta.env.VITE_API_URL || (
+      typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? 'http://localhost:5000/api/v1'
+        : 'https://orderkare-3.onrender.com/api/v1'
+    );
+    axios.get(`${API}/plans`)
+      .then(res => {
+        if (res.data?.plans && Array.isArray(res.data.plans) && res.data.plans.length > 0) {
+          const mapped = res.data.plans.map((p: any) => ({
+            name: p.name,
+            price: {
+              monthly: typeof p.priceMonthly === 'number' ? `₹${p.priceMonthly.toLocaleString('en-IN')}` : p.priceMonthly,
+              yearly: typeof p.priceYearly === 'number' ? `₹${p.priceYearly.toLocaleString('en-IN')}` : p.priceYearly,
+            },
+            desc: p.description,
+            features: Array.isArray(p.features) ? p.features : [],
+            cta: p.ctaText || 'Start Free Trial',
+            ctaLink: p.ctaLink || '/register',
+            popular: Boolean(p.isPopular)
+          }));
+          setPlans(mapped);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#fafbfe] text-slate-900 font-sans antialiased overflow-x-hidden selection:bg-orange-500 selection:text-white">
@@ -970,7 +1002,7 @@ export const LandingPage: React.FC = () => {
                     )}
                   </div>
                   <ul className="space-y-3 mb-8">
-                    {plan.features.map((feat, fi) => (
+                    {(plan.features || []).map((feat: string, fi: number) => (
                       <li key={fi} className="flex items-center gap-2.5 text-xs sm:text-sm text-slate-700">
                         <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                         <span>{feat}</span>
@@ -979,7 +1011,7 @@ export const LandingPage: React.FC = () => {
                   </ul>
                 </div>
                 <Link
-                  to="/register"
+                  to={plan.ctaLink || "/register"}
                   className={`block w-full py-3.5 rounded-xl font-bold text-center text-sm transition-all active:scale-95 ${
                     plan.popular
                       ? 'bg-gradient-to-r from-orange-500 to-rose-500 text-white hover:from-orange-600 hover:to-rose-600 shadow-md shadow-orange-500/25'

@@ -12,6 +12,7 @@ import orderRoutes from './src/routes/order.routes';
 import menuRoutes from './src/routes/menu.routes';
 import restaurantRoutes from './src/routes/restaurant.routes';
 import adRoutes from './src/routes/ad.routes';
+import planRoutes from './src/routes/plan.routes';
 import { initSocket } from './src/utils/socket';
 
 
@@ -69,7 +70,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ limit: '25mb', extended: true }));
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 1000,
@@ -109,6 +111,13 @@ app.use('/ads', adRoutes);
 app.use('/api/v1/super-admin/ads', adRoutes);
 app.use('/api/super-admin/ads', adRoutes);
 app.use('/super-admin/ads', adRoutes);
+
+app.use('/api/v1/plans', planRoutes);
+app.use('/api/plans', planRoutes);
+app.use('/plans', planRoutes);
+app.use('/api/v1/super-admin/plans', planRoutes);
+app.use('/api/super-admin/plans', planRoutes);
+app.use('/super-admin/plans', planRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

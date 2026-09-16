@@ -14,7 +14,12 @@ import {
   ArrowRight,
   X,
   Award,
-  Power
+  Power,
+  Upload,
+  Image as ImageIcon,
+  Link as LinkIcon,
+  Check,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -43,6 +48,60 @@ const GRADIENT_PRESETS = [
   { label: 'Rose / Royal Velvet', value: 'from-rose-950/90 via-slate-900 to-slate-950' },
 ];
 
+
+const STOCK_PRESETS = [
+  {
+    name: 'Coca-Cola Zero Sugar',
+    url: 'https://images.unsplash.com/photo-1554866585-cd94860890b7?auto=format&fit=crop&w=800&q=80',
+    title: 'Chilled Refreshment with Every Meal',
+    sponsor: 'Coca-Cola',
+    badge: 'Exclusive Offer',
+    discountText: 'Flat ₹50 OFF',
+    promoCode: 'COKEZERO',
+    gradient: 'from-red-950/90 via-slate-900 to-slate-950',
+  },
+  {
+    name: 'Gourmet Woodfired Pizza',
+    url: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=800&q=80',
+    title: 'Authentic Handcrafted Pizza Night',
+    sponsor: 'Italian Bistro Special',
+    badge: 'Chef Pick',
+    discountText: '20% OFF on 2 Pizzas',
+    promoCode: 'PIZZALOVE',
+    gradient: 'from-amber-950/90 via-slate-900 to-slate-950',
+  },
+  {
+    name: 'Royal Dum Biryani',
+    url: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=800&q=80',
+    title: 'Aromatic Dum Biryani Feast',
+    sponsor: 'Nawabi Kitchen',
+    badge: 'Trending Combo',
+    discountText: 'Complimentary Raita & Sweet',
+    promoCode: 'BIRYANI50',
+    gradient: 'from-emerald-950/90 via-slate-900 to-slate-950',
+  },
+  {
+    name: 'Artisan Mocktails & Drinks',
+    url: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=800&q=80',
+    title: 'Cool Summer Mojitos & Mocktails',
+    sponsor: 'Bar & Beverage Lounge',
+    badge: 'Happy Hours',
+    discountText: 'Buy 1 Get 1 Free',
+    promoCode: 'SUMMERCOOL',
+    gradient: 'from-indigo-950/90 via-slate-900 to-slate-950',
+  },
+  {
+    name: 'Decadent Chocolate Dessert',
+    url: 'https://images.unsplash.com/photo-1587314168485-3236d6710814?auto=format&fit=crop&w=800&q=80',
+    title: 'Rich Belgian Chocolate Lava Cake',
+    sponsor: 'Dessert Boutique',
+    badge: 'Sweet Ending',
+    discountText: 'Free with ₹999+ Order',
+    promoCode: 'SWEETTREAT',
+    gradient: 'from-rose-950/90 via-slate-900 to-slate-950',
+  }
+];
+
 export const SuperAdminAds: React.FC = () => {
   const [ads, setAds] = useState<Advertisement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +112,67 @@ export const SuperAdminAds: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingAd, setEditingAd] = useState<Advertisement | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [imageUploadMode, setImageUploadMode] = useState<'upload' | 'url' | 'presets'>('upload');
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
+
+  const handleImageFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert('Please select a valid image file (PNG, JPG, JPEG, WEBP)');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Image file size should be less than 10MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 1200;
+        const scale = MAX_WIDTH / img.width;
+        if (scale < 1) {
+          canvas.width = MAX_WIDTH;
+          canvas.height = img.height * scale;
+        } else {
+          canvas.width = img.width;
+          canvas.height = img.height;
+        }
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        setForm(prev => ({ ...prev, imageUrl: dataUrl }));
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleImageFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingImage(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleImageFile(file);
+  };
+
+  const applyPreset = (preset: typeof STOCK_PRESETS[0]) => {
+    setForm(prev => ({
+      ...prev,
+      sponsor: preset.sponsor,
+      badge: preset.badge,
+      title: preset.title,
+      discountText: preset.discountText,
+      promoCode: preset.promoCode,
+      imageUrl: preset.url,
+      bgGradient: preset.gradient,
+    }));
+  };
 
   // Form State
   const [form, setForm] = useState({
@@ -483,21 +603,149 @@ export const SuperAdminAds: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Image URL */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Banner Image URL *
+                {/* Image Upload & Management Section */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Banner Promotional Image *
                     </label>
-                    <input
-                      type="url"
-                      required
-                      value={form.imageUrl}
-                      onChange={e => setForm({ ...form, imageUrl: e.target.value })}
-                      placeholder="https://images.unsplash.com/..."
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:border-rose-600 transition-all"
-                    />
+                    <div className="flex items-center bg-slate-100 p-0.5 rounded-lg text-[11px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setImageUploadMode('upload')}
+                        className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${
+                          imageUploadMode === 'upload' ? 'bg-white text-rose-600 shadow-xs' : 'text-slate-500'
+                        }`}
+                      >
+                        <Upload className="w-3 h-3" />
+                        <span>Upload File</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImageUploadMode('url')}
+                        className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${
+                          imageUploadMode === 'url' ? 'bg-white text-rose-600 shadow-xs' : 'text-slate-500'
+                        }`}
+                      >
+                        <LinkIcon className="w-3 h-3" />
+                        <span>Paste URL</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImageUploadMode('presets')}
+                        className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${
+                          imageUploadMode === 'presets' ? 'bg-white text-rose-600 shadow-xs' : 'text-slate-500'
+                        }`}
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        <span>Presets</span>
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Mode 1: Direct File Upload Area */}
+                  {imageUploadMode === 'upload' && (
+                    <div
+                      onDragOver={(e) => { e.preventDefault(); setIsDraggingImage(true); }}
+                      onDragLeave={() => setIsDraggingImage(false)}
+                      onDrop={handleDrop}
+                      className={`border-2 border-dashed rounded-2xl p-5 text-center transition-all ${
+                        isDraggingImage
+                          ? 'border-rose-500 bg-rose-50/50'
+                          : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                      }`}
+                    >
+                      {form.imageUrl ? (
+                        <div className="flex items-center gap-4 text-left">
+                          <div className="w-24 h-16 rounded-xl overflow-hidden border border-slate-200 shrink-0 bg-slate-100 shadow-xs">
+                            <img src={form.imageUrl} alt="Uploaded preview" className="w-full h-full object-cover" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 text-emerald-600 text-xs font-bold">
+                              <CheckCircle2 className="w-4 h-4 shrink-0" />
+                              <span className="truncate">Image Loaded Successfully</span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 mt-0.5 truncate">Ready for banner display</p>
+                            <label className="inline-block mt-1 text-xs font-bold text-rose-600 hover:underline cursor-pointer">
+                              Change Image File
+                              <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+                            </label>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setForm(prev => ({ ...prev, imageUrl: '' }))}
+                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+                            title="Remove image"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="cursor-pointer block space-y-2">
+                          <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+                          <div className="w-12 h-12 bg-white rounded-2xl border border-slate-200 shadow-xs mx-auto flex items-center justify-center text-rose-600">
+                            <Upload className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-800">
+                              Click to choose image file <span className="text-slate-400 font-normal">or drag & drop here</span>
+                            </p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              Supports JPG, PNG, WEBP up to 10MB (automatically optimized)
+                            </p>
+                          </div>
+                        </label>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Mode 2: Direct URL Input */}
+                  {imageUploadMode === 'url' && (
+                    <div className="space-y-2">
+                      <div className="relative flex items-center">
+                        <LinkIcon className="w-4 h-4 text-slate-400 absolute left-3.5" />
+                        <input
+                          type="url"
+                          value={form.imageUrl}
+                          onChange={e => setForm({ ...form, imageUrl: e.target.value })}
+                          placeholder="https://images.unsplash.com/photo-..."
+                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:border-rose-600 transition-all"
+                        />
+                      </div>
+                      {form.imageUrl ? (
+                        <div className="h-16 rounded-xl overflow-hidden border border-slate-200 bg-slate-950 relative">
+                          <img src={form.imageUrl} alt="URL Preview" className="w-full h-full object-cover" />
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+
+                  {/* Mode 3: Quick Stock Presets */}
+                  {imageUploadMode === 'presets' && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+                      {STOCK_PRESETS.map((p, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => applyPreset(p)}
+                          className={`p-2 rounded-xl border text-left flex items-center gap-2.5 transition-all ${
+                            form.imageUrl === p.url
+                              ? 'border-rose-500 bg-rose-50 ring-2 ring-rose-500/20'
+                              : 'border-slate-200 hover:border-slate-300 bg-white'
+                          }`}
+                        >
+                          <img src={p.url} alt={p.name} className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[11px] font-bold text-slate-800 truncate">{p.name}</p>
+                            <p className="text-[10px] text-rose-600 font-mono font-bold truncate">{p.discountText}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
                   {/* CTA Text */}
                   <div>
