@@ -13,6 +13,7 @@ import menuRoutes from './src/routes/menu.routes';
 import restaurantRoutes from './src/routes/restaurant.routes';
 import adRoutes from './src/routes/ad.routes';
 import planRoutes from './src/routes/plan.routes';
+import settingsRoutes from './src/routes/settings.routes';
 import { initSocket } from './src/utils/socket';
 
 
@@ -119,6 +120,13 @@ app.use('/api/v1/super-admin/plans', planRoutes);
 app.use('/api/super-admin/plans', planRoutes);
 app.use('/super-admin/plans', planRoutes);
 
+app.use('/api/v1/settings', settingsRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/settings', settingsRoutes);
+app.use('/api/v1/super-admin/settings', settingsRoutes);
+app.use('/api/super-admin/settings', settingsRoutes);
+app.use('/super-admin/settings', settingsRoutes);
+
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'OrderKare API is running' });
@@ -144,6 +152,13 @@ const shutdown = async (signal: string) => {
     process.exit(0);
   });
 };
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.warn('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.warn('Uncaught Exception thrown:', err);
+});
 
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
 process.on('SIGINT', () => void shutdown('SIGINT'));

@@ -287,6 +287,8 @@ export const LandingPage: React.FC = () => {
       popular: false
     }
   ]);
+  const [supportEmail, setSupportEmail] = useState('support@orderkare.com');
+  const [supportPhone, setSupportPhone] = useState('+91 98765 43210');
 
   useEffect(() => {
     const API = import.meta.env.VITE_API_URL || (
@@ -310,6 +312,15 @@ export const LandingPage: React.FC = () => {
             popular: Boolean(p.isPopular)
           }));
           setPlans(mapped);
+        }
+      })
+      .catch(() => {});
+
+    axios.get(`${API}/settings/public`)
+      .then(res => {
+        if (res.data?.settings) {
+          if (res.data.settings.supportEmail) setSupportEmail(res.data.settings.supportEmail);
+          if (res.data.settings.supportPhone) setSupportPhone(res.data.settings.supportPhone);
         }
       })
       .catch(() => {});
@@ -1196,7 +1207,8 @@ export const LandingPage: React.FC = () => {
               </p>
               <div className="pt-1 text-[11px] text-slate-400 space-y-1">
                 <p>📍 Sector 62, Noida NCR, India</p>
-                <p>✉️ <a href="mailto:support@orderkare.com" className="text-slate-600 hover:text-orange-600 font-medium">support@orderkare.com</a></p>
+                <p>✉️ <a href={`mailto:${supportEmail}`} className="text-slate-600 hover:text-orange-600 font-medium">{supportEmail}</a></p>
+                <p>📞 <a href={`tel:${supportPhone}`} className="text-slate-600 hover:text-orange-600 font-medium">{supportPhone}</a></p>
               </div>
             </div>
 
@@ -1244,7 +1256,7 @@ export const LandingPage: React.FC = () => {
                 <li><button onClick={() => setLegalModal('terms')} className="hover:text-orange-600 transition-colors text-left">Terms of Service</button></li>
                 <li><span className="text-slate-500">0% Commission Model</span></li>
                 <li><span className="text-slate-500">256-bit TLS Security</span></li>
-                <li><a href="mailto:support@orderkare.com" className="hover:text-orange-600 transition-colors">Contact Support</a></li>
+                <li><a href={`mailto:${supportEmail}`} className="hover:text-orange-600 transition-colors">Contact Support</a></li>
               </ul>
             </div>
           </div>

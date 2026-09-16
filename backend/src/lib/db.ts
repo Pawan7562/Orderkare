@@ -21,12 +21,24 @@ export const db = new Pool({
   connectionTimeoutMillis: 10000,
 });
 
+// Attach error listener to prevent process crashes on idle client drops / network disconnects
+db.on('error', (err: any) => {
+  console.warn('⚡ Neon Pool idle client connection notice (auto-recovering):', err.message || err);
+});
+
 export const query = async (text: string, params?: any[]) => {
-  const start = Date.now();
-  const res = await db.query(text, params);
-  const duration = Date.now() - start;
-  // console.log('Executed Neon query', { text: text.substring(0, 40), duration, rows: res.rowCount });
-  return res;
+  try {
+    const start = Date.now();
+    const res = await db.query(text, params);
+    return res;
+  } catch (err: any) {
+    // If pool connection was terminated, retry query once
+    if (err?.message?.includes('Connection terminated') || err?.message?.includes('connection timeout')) {
+      console.warn('Retrying database query after connection reset...');
+      return await db.query(text, params);
+    }
+    throw err;
+  }
 };
 
 export default db;

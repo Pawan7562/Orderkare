@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import api from '../lib/api';
@@ -13,7 +13,11 @@ import {
   CheckCircle2,
   X,
   HelpCircle,
-  Shield
+  Shield,
+  KeyRound,
+  RefreshCw,
+  Sparkles,
+  AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -23,16 +27,43 @@ export const LoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
+  const [successBanner, setSuccessBanner] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Forgot Password Flow State
   const [forgotModalOpen, setForgotModalOpen] = useState(false);
+  const [forgotStep, setForgotStep] = useState<'REQUEST' | 'RESET'>('REQUEST');
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+  const [forgotSuccess, setForgotSuccess] = useState('');
+
+  // Support & Legal
+  const [supportEmail, setSupportEmail] = useState('support@orderkare.com');
   const [legalModal, setLegalModal] = useState<'privacy' | 'terms' | 'security' | null>(null);
 
   const { login } = useAuthStore();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    // Fetch public platform settings
+    api.get('/settings/public')
+      .then(res => {
+        if (res.data?.settings?.supportEmail) {
+          setSupportEmail(res.data.settings.supportEmail);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccessBanner('');
     setLoading(true);
     try {
       const res = await api.post('/auth/login', { email, password });
@@ -46,6 +77,76 @@ export const LoginPage: React.FC = () => {
       setError(err.response?.data?.message || 'Invalid email or password. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenForgotModal = () => {
+    setForgotEmail(email || '');
+    setForgotStep('REQUEST');
+    setForgotError('');
+    setForgotSuccess('');
+    setResetCode('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setForgotModalOpen(true);
+  };
+
+  // Step 1: Request Password Reset Code
+  const handleRequestResetCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail) {
+      setForgotError('Please enter your registered email address.');
+      return;
+    }
+    setForgotError('');
+    setForgotLoading(true);
+    try {
+      const res = await api.post('/auth/forgot-password', { email: forgotEmail });
+      setForgotSuccess(res.data?.message || 'Verification code sent to your email.');
+      if (res.data?.resetCode) {
+        setResetCode(res.data.resetCode);
+      }
+      setForgotStep('RESET');
+    } catch (err: any) {
+      setForgotError(err.response?.data?.message || 'No account found with this email.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  // Step 2: Submit Reset Code and Set New Password
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetCode || !newPassword) {
+      setForgotError('Verification code and new password are required.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setForgotError('Passwords do not match. Please verify.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setForgotError('New password must be at least 6 characters.');
+      return;
+    }
+
+    setForgotError('');
+    setForgotLoading(true);
+    try {
+      const res = await api.post('/auth/reset-password', {
+        email: forgotEmail,
+        code: resetCode,
+        newPassword
+      });
+
+      setEmail(forgotEmail);
+      setPassword(newPassword);
+      setForgotModalOpen(false);
+      setSuccessBanner(res.data?.message || 'Password reset successfully! Please sign in.');
+    } catch (err: any) {
+      setForgotError(err.response?.data?.message || 'Invalid verification code or expired session.');
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -102,6 +203,18 @@ export const LoginPage: React.FC = () => {
             </p>
           </div>
 
+          {/* Success Banner */}
+          {successBanner && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-2xl text-xs font-medium mb-6 flex items-start space-x-2.5"
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span>{successBanner}</span>
+            </motion.div>
+          )}
+
           {/* Error Alert */}
           {error && (
             <motion.div
@@ -109,9 +222,7 @@ export const LoginPage: React.FC = () => {
               animate={{ opacity: 1, height: 'auto' }}
               className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-2xl text-xs font-medium mb-6 flex items-start space-x-2.5"
             >
-              <div className="w-4 h-4 rounded-full bg-rose-200 text-rose-700 flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-bold">
-                !
-              </div>
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <span>{error}</span>
             </motion.div>
           )}
@@ -146,8 +257,8 @@ export const LoginPage: React.FC = () => {
                 </label>
                 <button
                   type="button"
-                  onClick={() => setForgotModalOpen(true)}
-                  className="text-xs font-medium text-rose-600 hover:text-rose-700 hover:underline"
+                  onClick={handleOpenForgotModal}
+                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
                 >
                   Forgot password?
                 </button>
@@ -167,7 +278,7 @@ export const LoginPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -193,7 +304,7 @@ export const LoginPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-rose-600 hover:bg-rose-700 text-white py-3.5 px-6 rounded-xl font-bold text-sm transition-all shadow-md shadow-rose-600/20 hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-60 disabled:pointer-events-none flex items-center justify-center space-x-2"
+                className="w-full bg-rose-600 hover:bg-rose-700 text-white py-3.5 px-6 rounded-xl font-bold text-sm transition-all shadow-md shadow-rose-600/20 hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-60 disabled:pointer-events-none flex items-center justify-center space-x-2 cursor-pointer"
               >
                 <span>{loading ? 'Signing in...' : 'Sign In to Dashboard'}</span>
                 {!loading && <ArrowRight className="w-4 h-4" />}
@@ -224,21 +335,21 @@ export const LoginPage: React.FC = () => {
         </div>
         <p>© 2026 OrderKare Technologies Pvt. Ltd. All rights reserved.</p>
         <div className="flex items-center space-x-4">
-          <button onClick={() => setLegalModal('privacy')} className="hover:text-slate-600 transition-colors">
+          <button onClick={() => setLegalModal('privacy')} className="hover:text-slate-600 transition-colors cursor-pointer">
             Privacy
           </button>
           <span>•</span>
-          <button onClick={() => setLegalModal('terms')} className="hover:text-slate-600 transition-colors">
+          <button onClick={() => setLegalModal('terms')} className="hover:text-slate-600 transition-colors cursor-pointer">
             Terms
           </button>
           <span>•</span>
-          <button onClick={() => setLegalModal('security')} className="hover:text-slate-600 transition-colors">
+          <button onClick={() => setLegalModal('security')} className="hover:text-slate-600 transition-colors cursor-pointer">
             Security
           </button>
         </div>
       </footer>
 
-      {/* Forgot Password Modal */}
+      {/* Interactive Forgot Password Modal */}
       <AnimatePresence>
         {forgotModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
@@ -250,43 +361,172 @@ export const LoginPage: React.FC = () => {
             >
               <button
                 onClick={() => setForgotModalOpen(false)}
-                className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
                 aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>
 
-              <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mb-4">
-                <HelpCircle className="w-5 h-5" />
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-rose-500 to-orange-500 text-white flex items-center justify-center mb-4 shadow-md shadow-rose-500/20">
+                <KeyRound className="w-5 h-5" />
               </div>
 
-              <h3 className="text-xl font-extrabold text-slate-950 mb-2">
-                Credential Assistance
+              <h3 className="text-xl font-extrabold text-slate-950 mb-1">
+                {forgotStep === 'REQUEST' ? 'Reset Hotel Admin Password' : 'Enter Verification Code'}
               </h3>
-              <p className="text-xs text-slate-600 leading-relaxed mb-4">
-                For restaurant data protection, passwords cannot be retrieved automatically. Please contact your restaurant master administrator or reach out to OrderKare Technical Support:
+              <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                {forgotStep === 'REQUEST'
+                  ? 'Enter your registered hotel administrator email to receive a secure 6-digit recovery code.'
+                  : `Enter the 6-digit code sent to ${forgotEmail} and choose a new master password.`}
               </p>
 
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2 text-xs">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Support Email:</span>
-                  <a href="mailto:corporate@orderkare.com" className="font-bold text-rose-600 hover:underline">
-                    corporate@orderkare.com
-                  </a>
+              {/* Error Message inside modal */}
+              {forgotError && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-700 px-3.5 py-2.5 rounded-xl text-xs font-medium mb-4 flex items-center space-x-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{forgotError}</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Response SLA:</span>
-                  <span className="font-bold text-slate-800">&lt; 15 minutes</span>
-                </div>
-              </div>
+              )}
 
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setForgotModalOpen(false)}
-                  className="bg-slate-950 hover:bg-slate-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-colors"
-                >
-                  Understood
-                </button>
+              {/* Success Message inside modal */}
+              {forgotSuccess && (
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3.5 py-2.5 rounded-xl text-xs font-medium mb-4 flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                  <span>{forgotSuccess}</span>
+                </div>
+              )}
+
+              {forgotStep === 'REQUEST' ? (
+                /* Step 1: Request Code */
+                <form onSubmit={handleRequestResetCode} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Registered Email Address
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                      <input
+                        type="email"
+                        required
+                        value={forgotEmail}
+                        onChange={e => setForgotEmail(e.target.value)}
+                        placeholder="admin@hotel.com"
+                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:border-rose-600 focus:ring-4 focus:ring-rose-500/10 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setForgotModalOpen(false)}
+                      className="px-4 py-3 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={forgotLoading}
+                      className="flex items-center space-x-2 bg-rose-600 hover:bg-rose-700 text-white px-5 py-3 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer"
+                    >
+                      {forgotLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                      <span>{forgotLoading ? 'Sending Code...' : 'Send Recovery Code'}</span>
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                /* Step 2: Enter Code & Set New Password */
+                <form onSubmit={handleResetPassword} className="space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        6-Digit Security Code
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleRequestResetCode}
+                        disabled={forgotLoading}
+                        className="text-[11px] font-semibold text-rose-600 hover:underline"
+                      >
+                        Resend Code
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      required
+                      value={resetCode}
+                      onChange={e => setResetCode(e.target.value)}
+                      placeholder="e.g. 583920"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-center text-base font-mono font-bold tracking-widest text-slate-900 focus:bg-white focus:border-rose-600 focus:ring-4 focus:ring-rose-500/10 outline-none transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        required
+                        minLength={6}
+                        value={newPassword}
+                        onChange={e => setNewPassword(e.target.value)}
+                        placeholder="At least 6 characters"
+                        className="w-full pl-4 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-rose-600 focus:ring-4 focus:ring-rose-500/10 outline-none transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600"
+                      >
+                        {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Confirm New Password
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                      placeholder="Re-type new password"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-rose-600 focus:ring-4 focus:ring-rose-500/10 outline-none transition-all"
+                    />
+                  </div>
+
+                  <div className="pt-2 flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setForgotStep('REQUEST')}
+                      className="px-4 py-3 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={forgotLoading}
+                      className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer"
+                    >
+                      {forgotLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                      <span>{forgotLoading ? 'Resetting...' : 'Reset Password & Save'}</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Support Contact Footer inside modal */}
+              <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+                <span>Need urgent assistance?</span>
+                <a href={`mailto:${supportEmail}`} className="font-semibold text-rose-600 hover:underline">
+                  {supportEmail}
+                </a>
               </div>
             </motion.div>
           </div>
@@ -305,7 +545,7 @@ export const LoginPage: React.FC = () => {
             >
               <button
                 onClick={() => setLegalModal(null)}
-                className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
                 aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
@@ -368,7 +608,7 @@ export const LoginPage: React.FC = () => {
               <div className="pt-6 mt-6 border-t border-slate-100 flex justify-end">
                 <button
                   onClick={() => setLegalModal(null)}
-                  className="bg-slate-950 hover:bg-slate-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-colors"
+                  className="bg-slate-950 hover:bg-slate-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-colors cursor-pointer"
                 >
                   Close
                 </button>

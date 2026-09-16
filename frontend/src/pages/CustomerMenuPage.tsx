@@ -1149,84 +1149,89 @@ export const CustomerMenuPage = () => {
         </div>
       </div>
 
-      {/* ─── PROMO & SPONSORED BANNER (FULL BREADTH & HIGH IMPACT) ─── */}
+      {/* ─── PROMO & SPONSORED BANNER (100% PURE, CLEAN & UNOBSTRUCTED) ─── */}
       {ads.length > 0 && currentAd && (
         <motion.div
           key={currentAd.id || currentAdIndex}
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.4 }}
-          className="px-3 pt-3 pb-2 text-left"
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25 }}
+          className="px-3 pt-3 pb-1 text-left"
         >
-          <div className="relative w-full rounded-2xl overflow-hidden shadow-lg border border-slate-700/60 bg-slate-950 text-white min-h-[175px] sm:min-h-[195px] flex flex-col justify-between group">
-            {/* 1. Rich Background Image */}
-            {currentAd.imageUrl ? (
-              <img
-                src={currentAd.imageUrl}
-                alt={currentAd.title}
-                className="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-105"
-              />
-            ) : null}
-
-            {/* 2. Layered Contrast Overlays */}
-            <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/85 to-black/35" />
-            <div className={`absolute inset-0 bg-gradient-to-tr ${currentAd.bgGradient || 'from-rose-950/70 via-slate-950/80 to-transparent'} opacity-75 mix-blend-multiply`} />
-
-            {/* 3. Foreground Banner Content */}
-            <div className="relative z-10 p-4 sm:p-5 flex flex-col justify-between h-full min-h-[175px] sm:min-h-[195px] space-y-3">
-              {/* Top Row: Sponsor & Badge */}
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2.5 py-0.5 rounded-full backdrop-blur-md shadow-xs">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                    {currentAd.badge || 'Featured Offer'}
-                  </span>
-                  <span className="text-xs font-bold text-slate-300 drop-shadow">
-                    {currentAd.sponsor}
-                  </span>
-                </div>
-
-                {ads.length > 1 && (
-                  <div className="flex items-center gap-1 bg-black/40 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10">
-                    <span className="text-[10px] font-mono font-bold text-amber-300">
-                      {(currentAdIndex % ads.length) + 1}
-                    </span>
-                    <span className="text-[10px] text-slate-400">/</span>
-                    <span className="text-[10px] font-mono text-slate-400">
-                      {ads.length}
-                    </span>
+          <div className="w-full rounded-2xl overflow-hidden shadow-xs border border-slate-200 bg-white">
+            {/* Pure Clean Graphic Banner Image - 100% Unobstructed, Zero Overlays */}
+            {currentAd.ctaLink ? (
+              <a
+                href={currentAd.ctaLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full overflow-hidden bg-white cursor-pointer"
+              >
+                {currentAd.imageUrl ? (
+                  <img
+                    src={currentAd.imageUrl}
+                    alt={currentAd.title || currentAd.sponsor || 'Advertisement'}
+                    className="w-full h-auto max-h-[220px] object-cover object-center block"
+                  />
+                ) : (
+                  <div className="w-full p-5 flex flex-col justify-center bg-gradient-to-r from-orange-500 to-amber-500 text-white">
+                    <span className="text-[10px] font-black uppercase text-white/90">{currentAd.badge || 'Special Offer'}</span>
+                    <h3 className="text-base font-black mt-0.5">{currentAd.title}</h3>
+                    <p className="text-xs text-white/90 mt-1">{currentAd.description}</p>
+                  </div>
+                )}
+              </a>
+            ) : (
+              <div
+                onClick={() => currentAd.promoCode && copyPromoCode(currentAd.promoCode)}
+                className={`block w-full overflow-hidden bg-white ${currentAd.promoCode ? 'cursor-pointer' : ''}`}
+              >
+                {currentAd.imageUrl ? (
+                  <img
+                    src={currentAd.imageUrl}
+                    alt={currentAd.title || currentAd.sponsor || 'Advertisement'}
+                    className="w-full h-auto max-h-[220px] object-cover object-center block"
+                  />
+                ) : (
+                  <div className="w-full p-5 flex flex-col justify-center bg-gradient-to-r from-orange-500 to-amber-500 text-white">
+                    <span className="text-[10px] font-black uppercase text-white/90">{currentAd.badge || 'Special Offer'}</span>
+                    <h3 className="text-base font-black mt-0.5">{currentAd.title}</h3>
+                    <p className="text-xs text-white/90 mt-1">{currentAd.description}</p>
                   </div>
                 )}
               </div>
+            )}
 
-              {/* Middle: Title & Description */}
-              <div className="space-y-1">
-                <h3 className="text-sm sm:text-base font-black text-white leading-tight tracking-tight drop-shadow max-w-[85%]">
-                  {currentAd.title}
-                </h3>
-                {currentAd.description ? (
-                  <p className="text-[11px] sm:text-xs text-slate-300 line-clamp-2 leading-relaxed max-w-[82%] font-medium">
-                    {currentAd.description}
-                  </p>
-                ) : null}
-              </div>
+            {/* Clean, Lightweight Action Footer (Below the Banner Graphic) */}
+            {(
+              (currentAd.discountText && !['0', '00', '0%', 'none', 'n/a', 'null'].includes(currentAd.discountText.trim().toLowerCase())) || 
+              currentAd.promoCode || 
+              currentAd.ctaText ||
+              currentAd.sponsor
+            ) && (
+              <div className="px-3.5 py-2.5 bg-white border-t border-slate-100 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  {currentAd.sponsor && (
+                    <span className="text-[11px] font-bold text-slate-700 truncate">
+                      {currentAd.sponsor}
+                    </span>
+                  )}
 
-              {/* Bottom Row: Discount Tag, Promo Code & CTA */}
-              <div className="pt-2 border-t border-white/10 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <div className="inline-flex items-center gap-1 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-xs px-2.5 py-1 rounded-lg shadow-sm font-mono">
-                    <Percent className="w-3 h-3 stroke-[3]" />
-                    <span>{currentAd.discountText}</span>
-                  </div>
+                  {currentAd.discountText && !['0', '00', '0%', 'none', 'n/a', 'null'].includes(currentAd.discountText.trim().toLowerCase()) && (
+                    <span className="inline-flex items-center gap-0.5 bg-orange-50 text-orange-700 border border-orange-200 font-black text-[11px] px-2 py-0.5 rounded-md font-mono shrink-0">
+                      <Percent className="w-2.5 h-2.5 stroke-[3]" />
+                      <span>{currentAd.discountText}</span>
+                    </span>
+                  )}
 
                   {currentAd.promoCode && (
                     <button
                       type="button"
                       onClick={() => copyPromoCode(currentAd.promoCode!)}
-                      className="inline-flex items-center gap-1.5 text-[10px] font-mono font-bold bg-white/15 hover:bg-white/25 text-white border border-white/20 px-2.5 py-1 rounded-lg backdrop-blur-md transition-all active:scale-95 shadow-xs"
-                      title="Click to copy and apply discount"
+                      className="inline-flex items-center gap-1 text-[11px] font-mono font-bold bg-slate-50 hover:bg-orange-50 text-slate-700 hover:text-orange-700 border border-slate-200 hover:border-orange-200 px-2 py-0.5 rounded-md transition-all active:scale-95 shrink-0 cursor-pointer"
+                      title="Click to copy coupon code"
                     >
-                      <Tag className="w-3 h-3 text-amber-300" />
+                      <Tag className="w-2.5 h-2.5 text-orange-500" />
                       <span>{copiedCode === currentAd.promoCode ? 'COPIED ✓' : currentAd.promoCode}</span>
                     </button>
                   )}
@@ -1237,36 +1242,36 @@ export const CustomerMenuPage = () => {
                     href={currentAd.ctaLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[11px] font-extrabold bg-white text-slate-900 hover:bg-slate-100 px-3 py-1 rounded-lg shadow-sm transition-all active:scale-95"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded-lg shadow-2xs transition-all active:scale-95 shrink-0"
                   >
-                    <span>{currentAd.ctaText || 'Claim'}</span>
-                    <ArrowRight className="w-3 h-3 text-orange-600" />
+                    <span>{currentAd.ctaText || 'Visit'}</span>
+                    <ArrowRight className="w-3 h-3 text-white" />
                   </a>
                 ) : currentAd.promoCode ? (
                   <button
                     type="button"
                     onClick={() => copyPromoCode(currentAd.promoCode!)}
-                    className="inline-flex items-center gap-1 text-[11px] font-extrabold bg-white text-slate-900 hover:bg-slate-100 px-3 py-1 rounded-lg shadow-sm transition-all active:scale-95"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded-lg shadow-2xs transition-all active:scale-95 shrink-0 cursor-pointer"
                   >
-                    <span>{currentAd.ctaText || 'Apply Code'}</span>
-                    <ArrowRight className="w-3 h-3 text-orange-600" />
+                    <span>{currentAd.ctaText || 'Use Code'}</span>
+                    <ArrowRight className="w-3 h-3 text-white" />
                   </button>
                 ) : null}
               </div>
-            </div>
+            )}
 
-            {/* Pagination Dots (if multiple ads) */}
+            {/* Pagination Slide Dots */}
             {ads.length > 1 && (
-              <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5">
+              <div className="py-1.5 bg-white border-t border-slate-50 flex items-center justify-center gap-1.5">
                 {ads.map((_, dotIdx) => (
                   <button
                     key={dotIdx}
                     type="button"
                     onClick={() => setCurrentAdIndex(dotIdx)}
-                    className={`h-1.5 rounded-full transition-all ${
+                    className={`h-1.5 rounded-full transition-all cursor-pointer ${
                       dotIdx === (currentAdIndex % ads.length)
-                        ? 'w-5 bg-amber-400'
-                        : 'w-1.5 bg-white/30 hover:bg-white/50'
+                        ? 'w-5 bg-orange-500'
+                        : 'w-1.5 bg-slate-200 hover:bg-slate-300'
                     }`}
                     aria-label={`Go to slide ${dotIdx + 1}`}
                   />

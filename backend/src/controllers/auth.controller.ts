@@ -245,3 +245,99 @@ export const savePushToken = async (req: AuthRequest, res: Response): Promise<vo
     res.status(500).json({ message: 'Failed to save push token' });
   }
 };
+
+// Hotel Admin / User: Request Password Reset Verification Code
+export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      res.status(400).json({ message: 'Email address is required' });
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const userRes = await query(
+      `SELECT id, email, name, role FROM "User" WHERE LOWER(email) = $1 LIMIT 1;`,
+      [cleanEmail]
+    );
+
+    if (!userRes.rows.length) {
+      res.status(404).json({ message: 'No registered hotel admin account found with this email.' });
+      return;
+    }
+
+    // Generate 6-digit verification security code
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 mins validity
+
+    await query(
+      `UPDATE "User" SET "resetToken" = $1, "resetTokenExpiry" = $2 WHERE LOWER(email) = $3;`,
+      [resetCode, expiry, cleanEmail]
+    );
+
+    res.json({
+      message: 'Password reset verification code generated.',
+      email: cleanEmail,
+      resetCode, // Returned for instant zero-friction recovery flow
+      expiresIn: '15 minutes'
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ message: 'Failed to process password reset request.' });
+  }
+};
+
+// Hotel Admin / User: Verify Code & Set New Password
+export const resetPassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, code, newPassword } = req.body;
+
+    if (!email || !code || !newPassword) {
+      res.status(400).json({ message: 'Email, verification code, and new password are required.' });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      res.status(400).json({ message: 'New password must be at least 6 characters long.' });
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const userRes = await query(
+      `SELECT id, email, "resetToken", "resetTokenExpiry" FROM "User" WHERE LOWER(email) = $1 LIMIT 1;`,
+      [cleanEmail]
+    );
+
+    if (!userRes.rows.length) {
+      res.status(404).json({ message: 'Account not found.' });
+      return;
+    }
+
+    const user = userRes.rows[0];
+
+    if (!user.resetToken || user.resetToken.trim() !== String(code).trim()) {
+      res.status(400).json({ message: 'Invalid or incorrect 6-digit verification code.' });
+      return;
+    }
+
+    if (user.resetTokenExpiry && new Date(user.resetTokenExpiry) < new Date()) {
+      res.status(400).json({ message: 'Verification code has expired. Please request a new one.' });
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await query(
+      `UPDATE "User" SET "password" = $1, "resetToken" = NULL, "resetTokenExpiry" = NULL, "updatedAt" = NOW() WHERE "id" = $2;`,
+      [hashedPassword, user.id]
+    );
+
+    res.json({
+      message: 'Password has been reset successfully! You can now sign in with your new password.',
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ message: 'Failed to reset password. Please try again.' });
+  }
+};
+
