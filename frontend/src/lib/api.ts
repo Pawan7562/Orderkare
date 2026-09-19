@@ -2,7 +2,12 @@ import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
 const getBaseApiUrl = () => {
-  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  const configuredUrl = import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '');
+  if (configuredUrl) {
+    if (/\/api\/v1$/i.test(configuredUrl)) return configuredUrl;
+    if (/\/api$/i.test(configuredUrl)) return `${configuredUrl}/v1`;
+    return `${configuredUrl}/api/v1`;
+  }
   if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     return 'http://localhost:5000/api/v1';
   }

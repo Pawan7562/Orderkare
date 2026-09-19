@@ -71,6 +71,7 @@ const PaymentModal = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState<'pay' | 'success' | 'pending'>('pay');
   const [manualMode, setManualMode] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
 
   const cleanUpi = upiId.trim();
   const upiLink = cleanUpi ? `upi://pay?pa=${encodeURIComponent(cleanUpi)}&pn=OrderKare&am=${amount}&cu=INR&tn=${encodeURIComponent(`${planName} - ${restaurantName}`)}` : '';
@@ -93,8 +94,12 @@ const PaymentModal = ({
 
   const openSecureCheckout = async () => {
     setIsSubmitting(true);
+    setPaymentError('');
     try {
       const { data: paymentOrder } = await api.post('/subscriptions/payment-order', { planId });
+      if (!paymentOrder?.keyId || !paymentOrder?.orderId || !paymentOrder?.amount) {
+        throw new Error('The payment server returned an incomplete Razorpay order.');
+      }
       await loadRazorpay();
       if (!window.Razorpay) throw new Error('Secure checkout is unavailable');
 
@@ -112,7 +117,7 @@ const PaymentModal = ({
             setStep('success');
             setTimeout(() => { onSuccess(); onClose(); }, 1800);
           } catch (err: any) {
-            alert(err.response?.data?.message || 'Payment verification failed. Contact support if you were charged.');
+            setPaymentError(err.response?.data?.message || 'Payment verification failed. Contact support if you were charged.');
           } finally {
             setIsSubmitting(false);
           }
@@ -123,7 +128,7 @@ const PaymentModal = ({
     } catch (err: any) {
       setIsSubmitting(false);
       if (err.response?.status === 503) setManualMode(true);
-      else alert(err.response?.data?.message || 'Unable to start secure payment. Please try again.');
+      setPaymentError(err.response?.data?.message || err.message || 'Unable to start secure payment. Please try again.');
     }
   };
 
@@ -201,6 +206,12 @@ const PaymentModal = ({
             </div>
           ) : (
             <>
+              {paymentError && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs font-medium text-rose-700">
+                  {paymentError}
+                </div>
+              )}
+
               {/* Amount Display */}
               <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-2xl p-4">
                 <div>
