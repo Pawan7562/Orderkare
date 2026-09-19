@@ -1,6 +1,6 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
-import { query } from '../lib/db';
+import { db, query } from '../lib/db';
 import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 
 const plans: Record<string, { amount: number; days: number; status: 'ACTIVE' | 'TRIAL' }> = {
@@ -23,47 +23,121 @@ const getRazorpayConfig = async () => {
     keySecret: process.env.RAZORPAY_KEY_SECRET?.trim() || settings?.razorpayKeySecret?.trim() || '',
     upiId: settings?.defaultUpiId?.trim() || '',
     paymentMode: process.env.RAZORPAY_MODE?.trim() || settings?.paymentMode || 'live',
+    webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET?.trim() || '',
   };
 };
 
 const razorpayRequest = async (path: string, method: 'GET' | 'POST', body: unknown, keyId: string, keySecret: string) => {
-  const response = await fetch(`https://api.razorpay.com/v1${path}`, {
-    method,
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
-      'Content-Type': 'application/json',
-    },
-    body: method === 'POST' ? JSON.stringify(body) : undefined,
-  });
-  const payload = await response.json() as any;
-  if (!response.ok) {
-    throw new Error(payload?.error?.description || 'Razorpay request failed');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(`https://api.razorpay.com/v1${path}`, {
+      method,
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
+        'Content-Type': 'application/json',
+      },
+      body: method === 'POST' ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+    const payload = await response.json() as any;
+    if (!response.ok) {
+      throw new Error(payload?.error?.description || 'Razorpay request failed');
+    }
+    return payload;
+  } finally {
+    clearTimeout(timeout);
   }
-  return payload;
 };
 
 const activateSubscription = async (restaurantId: string, planId: string, paymentReference: string, amount: number, days: number, status: 'ACTIVE' | 'TRIAL') => {
-  const existing = await query(`SELECT * FROM "Subscription" WHERE "restaurantId" = $1 LIMIT 1;`, [restaurantId]);
-  const current = existing.rows[0] || null;
-  const now = new Date();
-  const startDate = current?.validUntil && new Date(current.validUntil) > now ? new Date(current.validUntil) : now;
-  const validUntil = new Date(startDate.getTime() + days * 24 * 60 * 60 * 1000);
-  const subscriptionId = current?.id || randomUUID();
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT "id" FROM "Restaurant" WHERE "id" = $1 FOR UPDATE;`, [restaurantId]);
+    const existing = await client.query(`SELECT * FROM "Subscription" WHERE "restaurantId" = $1 LIMIT 1 FOR UPDATE;`, [restaurantId]);
+    const current = existing.rows[0] || null;
 
-  if (current) {
-    await query(
-      `UPDATE "Subscription" SET "status" = $1, "planName" = $2, "amountPaid" = $3, "paymentReference" = $4, "validUntil" = $5, "updatedAt" = NOW() WHERE "id" = $6 AND "restaurantId" = $7;`,
-      [status, planId, amount, paymentReference, validUntil, subscriptionId, restaurantId]
-    );
-  } else {
-    await query(
-      `INSERT INTO "Subscription" ("id", "status", "planName", "amountPaid", "paymentReference", "validUntil", "restaurantId") VALUES ($1, $2, $3, $4, $5, $6, $7);`,
-      [subscriptionId, status, planId, amount, paymentReference, validUntil, restaurantId]
-    );
+    if (current?.paymentReference === paymentReference) {
+      await client.query('COMMIT');
+      return current;
+    }
+
+    const now = new Date();
+    const startDate = current?.validUntil && new Date(current.validUntil) > now ? new Date(current.validUntil) : now;
+    const validUntil = new Date(startDate.getTime() + days * 24 * 60 * 60 * 1000);
+    const subscriptionId = current?.id || randomUUID();
+
+    if (current) {
+      await client.query(
+        `UPDATE "Subscription" SET "status" = $1, "planName" = $2, "amountPaid" = $3, "paymentReference" = $4, "validUntil" = $5, "updatedAt" = NOW() WHERE "id" = $6 AND "restaurantId" = $7;`,
+        [status, planId, amount, paymentReference, validUntil, subscriptionId, restaurantId]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO "Subscription" ("id", "status", "planName", "amountPaid", "paymentReference", "validUntil", "restaurantId") VALUES ($1, $2, $3, $4, $5, $6, $7);`,
+        [subscriptionId, status, planId, amount, paymentReference, validUntil, restaurantId]
+      );
+    }
+
+    await client.query(`UPDATE "Restaurant" SET "subscriptionStatus" = 'ACTIVE', "isActive" = true, "updatedAt" = NOW() WHERE "id" = $1;`, [restaurantId]);
+    await client.query('COMMIT');
+    return { id: subscriptionId, status, planName: planId, amountPaid: amount, paymentReference, validUntil: validUntil.toISOString() };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
+};
 
-  await query(`UPDATE "Restaurant" SET "subscriptionStatus" = 'ACTIVE', "isActive" = true, "updatedAt" = NOW() WHERE "id" = $1;`, [restaurantId]);
-  return { id: subscriptionId, status, planName: planId, amountPaid: amount, paymentReference, validUntil: validUntil.toISOString() };
+const isValidWebhookSignature = (rawBody: Buffer, signature: string, secret: string) => {
+  const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
+  const expectedBuffer = Buffer.from(expected, 'utf8');
+  const receivedBuffer = Buffer.from(signature || '', 'utf8');
+  return expectedBuffer.length === receivedBuffer.length && timingSafeEqual(expectedBuffer, receivedBuffer);
+};
+
+export const handleRazorpayWebhook = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const config = await getRazorpayConfig();
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
+    const signature = String(req.headers['x-razorpay-signature'] || '');
+    if (!config.webhookSecret || !isValidWebhookSignature(rawBody, signature, config.webhookSecret)) {
+      res.status(401).json({ message: 'Invalid webhook signature' });
+      return;
+    }
+
+    const payload = JSON.parse(rawBody.toString('utf8')) as any;
+    if (!['payment.captured', 'order.paid'].includes(payload.event)) {
+      res.status(200).json({ received: true });
+      return;
+    }
+
+    const payment = payload.payload?.payment?.entity;
+    const order = payload.payload?.order?.entity;
+    const paymentId = payment?.id;
+    const orderId = payment?.order_id || order?.id;
+    if (!paymentId || !orderId) {
+      res.status(200).json({ received: true });
+      return;
+    }
+
+    const razorpayOrder = await razorpayRequest(`/orders/${encodeURIComponent(orderId)}`, 'GET', undefined, config.keyId, config.keySecret);
+    const planKey = String(razorpayOrder.notes?.planId || '').toUpperCase().trim();
+    const restaurantId = String(razorpayOrder.notes?.restaurantId || '').trim();
+    const plan = getPlan(planKey);
+    if (!restaurantId || !plan || Number(payment?.amount || order?.amount) !== plan.amount * 100) {
+      res.status(400).json({ message: 'Webhook payment metadata is invalid' });
+      return;
+    }
+
+    await activateSubscription(restaurantId, planKey, paymentId, plan.amount, plan.days, plan.status);
+    res.status(200).json({ received: true });
+  } catch (error) {
+    console.error('handleRazorpayWebhook error:', error);
+    res.status(500).json({ message: 'Webhook processing failed' });
+  }
 };
 
 const ensureSubscriptionSchema = async () => {

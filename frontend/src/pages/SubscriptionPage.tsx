@@ -136,6 +136,7 @@ const PaymentModal = ({
     e.preventDefault();
     if (!utrNumber.trim()) return;
     setIsSubmitting(true);
+    setPaymentError('');
     try {
       const response = await api.post('/subscriptions/pay', {
         planId,
@@ -143,7 +144,7 @@ const PaymentModal = ({
       });
       if (response.data?.pending) setStep('pending');
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Payment verification failed. Please try again.');
+      setPaymentError(err.response?.data?.message || 'Payment reference submission failed. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -163,7 +164,7 @@ const PaymentModal = ({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-        className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden z-10"
+        className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto z-10"
       >
         {/* Header */}
         <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-6 text-white relative">

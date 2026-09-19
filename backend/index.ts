@@ -13,6 +13,7 @@ import menuRoutes from './src/routes/menu.routes';
 import restaurantRoutes from './src/routes/restaurant.routes';
 import tableRoutes from './src/routes/table.routes';
 import subscriptionRoutes from './src/routes/subscription.routes';
+import { handleRazorpayWebhook } from './src/controllers/subscription.controller';
 import adRoutes from './src/routes/ad.routes';
 import planRoutes from './src/routes/plan.routes';
 import settingsRoutes from './src/routes/settings.routes';
@@ -73,6 +74,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
+app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json', limit: '2mb' }), handleRazorpayWebhook);
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ limit: '25mb', extended: true }));
 app.use(rateLimit({

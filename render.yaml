@@ -31,6 +31,8 @@ services:
         sync: false
       - key: RAZORPAY_MODE
         value: live
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
       - key: DB_POOL_MAX
         value: 20
       - key: REDIS_URL
