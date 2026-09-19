@@ -21,9 +21,16 @@ export const getPublicSettings = async (_req: Request, res: Response): Promise<v
 export const getSuperAdminSettings = async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
     const result = await query(
-      `SELECT * FROM "SystemSettings" WHERE "id" = 'default' LIMIT 1;`
+      `SELECT "id", "platformName", "supportEmail", "supportPhone", "platformUrl", "currencySymbol", "defaultCurrency", "stripePublishableKey", "defaultUpiId", "paymentMode", "maintenanceMode", "maintenanceMessage", "autoApproveRestaurants", "freeTrialDays", "enableCustomerFeedback", "enableAudioAlerts", "updatedAt" FROM "SystemSettings" WHERE "id" = 'default' LIMIT 1;`
     );
-    res.json({ settings: result.rows[0] || {} });
+    res.json({
+      settings: {
+        ...(result.rows[0] || {}),
+        razorpayKeyId: process.env.RAZORPAY_KEY_ID || '',
+        razorpayConfigured: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
+        secretsManagedByEnvironment: Boolean(process.env.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_SECRET),
+      },
+    });
   } catch (error) {
     console.error('Error fetching super admin settings:', error);
     res.status(500).json({ message: 'Failed to fetch system settings' });
@@ -89,8 +96,8 @@ export const updateSuperAdminSettings = async (req: AuthRequest, res: Response):
         defaultCurrency !== undefined ? defaultCurrency : null,
         stripePublishableKey !== undefined ? stripePublishableKey : null,
         stripeSecretKey !== undefined ? stripeSecretKey : null,
-        razorpayKeyId !== undefined ? razorpayKeyId : null,
-        razorpayKeySecret !== undefined ? razorpayKeySecret : null,
+        razorpayKeyId !== undefined && String(razorpayKeyId).trim() ? String(razorpayKeyId).trim() : null,
+        razorpayKeySecret !== undefined && String(razorpayKeySecret).trim() ? String(razorpayKeySecret).trim() : null,
         defaultUpiId !== undefined ? defaultUpiId : null,
         paymentMode !== undefined ? paymentMode : null,
         maintenanceMode !== undefined ? Boolean(maintenanceMode) : null,
@@ -103,7 +110,13 @@ export const updateSuperAdminSettings = async (req: AuthRequest, res: Response):
     );
 
     res.json({
-      settings: result.rows[0],
+      settings: {
+        ...result.rows[0],
+        razorpayKeySecret: undefined,
+        stripeSecretKey: undefined,
+        razorpayConfigured: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
+        secretsManagedByEnvironment: Boolean(process.env.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_SECRET),
+      },
       message: 'System settings updated successfully!',
     });
   } catch (error) {

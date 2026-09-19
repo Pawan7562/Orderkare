@@ -88,14 +88,6 @@ export const GlobalOrderNotifier: React.FC = () => {
       triggerOrderAlert(newOrder);
     });
 
-    socket.on('global_new_order', (broadcastOrder: any) => {
-      if (!broadcastOrder) return;
-      if (!restaurantId || broadcastOrder.restaurantId === restaurantId) {
-        console.log('[GlobalOrderNotifier Web] WebSocket global_new_order received:', broadcastOrder);
-        triggerOrderAlert(broadcastOrder);
-      }
-    });
-
     return () => {
       socket.disconnect();
     };

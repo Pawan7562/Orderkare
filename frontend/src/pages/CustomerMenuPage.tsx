@@ -250,77 +250,21 @@ export const CustomerMenuPage = () => {
     const fetchMenu = async () => {
       setLoading(true);
       try {
-        const res = await axios.get(`${API}/menu/public/${slug || 'royal-palace'}`);
+        if (!slug) {
+          setRestaurant(null);
+          setCategories([]);
+          setFoods([]);
+          return;
+        }
+        const res = await axios.get(`${API}/menu/public/${slug}`);
         setRestaurant(res.data.restaurant);
         setCategories(res.data.categories || []);
         setFoods(res.data.foods || []);
       } catch (err) {
-        setRestaurant({
-          id: 'demo-res',
-          name: 'The Spice Route Dining',
-          logoUrl: null,
-          bannerUrl: null,
-          address: 'Sector 62, Noida NCR',
-          phone: '+91 98765 43210'
-        });
-        setCategories([
-          { id: 'cat-1', name: 'Starters' },
-          { id: 'cat-2', name: 'Main Course' },
-          { id: 'cat-3', name: 'Breads & Rice' },
-          { id: 'cat-4', name: 'Beverages' },
-        ]);
-        setFoods([
-          {
-            id: 'food-1',
-            name: 'Wood-Fired Margherita Pizza',
-            description: 'San Marzano tomato sauce, fresh buffalo mozzarella, fresh basil, and extra virgin olive oil.',
-            price: 299,
-            isVeg: true,
-            isAvailable: true,
-            imageUrl: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=500&auto=format&fit=crop&q=80',
-            categoryId: 'cat-2'
-          },
-          {
-            id: 'food-2',
-            name: 'Smoked Butter Chicken Bowl',
-            description: 'Tender tandoor-roasted chicken in a rich, velvety aromatic tomato-butter gravy with basmati rice.',
-            price: 380,
-            isVeg: false,
-            isAvailable: true,
-            imageUrl: 'https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=500&auto=format&fit=crop&q=80',
-            categoryId: 'cat-2'
-          },
-          {
-            id: 'food-3',
-            name: 'Crispy Truffle Paneer Bao (2 pcs)',
-            description: 'Steamed fluffy lotus bao buns filled with crispy spiced paneer, sriracha mayo, and pickled cucumber.',
-            price: 249,
-            isVeg: true,
-            isAvailable: true,
-            imageUrl: 'https://images.unsplash.com/photo-1567620832903-9fc6debc209f?w=500&auto=format&fit=crop&q=80',
-            categoryId: 'cat-1'
-          },
-          {
-            id: 'food-4',
-            name: 'Royal Dum Gosht Biryani',
-            description: 'Slow-cooked fragrant long-grain basmati rice with succulent lamb shank, saffron, and fresh mint.',
-            price: 450,
-            isVeg: false,
-            isAvailable: true,
-            imageUrl: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=500&auto=format&fit=crop&q=80',
-            categoryId: 'cat-3'
-          },
-          {
-            id: 'food-5',
-            name: 'Fresh Mint & Lime Mojito',
-            description: 'Fresh crushed garden mint, zesty Mexican lime, and sparkling soda over crushed ice.',
-            price: 149,
-            isVeg: true,
-            isAvailable: true,
-            imageUrl: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=500&auto=format&fit=crop&q=80',
-            categoryId: 'cat-4'
-          }
-        ]);
+        console.error('Failed to load menu for slug:', slug, err);
+        setRestaurant(null);
+        setCategories([]);
+        setFoods([]);
       } finally {
         setLoading(false);
       }
@@ -1096,6 +1040,41 @@ export const CustomerMenuPage = () => {
   // ═══════════════════════════════════════════════════════════════════════════
   // ─── MAIN DIGITAL MENU VIEW (ANIMATED, CLEAN & PROFESSIONAL)
   // ═══════════════════════════════════════════════════════════════════════════
+  if (!restaurant) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto font-sans border-x border-slate-200">
+        <div className="w-16 h-16 bg-orange-50 text-orange-500 rounded-3xl flex items-center justify-center mb-4 shadow-sm border border-orange-100">
+          <Utensils className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-black text-slate-900">Restaurant Menu Not Found</h2>
+        <p className="text-xs text-slate-500 mt-2 max-w-xs leading-relaxed">
+          The requested restaurant menu could not be found or is currently inactive. Please ensure you scanned the correct QR code.
+        </p>
+      </div>
+    );
+  }
+
+  if (restaurant && (restaurant as any).isSubscriptionActive === false) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto font-sans border-x border-slate-200">
+        <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-3xl flex items-center justify-center mb-4 shadow-sm border border-amber-200">
+          <Clock className="w-8 h-8" />
+        </div>
+        <span className="text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 px-3 py-1 rounded-full mb-2">
+          Service Temporarily Paused
+        </span>
+        <h2 className="text-xl font-black text-slate-900">{restaurant.name}</h2>
+        <p className="text-xs text-slate-500 mt-2 max-w-xs leading-relaxed">
+          This restaurant's digital menu and QR ordering are temporarily paused due to an inactive subscription.
+        </p>
+        <div className="mt-5 p-4 bg-white border border-slate-200 rounded-2xl w-full max-w-xs text-xs text-slate-600 space-y-1">
+          <p className="font-bold text-slate-800">Need to place an order?</p>
+          <p className="text-slate-500">Please contact the restaurant steward or counter staff directly.</p>
+        </div>
+      </div>
+    );
+  }
+
   const currentAd = ads.length > 0 ? ads[currentAdIndex % ads.length] : null;
 
   return (

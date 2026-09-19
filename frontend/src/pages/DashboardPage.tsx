@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { ShoppingBag, IndianRupee, Clock, Grid2X2, ArrowUpRight, RefreshCcw } from 'lucide-react';
+import { ShoppingBag, IndianRupee, Clock, Grid2X2, RefreshCcw, QrCode, Sparkles, Lock, ArrowRight, Crown } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { io } from 'socket.io-client';
 import { motion } from 'framer-motion';
@@ -38,21 +39,24 @@ interface FeedbackItem {
 }
 
 export const DashboardPage = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats>({
-    todayOrders: 0, todaySales: 0, pendingOrders: 0, activeTables: 0, totalTables: 20
+    todayOrders: 0, todaySales: 0, pendingOrders: 0, activeTables: 0, totalTables: 0
   });
   const [pendingOrders, setPendingOrders] = useState<RecentOrder[]>([]);
   const [preparingOrders, setPreparingOrders] = useState<RecentOrder[]>([]);
   const [recentFeedback, setRecentFeedback] = useState<FeedbackItem[]>([]);
+  const [subscription, setSubscription] = useState<any>(null);
   const [notification, setNotification] = useState<{ id: string; title: string; message: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
     try {
-      const [statsRes, ordersRes, feedbackRes] = await Promise.all([
+      const [statsRes, ordersRes, feedbackRes, subRes] = await Promise.all([
         api.get('/restaurants/dashboard/stats'),
         api.get('/orders?status=PENDING,ACCEPTED,PREPARING'),
         api.get('/orders/feedback'),
+        api.get('/subscriptions/status').catch(() => ({ data: { isSubscribed: false } })),
       ]);
       const d = statsRes.data || {};
       setStats({
@@ -60,12 +64,13 @@ export const DashboardPage = () => {
         todaySales: d.todaySales ?? d.todayRevenue ?? 0,
         pendingOrders: d.pendingOrders ?? d.activeOrders ?? 0,
         activeTables: d.activeTables || 0,
-        totalTables: d.totalTables || 20,
+        totalTables: d.totalTables ?? 0,
       });
       const orders = ordersRes.data?.orders || [];
       setPendingOrders(orders.filter((o: RecentOrder) => o.status === 'PENDING'));
       setPreparingOrders(orders.filter((o: RecentOrder) => o.status === 'PREPARING' || o.status === 'ACCEPTED'));
       setRecentFeedback(feedbackRes.data?.feedback || []);
+      setSubscription(subRes.data);
     } catch (err) {
       // Silently fail — server may not have data yet
     } finally {
@@ -139,11 +144,6 @@ export const DashboardPage = () => {
     };
 
     socket.on('new_order', handleNewOrder);
-    socket.on('global_new_order', (bOrder: any) => {
-      if (!restaurantId || bOrder?.restaurantId === restaurantId) {
-        handleNewOrder(bOrder);
-      }
-    });
 
     const handleNewFeedback = (fb: any) => {
       if (!fb) return;
@@ -196,10 +196,10 @@ export const DashboardPage = () => {
   };
 
   const statCards = [
-    { label: "Today's Orders", value: stats.todayOrders, icon: ShoppingBag, color: 'bg-primary/10 text-primary', trend: '+8.2%' },
-    { label: "Today's Sales", value: `₹${(stats.todaySales || 0).toLocaleString()}`, icon: IndianRupee, color: 'bg-blue-50 text-blue-600', trend: '+12.4%' },
-    { label: 'Pending Orders', value: stats.pendingOrders, icon: Clock, color: 'bg-amber-50 text-amber-600', highlight: true, trend: '' },
-    { label: 'Active Tables', value: `${stats.activeTables}/${stats.totalTables}`, icon: Grid2X2, color: 'bg-emerald-50 text-emerald-600', trend: '' },
+    { label: "Today's Orders", value: stats.todayOrders, icon: ShoppingBag, color: 'bg-primary/10 text-primary' },
+    { label: "Today's Sales", value: `₹${(stats.todaySales || 0).toLocaleString()}`, icon: IndianRupee, color: 'bg-blue-50 text-blue-600' },
+    { label: 'Pending Orders', value: stats.pendingOrders, icon: Clock, color: 'bg-amber-50 text-amber-600', highlight: true },
+    { label: 'Active Tables', value: `${stats.activeTables}/${stats.totalTables}`, icon: Grid2X2, color: 'bg-emerald-50 text-emerald-600' },
   ];
 
   const stagger = {
@@ -242,15 +242,89 @@ export const DashboardPage = () => {
       )}
 
       {/* Header */}
-      <motion.div variants={stagger.item} className="flex items-center justify-between">
+      <motion.div variants={stagger.item} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Operations Live View</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Restaurant Management Dashboard</p>
+          <p className="text-slate-500 text-sm mt-0.5">Restaurant Management & Table Ordering Dashboard</p>
         </div>
-        <button onClick={fetchData} className="flex items-center space-x-2 bg-white text-slate-600 border border-slate-200 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all">
-          <RefreshCcw className="w-4 h-4" />
-          <span>Refresh</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => navigate(subscription?.isSubscribed ? '/dashboard/tables' : '/dashboard/subscription')} 
+            className="flex items-center space-x-2 bg-gradient-to-r from-primary to-orange-500 text-white px-4 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-primary/20 hover:opacity-95 transition-all"
+          >
+            <QrCode className="w-4 h-4" />
+            <span>{subscription?.isSubscribed ? 'Generate & View Table QRs' : 'Generate QR (Activate)'}</span>
+          </button>
+          <button onClick={fetchData} className="flex items-center space-x-2 bg-white text-slate-600 border border-slate-200 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all">
+            <RefreshCcw className="w-4 h-4" />
+            <span>Refresh</span>
+          </button>
+        </div>
+      </motion.div>
+
+      {/* QR Code & Subscription Status Hero Banner */}
+      <motion.div 
+        variants={stagger.item}
+        className={`rounded-3xl border p-6 shadow-sm transition-all ${
+          subscription?.isSubscribed 
+            ? 'bg-gradient-to-br from-emerald-50 via-white to-teal-50/40 border-emerald-200/80' 
+            : 'bg-gradient-to-br from-orange-50 via-white to-amber-50/50 border-orange-200/80'
+        }`}
+      >
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+          <div className="flex items-start gap-4">
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
+              subscription?.isSubscribed 
+                ? 'bg-emerald-500 text-white shadow-emerald-200' 
+                : 'bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-orange-200'
+            }`}>
+              {subscription?.isSubscribed ? <QrCode className="w-7 h-7" /> : <Lock className="w-7 h-7" />}
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-lg font-extrabold text-slate-900">
+                  {subscription?.isSubscribed ? 'Table QR Codes: Active & Live' : 'Table QR Code Generator'}
+                </h2>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
+                  subscription?.isSubscribed 
+                    ? 'bg-emerald-100 text-emerald-800' 
+                    : 'bg-orange-100 text-orange-800'
+                }`}>
+                  {subscription?.isSubscribed ? (subscription?.daysLeft !== undefined ? `${subscription.daysLeft} Days Left` : 'Active') : (subscription?.isFirstTime ? '₹1 Activation Needed' : 'Subscription Required')}
+                </span>
+              </div>
+              <p className="text-slate-600 text-sm mt-1 max-w-2xl">
+                {subscription?.isSubscribed 
+                  ? `Your dining tables' permanent QR codes are active. Customers scanning any table QR can view your live menu and place orders directly to this dashboard.`
+                  : subscription?.isFirstTime 
+                    ? 'New account special: Activate your permanent table QR codes for just ₹1 and get your first 30 days completely free!'
+                    : 'Renew your subscription (Monthly, 6 Months, or Annual) to reactivate your permanent table QR codes for customer ordering.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 w-full lg:w-auto shrink-0">
+            {subscription?.isSubscribed ? (
+              <button
+                onClick={() => navigate('/dashboard/tables')}
+                className="w-full lg:w-auto flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3 rounded-2xl shadow-md shadow-emerald-200 transition-all"
+              >
+                <QrCode className="w-4 h-4" />
+                <span>Generate & Download QRs</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                onClick={() => navigate('/dashboard/subscription')}
+                className="w-full lg:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold px-6 py-3 rounded-2xl shadow-md shadow-orange-200 transition-all"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>{subscription?.isFirstTime ? 'Activate for ₹1 (1 Month Free)' : 'Choose Plan & Unlock QR'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
       </motion.div>
 
       {/* Stat Cards */}
@@ -263,11 +337,6 @@ export const DashboardPage = () => {
                 <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${stat.color}`}>
                   <Icon className="w-5 h-5" />
                 </div>
-                {stat.trend && (
-                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                    <ArrowUpRight className="w-3 h-3" /> {stat.trend}
-                  </span>
-                )}
               </div>
               <p className={`text-3xl font-extrabold tracking-tight ${stat.highlight ? 'text-amber-600' : 'text-slate-900'}`}>
                 {stat.value}

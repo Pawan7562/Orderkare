@@ -99,7 +99,6 @@ export default function OrdersScreen() {
       };
 
       socket.on('new_order', onNewOrder);
-      socket.on('global_new_order', onGlobalOrder);
       socket.on('order_updated', onOrderUpdated);
 
       const interval = setInterval(() => {
@@ -109,7 +108,6 @@ export default function OrdersScreen() {
       return () => {
         clearInterval(interval);
         socket.off('new_order', onNewOrder);
-        socket.off('global_new_order', onGlobalOrder);
         socket.off('order_updated', onOrderUpdated);
       };
     }

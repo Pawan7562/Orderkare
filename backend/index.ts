@@ -11,6 +11,8 @@ import foodRoutes from './src/routes/food.routes';
 import orderRoutes from './src/routes/order.routes';
 import menuRoutes from './src/routes/menu.routes';
 import restaurantRoutes from './src/routes/restaurant.routes';
+import tableRoutes from './src/routes/table.routes';
+import subscriptionRoutes from './src/routes/subscription.routes';
 import adRoutes from './src/routes/ad.routes';
 import planRoutes from './src/routes/plan.routes';
 import settingsRoutes from './src/routes/settings.routes';
@@ -106,6 +108,14 @@ app.use('/api/v1/restaurants', restaurantRoutes);
 app.use('/api/restaurants', restaurantRoutes);
 app.use('/restaurants', restaurantRoutes);
 
+app.use('/api/v1/tables', tableRoutes);
+app.use('/api/tables', tableRoutes);
+app.use('/tables', tableRoutes);
+
+app.use('/api/v1/subscriptions', subscriptionRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/subscriptions', subscriptionRoutes);
+
 app.use('/api/v1/ads', adRoutes);
 app.use('/api/ads', adRoutes);
 app.use('/ads', adRoutes);
@@ -129,7 +139,15 @@ app.use('/super-admin/settings', settingsRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', message: 'OrderKare API is running' });
+  res.json({
+    status: 'ok',
+    message: 'OrderKare API is running',
+    payments: {
+      provider: 'razorpay',
+      configured: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
+      mode: process.env.RAZORPAY_MODE || 'live',
+    },
+  });
 });
 
 // Initialize real-time WebSockets

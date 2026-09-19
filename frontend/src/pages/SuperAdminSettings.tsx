@@ -132,7 +132,8 @@ export const SuperAdminSettings = () => {
         if (s.stripePublishableKey !== undefined) setStripePublishableKey(s.stripePublishableKey || '');
         if (s.stripeSecretKey !== undefined) setStripeSecretKey(s.stripeSecretKey || '');
         if (s.razorpayKeyId !== undefined) setRazorpayKeyId(s.razorpayKeyId || '');
-        if (s.razorpayKeySecret !== undefined) setRazorpayKeySecret(s.razorpayKeySecret || '');
+        // Secrets are intentionally never returned by the API.
+        setRazorpayKeySecret('');
         if (s.defaultUpiId !== undefined) setDefaultUpiId(s.defaultUpiId || 'orderkare@icici');
 
         if (s.maintenanceMode !== undefined) setMaintenanceMode(Boolean(s.maintenanceMode));
@@ -194,7 +195,7 @@ export const SuperAdminSettings = () => {
         stripePublishableKey,
         stripeSecretKey,
         razorpayKeyId,
-        razorpayKeySecret,
+        razorpayKeySecret: razorpayKeySecret.trim() || undefined,
         defaultUpiId,
         maintenanceMode,
         maintenanceMessage,
@@ -617,14 +618,14 @@ export const SuperAdminSettings = () => {
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                      Razorpay Key Secret
+                      Razorpay Key Secret (optional database fallback)
                     </label>
                     <div className="relative">
                       <input
                         type={showRazorpaySecret ? 'text' : 'password'}
                         value={razorpayKeySecret}
                         onChange={(e) => setRazorpayKeySecret(e.target.value)}
-                        placeholder="••••••••••••••••••••••••••••••••"
+                        placeholder="Managed securely in Render environment"
                         className="w-full pl-4 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono font-medium text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                       />
                       <button

@@ -25,6 +25,12 @@ services:
         value: 10000
       - key: CORS_ORIGIN
         value: https://www.orderkare.co.in,https://orderkare.co.in
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_MODE
+        value: live
       - key: DB_POOL_MAX
         value: 20
       - key: REDIS_URL

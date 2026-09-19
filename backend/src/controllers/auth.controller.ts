@@ -45,49 +45,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     );
     const user = userRes.rows[0];
 
-    // 4. Auto-create starter menu categories and food items in Neon PostgreSQL
-    try {
-      const catStartersId = 'cat-' + Math.random().toString(36).substring(2, 8);
-      const catMainId = 'cat-' + Math.random().toString(36).substring(2, 8);
-      const catDrinksId = 'cat-' + Math.random().toString(36).substring(2, 8);
-
-      await query(
-        `INSERT INTO "Category" ("id", "name", "orderIndex", "restaurantId")
-         VALUES ($1, 'Starters', 1, $4), ($2, 'Main Course', 2, $4), ($3, 'Beverages', 3, $4);`,
-        [catStartersId, catMainId, catDrinksId, hotelId]
-      );
-
-      // Add starter dishes
-      await query(
-        `INSERT INTO "FoodItem" ("id", "name", "description", "price", "isVeg", "imageUrl", "categoryId", "restaurantId")
-         VALUES 
-         ($1, 'Chef Special Paneer Tikka', 'Tandoori roasted cottage cheese cubes marinated in herbs.', 220, true, 'https://images.unsplash.com/photo-1599487488170-d11ec9c172f0?auto=format&fit=crop&w=400&q=80', $4, $7),
-         ($2, 'Royal Signature Curry', 'Creamy rich aromatic curry cooked with slow-simmered spices.', 320, true, 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=400&q=80', $5, $7),
-         ($3, 'Fresh Mint Mojito', 'Chilled sparkling lime refresher with crushed garden mint.', 140, true, 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&w=400&q=80', $6, $7);`,
-        [
-          'item-' + Math.random().toString(36).substring(2, 8),
-          'item-' + Math.random().toString(36).substring(2, 8),
-          'item-' + Math.random().toString(36).substring(2, 8),
-          catStartersId,
-          catMainId,
-          catDrinksId,
-          hotelId
-        ]
-      );
-
-      // Add Tables 01 to 05
-      for (let i = 1; i <= 5; i++) {
-        const tableNum = i < 10 ? `0${i}` : `${i}`;
-        await query(
-          `INSERT INTO "Table" ("id", "tableNumber", "restaurantId")
-           VALUES ($1, $2, $3);`,
-          ['table-' + Math.random().toString(36).substring(2, 8), tableNum, hotelId]
-        );
-      }
-    } catch (seedErr) {
-      console.warn('Optional starter seed warning:', seedErr);
-    }
-
+    // Newly created admin starts with clean state (no dummy dishes, categories or tables)
     const fullUser = {
       id: user.id,
       email: user.email,

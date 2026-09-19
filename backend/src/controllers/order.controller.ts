@@ -17,8 +17,8 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     }
 
     try {
-      // Find restaurant by slug or id
-      let restaurant = await prisma.restaurant.findFirst({
+      // Find restaurant by slug or id strictly
+      const restaurant = await prisma.restaurant.findFirst({
         where: {
           OR: [
             { slug: rawSlug },
@@ -28,15 +28,24 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         },
       });
 
-      if (!restaurant) {
-        // Fallback: try finding first active restaurant if demo
-        if (rawSlug === 'demo' || rawSlug === 'royal-palace') {
-          restaurant = await prisma.restaurant.findFirst({ where: { isActive: true } });
-        }
-      }
-
       if (!restaurant || !restaurant.isActive) {
         res.status(404).json({ message: `Restaurant "${rawSlug}" not found or currently inactive` });
+        return;
+      }
+
+      // Check active subscription validity
+      const sub = await prisma.subscription.findUnique({
+        where: { restaurantId: restaurant.id },
+      });
+
+      const now = new Date();
+      const isSubscribed = sub && sub.validUntil && new Date(sub.validUntil) > now && ['ACTIVE', 'TRIAL'].includes(sub.status);
+
+      if (!isSubscribed) {
+        res.status(403).json({
+          message: 'Digital menu ordering is temporarily paused for this restaurant due to an expired or pending subscription. Please ask restaurant management to renew.',
+          isExpired: true,
+        });
         return;
       }
 

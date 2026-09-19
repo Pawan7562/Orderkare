@@ -130,7 +130,6 @@ export default function DashboardScreen() {
       socket.on('disconnect', handleDisconnect);
       socket.on('connect_error', handleDisconnect);
       socket.on('new_order', handleNewOrder);
-      socket.on('global_new_order', handleGlobalOrder);
       socket.on('order_updated', handleOrderUpdated);
       if (socket.connected) joinRestaurant();
 
@@ -139,7 +138,6 @@ export default function DashboardScreen() {
         socket.off('disconnect', handleDisconnect);
         socket.off('connect_error', handleDisconnect);
         socket.off('new_order', handleNewOrder);
-        socket.off('global_new_order', handleGlobalOrder);
         socket.off('order_updated', handleOrderUpdated);
       };
     }

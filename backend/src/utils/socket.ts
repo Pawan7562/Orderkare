@@ -87,35 +87,32 @@ import { sendOrderPushNotification } from './push';
 
 export const notifyNewOrder = (restaurantId: string, order: any) => {
   if (io) {
-    // 1. Emit to restaurant room
+    // Emit strictly to the owning restaurant room
     io.to(restaurantId).emit('new_order', order);
-    // 2. Also emit global event with restaurantId attached for fallback
-    io.emit('global_new_order', { ...order, restaurantId });
-    console.log(`🔌 Emitted new_order & global_new_order for restaurant: ${restaurantId}`);
+    console.log(`🔌 Emitted new_order strictly to restaurant room: ${restaurantId}`);
   }
   sendOrderPushNotification(restaurantId, order).catch(() => {});
 };
 
 export const notifyOrderStatusUpdate = (orderId: string, status: string, restaurantId?: string) => {
   if (io) {
-    // 1. Emit legacy individual event for direct listeners
-    io.emit(`order_status_${orderId}`, { orderId, status });
-    // 2. Emit to scoped order room
+    // 1. Emit to scoped order room (for customer tracking)
     io.to(`order:${orderId}`).emit('order_status_update', { orderId, status });
-    // 3. Emit order_updated to restaurant room & globally so admin views refresh live
+    io.emit(`order_status_${orderId}`, { orderId, status });
+
+    // 2. Emit order_updated strictly to restaurant room for admin dashboard
     if (restaurantId) {
       io.to(restaurantId).emit('order_updated', { orderId, status, restaurantId });
     }
-    io.emit('order_updated', { orderId, status, restaurantId });
-    console.log(`🔌 Emitted order status update: order=${orderId}, status=${status}`);
+    console.log(`🔌 Emitted order status update: order=${orderId}, status=${status}, restaurant=${restaurantId}`);
   }
 };
 
 export const notifyNewFeedback = (restaurantId: string, feedback: any) => {
   if (io) {
+    // Emit strictly to the owning restaurant room
     io.to(restaurantId).emit('new_feedback', feedback);
-    io.emit('global_new_feedback', { ...feedback, restaurantId });
-    console.log(`⭐ Emitted new_feedback for restaurant: ${restaurantId}`);
+    console.log(`⭐ Emitted new_feedback strictly to restaurant room: ${restaurantId}`);
   }
 };
 

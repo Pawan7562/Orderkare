@@ -131,11 +131,6 @@ export const OrdersPage = () => {
     };
 
     socket.on('new_order', handleNewOrder);
-    socket.on('global_new_order', (bOrder: any) => {
-      if (!restaurantId || bOrder?.restaurantId === restaurantId) {
-        handleNewOrder(bOrder);
-      }
-    });
     socket.on('order_updated', handleOrderUpdated);
 
     // Resilient Polling Fallback (every 4s)

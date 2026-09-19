@@ -49,3 +49,15 @@ export const requireRole = (roles: string[]) => {
     next();
   };
 };
+
+export const requireRestaurantContext = (req: AuthRequest, res: Response, next: NextFunction): void => {
+  if (!req.user) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
+  if (!req.user.restaurantId) {
+    res.status(403).json({ message: 'A restaurant account is required for this resource' });
+    return;
+  }
+  next();
+};

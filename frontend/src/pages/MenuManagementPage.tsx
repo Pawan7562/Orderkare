@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../lib/api';
-import { Plus, Pencil, Trash2, GripVertical, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, GripVertical, ToggleLeft, ToggleRight, Upload, Image as ImageIcon, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface Category {
@@ -31,7 +31,7 @@ export const MenuManagementPage = () => {
   const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [editingFood, setEditingFood] = useState<FoodItem | null>(null);
   const [catName, setCatName] = useState('');
-  const [foodForm, setFoodForm] = useState({ name: '', description: '', price: '', isVeg: true, categoryId: '' });
+  const [foodForm, setFoodForm] = useState({ name: '', description: '', price: '', isVeg: true, categoryId: '', imageUrl: '' });
   const [loading, setLoading] = useState(true);
 
   const fetchCategories = async () => {
@@ -66,6 +66,35 @@ export const MenuManagementPage = () => {
     } catch (err) { console.error(err); }
   };
 
+  const handleFoodImage = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      window.alert('Please choose a PNG, JPG, WEBP, or other image file.');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      window.alert('Please choose an image smaller than 8MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = new window.Image();
+      image.onload = () => {
+        const maxWidth = 1200;
+        const scale = Math.min(1, maxWidth / image.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(image.width * scale);
+        canvas.height = Math.round(image.height * scale);
+        const context = canvas.getContext('2d');
+        if (!context) return;
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        setFoodForm(current => ({ ...current, imageUrl: canvas.toDataURL('image/jpeg', 0.84) }));
+      };
+      image.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleDeleteCategory = async (id: string) => {
     if (!confirm('Delete this category and all its items?')) return;
     try {
@@ -87,7 +116,7 @@ export const MenuManagementPage = () => {
       } else {
         await api.post('/foods', payload);
       }
-      setFoodForm({ name: '', description: '', price: '', isVeg: true, categoryId: '' });
+      setFoodForm({ name: '', description: '', price: '', isVeg: true, categoryId: '', imageUrl: '' });
       setShowFoodForm(false); setEditingFood(null);
       if (activeCategory) fetchFoodItems(activeCategory);
     } catch (err) { console.error(err); }
@@ -193,7 +222,7 @@ export const MenuManagementPage = () => {
               </h2>
               {activeCategory && (
                 <button
-                  onClick={() => { setShowFoodForm(true); setEditingFood(null); setFoodForm({ name: '', description: '', price: '', isVeg: true, categoryId: activeCategory }); }}
+                  onClick={() => { setShowFoodForm(true); setEditingFood(null); setFoodForm({ name: '', description: '', price: '', isVeg: true, categoryId: activeCategory, imageUrl: '' }); }}
                   className="flex items-center space-x-2 bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
@@ -204,8 +233,14 @@ export const MenuManagementPage = () => {
 
             {/* Add/Edit Food Form */}
             {showFoodForm && (
-              <div className="bg-slate-50 rounded-xl p-5 mb-5 border border-slate-200">
-                <h3 className="font-medium text-slate-800 mb-4">{editingFood ? 'Edit Food Item' : 'Add New Food Item'}</h3>
+              <div className="bg-slate-50 rounded-2xl p-5 mb-5 border border-slate-200">
+                <div className="flex items-start justify-between gap-4 mb-5">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">Menu item details</p>
+                    <h3 className="font-extrabold text-slate-900 mt-1">{editingFood ? 'Edit food item' : 'Add new food item'}</h3>
+                  </div>
+                  <span className="text-xs text-slate-400">Required fields marked by context</span>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <input value={foodForm.name} onChange={(e) => setFoodForm({...foodForm, name: e.target.value})}
                     placeholder="Food name" className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary/20" />
@@ -214,6 +249,45 @@ export const MenuManagementPage = () => {
                 </div>
                 <textarea value={foodForm.description} onChange={(e) => setFoodForm({...foodForm, description: e.target.value})}
                   placeholder="Description" rows={2} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary/20 resize-none mb-4" />
+                <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">Dish image</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Use a clear landscape or square photo. Max 8MB.</p>
+                    </div>
+                    {foodForm.imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setFoodForm(current => ({ ...current, imageUrl: '' }))}
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 hover:text-red-600"
+                      >
+                        <X className="h-3.5 w-3.5" /> Remove
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                    <div className="h-28 w-36 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                      {foodForm.imageUrl ? (
+                        <img src={foodForm.imageUrl} alt="Dish preview" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full flex-col items-center justify-center gap-1 text-slate-400">
+                          <ImageIcon className="h-7 w-7" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider">No image</span>
+                        </div>
+                      )}
+                    </div>
+                    <label className="flex min-h-28 flex-1 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 text-center transition-colors hover:border-primary hover:bg-primary/5">
+                      <Upload className="h-5 w-5 text-primary" />
+                      <span className="mt-2 text-sm font-bold text-slate-700">Upload dish image</span>
+                      <span className="mt-1 text-xs text-slate-400">PNG, JPG, WEBP</span>
+                      <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) handleFoodImage(file);
+                        event.currentTarget.value = '';
+                      }} />
+                    </label>
+                  </div>
+                </div>
                 <div className="flex items-center justify-between">
                   <label className="flex items-center space-x-2 cursor-pointer">
                     <input type="checkbox" checked={foodForm.isVeg} onChange={(e) => setFoodForm({...foodForm, isVeg: e.target.checked})} className="rounded border-slate-300" />
@@ -231,8 +305,8 @@ export const MenuManagementPage = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {foodItems.map((food) => (
                 <div key={food.id} className={`bg-slate-50 rounded-xl p-4 border border-slate-100 flex gap-4 ${!food.isAvailable ? 'opacity-60' : ''}`}>
-                  <div className="w-20 h-20 bg-slate-200 rounded-xl shrink-0 flex items-center justify-center text-2xl">
-                    {food.isVeg ? '🥗' : '🍗'}
+                  <div className="w-20 h-20 bg-slate-200 rounded-xl shrink-0 overflow-hidden flex items-center justify-center text-2xl">
+                    {food.imageUrl ? <img src={food.imageUrl} alt={food.name} className="h-full w-full object-cover" /> : (food.isVeg ? '🥗' : '🍗')}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between">
@@ -250,7 +324,7 @@ export const MenuManagementPage = () => {
                         <button onClick={() => toggleAvailability(food)} className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors">
                           {food.isAvailable ? <ToggleRight className="w-5 h-5 text-green-500" /> : <ToggleLeft className="w-5 h-5 text-slate-400" />}
                         </button>
-                        <button onClick={() => { setEditingFood(food); setFoodForm({ name: food.name, description: food.description || '', price: String(food.price), isVeg: food.isVeg, categoryId: food.categoryId }); setShowFoodForm(true); }}
+                        <button onClick={() => { setEditingFood(food); setFoodForm({ name: food.name, description: food.description || '', price: String(food.price), isVeg: food.isVeg, categoryId: food.categoryId, imageUrl: food.imageUrl || '' }); setShowFoodForm(true); }}
                           className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors text-slate-500">
                           <Pencil className="w-3.5 h-3.5" />
                         </button>

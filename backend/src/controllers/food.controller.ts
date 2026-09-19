@@ -37,6 +37,9 @@ export const createFood = async (req: AuthRequest, res: Response): Promise<void>
     }
 
     try {
+      const category = await prisma.category.findFirst({ where: { id: categoryId, restaurantId } });
+      if (!category) { res.status(404).json({ message: 'Category not found for this restaurant' }); return; }
+
       const food = await prisma.foodItem.create({
         data: {
           name,
@@ -69,6 +72,11 @@ export const updateFood = async (req: AuthRequest, res: Response): Promise<void>
     try {
       const food = await prisma.foodItem.findFirst({ where: { id, restaurantId } });
       if (!food) { res.status(404).json({ message: 'Food item not found' }); return; }
+
+      if (categoryId !== undefined) {
+        const category = await prisma.category.findFirst({ where: { id: categoryId, restaurantId } });
+        if (!category) { res.status(404).json({ message: 'Category not found for this restaurant' }); return; }
+      }
 
       const updated = await prisma.foodItem.update({
         where: { id },

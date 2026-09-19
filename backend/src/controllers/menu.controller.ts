@@ -6,8 +6,8 @@ export const getPublicMenu = async (req: Request, res: Response): Promise<void> 
     const rawSlug = (req.params.slug as string || '').trim();
 
     try {
-      // Find restaurant by slug or id (case-insensitive or direct match)
-      let restaurant = await prisma.restaurant.findFirst({
+      // Find restaurant strictly by slug or id (case-insensitive or direct match)
+      const restaurant = await prisma.restaurant.findFirst({
         where: {
           OR: [
             { slug: rawSlug },
@@ -17,16 +17,18 @@ export const getPublicMenu = async (req: Request, res: Response): Promise<void> 
         },
       });
 
-      if (!restaurant) {
-        if (rawSlug === 'demo' || rawSlug === 'royal-palace' || !rawSlug) {
-          restaurant = await prisma.restaurant.findFirst({ where: { isActive: true } });
-        }
-      }
-
       if (!restaurant || !restaurant.isActive) {
         res.status(404).json({ message: `Restaurant "${rawSlug}" not found or inactive` });
         return;
       }
+
+      // Check subscription
+      const sub = await prisma.subscription.findUnique({
+        where: { restaurantId: restaurant.id },
+      });
+
+      const now = new Date();
+      const isSubscriptionActive = sub && sub.validUntil && new Date(sub.validUntil) > now && ['ACTIVE', 'TRIAL'].includes(sub.status);
 
       const [categories, foods] = await Promise.all([
         prisma.category.findMany({
@@ -49,7 +51,10 @@ export const getPublicMenu = async (req: Request, res: Response): Promise<void> 
           bannerUrl: restaurant.bannerUrl,
           address: restaurant.address,
           phone: restaurant.phone,
+          isSubscriptionActive: Boolean(isSubscriptionActive),
+          subscriptionStatus: sub?.status || 'PENDING',
         },
+        isSubscriptionActive: Boolean(isSubscriptionActive),
         categories,
         foods,
       });

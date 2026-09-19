@@ -113,20 +113,10 @@ export default function GlobalOrderNotifier({ onNavigateToTab }: Props) {
       triggerNewOrderAlert(newOrder);
     };
 
-    const handleGlobalOrder = (broadcastOrder: any) => {
-      if (!broadcastOrder) return;
-      if (!restaurantId || broadcastOrder.restaurantId === restaurantId) {
-        console.log('[GlobalOrderNotifier] Global broadcast order received:', broadcastOrder);
-        triggerNewOrderAlert(broadcastOrder);
-      }
-    };
-
     socket.on('new_order', handleNewOrder);
-    socket.on('global_new_order', handleGlobalOrder);
 
     return () => {
       socket.off('new_order', handleNewOrder);
-      socket.off('global_new_order', handleGlobalOrder);
       socket.off('connect', joinRoom);
     };
   }, [token, restaurantId]);

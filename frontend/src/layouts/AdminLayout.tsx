@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { LayoutDashboard, ShoppingBag, Menu, Grid2X2, Users, BarChart3, Settings, Bell, Search, LogOut } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Menu, Grid2X2, Users, BarChart3, Settings, Bell, Search, LogOut, CreditCard } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { GlobalOrderNotifier } from '../components/GlobalOrderNotifier';
 
@@ -16,6 +16,7 @@ export const AdminLayout = () => {
     { label: 'Workers', path: '/dashboard/workers', icon: Users },
     { label: 'Analytics', path: '/dashboard/analytics', icon: BarChart3 },
     { label: 'Settings', path: '/dashboard/settings', icon: Settings },
+    { label: 'Subscription', path: '/dashboard/subscription', icon: CreditCard },
   ];
 
   return (
@@ -85,7 +86,14 @@ export const AdminLayout = () => {
               />
             </div>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
+            <Link
+              to="/dashboard/tables"
+              className="flex items-center space-x-1.5 bg-primary/10 hover:bg-primary/20 text-primary px-3.5 py-2 rounded-xl text-xs font-bold transition-all border border-primary/20"
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              <span>Generate QR</span>
+            </Link>
             <button className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-colors">
               <Bell className="w-5 h-5" />
             </button>

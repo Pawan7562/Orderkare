@@ -19,6 +19,7 @@ import { SuperAdminAds } from './pages/SuperAdminAds';
 import { TablesPage } from './pages/TablesPage';
 import { WorkersPage } from './pages/WorkersPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
+import { SubscriptionPage } from './pages/SubscriptionPage';
 
 function App() {
   return (
@@ -42,6 +43,7 @@ function App() {
             <Route path="/dashboard/workers" element={<WorkersPage />} />
             <Route path="/dashboard/analytics" element={<AnalyticsPage />} />
             <Route path="/dashboard/settings" element={<SettingsPage />} />
+            <Route path="/dashboard/subscription" element={<SubscriptionPage />} />
           </Route>
         </Route>
 
