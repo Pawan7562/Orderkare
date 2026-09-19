@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { db, query } from '../lib/db';
 import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
+import { createAdminNotification } from './admin.controller';
+import { notifySuperAdmin, notifySubscriptionUpdated } from '../utils/socket';
 
 const plans: Record<string, { amount: number; days: number; status: 'ACTIVE' | 'TRIAL' }> = {
   FIRST_TIME_ACTIVATION: { amount: 1, days: 30, status: 'TRIAL' },
@@ -82,6 +84,44 @@ const activateSubscription = async (restaurantId: string, planId: string, paymen
 
     await client.query(`UPDATE "Restaurant" SET "subscriptionStatus" = 'ACTIVE', "isActive" = true, "updatedAt" = NOW() WHERE "id" = $1;`, [restaurantId]);
     await client.query('COMMIT');
+
+    // Notify Super Admin asynchronously
+    void (async () => {
+      try {
+        const restResult = await query(`SELECT "name" FROM "Restaurant" WHERE "id" = $1;`, [restaurantId]);
+        const restName = restResult.rows[0]?.name || 'Unknown Restaurant';
+        const isTrial = status === 'TRIAL' || amount === 1;
+        const title = isTrial
+          ? `🎉 New Hotel Activation: ${restName}`
+          : `💳 Plan Purchased: ${restName} (₹${amount})`;
+        const message = isTrial
+          ? `${restName} activated their 30-day QR access for ₹1. Reference: ${paymentReference}`
+          : `${restName} subscribed to ${planId} plan for ₹${amount}. Reference: ${paymentReference}`;
+
+        const notification = await createAdminNotification({
+          type: isTrial ? 'TRIAL_ACTIVATED' : 'SUBSCRIPTION_PURCHASED',
+          title,
+          message,
+          restaurantId,
+          restaurantName: restName,
+          amount,
+          planName: planId,
+        });
+
+        notifySuperAdmin(notification);
+        notifySubscriptionUpdated(restaurantId, {
+          id: subscriptionId,
+          status,
+          planName: planId,
+          amountPaid: amount,
+          validUntil: validUntil.toISOString(),
+          isSubscribed: true,
+        });
+      } catch (notifErr) {
+        console.error('Failed to dispatch Super Admin notification:', notifErr);
+      }
+    })();
+
     return { id: subscriptionId, status, planName: planId, amountPaid: amount, paymentReference, validUntil: validUntil.toISOString() };
   } catch (error) {
     await client.query('ROLLBACK');

@@ -17,6 +17,7 @@ import { handleRazorpayWebhook } from './src/controllers/subscription.controller
 import adRoutes from './src/routes/ad.routes';
 import planRoutes from './src/routes/plan.routes';
 import settingsRoutes from './src/routes/settings.routes';
+import adminRoutes from './src/routes/admin.routes';
 import { initSocket } from './src/utils/socket';
 
 
@@ -138,6 +139,12 @@ app.use('/settings', settingsRoutes);
 app.use('/api/v1/super-admin/settings', settingsRoutes);
 app.use('/api/super-admin/settings', settingsRoutes);
 app.use('/super-admin/settings', settingsRoutes);
+
+app.use('/api/v1/admin', adminRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/admin', adminRoutes);
+app.use('/api/v1/super-admin', adminRoutes);
+app.use('/api/super-admin', adminRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

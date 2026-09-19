@@ -52,6 +52,18 @@ export const initSocket = async (server: HttpServer): Promise<Server> => {
       console.log(`🔌 Client ${socket.id} auto-joined restaurant room: ${socket.data.user.restaurantId}`);
     }
 
+    // Auto-join super admin room if role is SUPER_ADMIN
+    if (socket.data.user?.role === 'SUPER_ADMIN') {
+      socket.join('super_admin');
+      console.log(`👑 Client ${socket.id} auto-joined super_admin room`);
+    }
+
+    // Join super admin room explicitly
+    socket.on('join_super_admin', () => {
+      socket.join('super_admin');
+      console.log(`👑 Client ${socket.id} explicitly joined super_admin room`);
+    });
+
     // Join room based on restaurant ID to receive scoped updates
     socket.on('join_restaurant', (restaurantId: string) => {
       if (restaurantId && typeof restaurantId === 'string') {
@@ -115,5 +127,23 @@ export const notifyNewFeedback = (restaurantId: string, feedback: any) => {
     console.log(`⭐ Emitted new_feedback strictly to restaurant room: ${restaurantId}`);
   }
 };
+
+export const notifySuperAdmin = (notification: any) => {
+  if (io) {
+    io.to('super_admin').emit('admin_notification', notification);
+    io.emit('super_admin_notification', notification); // Also broadcast as fallback
+    console.log(`👑 Emitted admin_notification to super_admin room:`, notification.title);
+  }
+};
+
+export const notifySubscriptionUpdated = (restaurantId: string, subscription: any) => {
+  if (io) {
+    io.to(restaurantId).emit('subscription_updated', subscription);
+    io.emit(`subscription_updated_${restaurantId}`, subscription);
+    console.log(`💳 Emitted subscription_updated to restaurant ${restaurantId}`);
+  }
+};
+
+
 
 
