@@ -108,15 +108,15 @@ export const RegisterPage: React.FC = () => {
         >
           {/* Header */}
           <div className="space-y-2 mb-8 text-center sm:text-left">
-            <div className="inline-flex items-center space-x-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-full text-xs font-bold mb-1">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-              <span>14-Day Full Access Free Trial</span>
+            <div className="inline-flex items-center space-x-1.5 bg-orange-50 text-orange-800 border border-orange-200 px-3 py-1 rounded-full text-xs font-bold mb-1">
+              <Sparkles className="w-3.5 h-3.5 text-orange-600" />
+              <span>₹1 One-Time Activation • 30 Days Free Full Access</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-950">
               Register your restaurant
             </h1>
             <p className="text-xs sm:text-sm text-slate-500">
-              Start generating instant table QR codes and accepting digital orders in 10 minutes.
+              Generate your official master dining QR standee and start accepting digital orders in 10 minutes.
             </p>
           </div>
 
@@ -307,7 +307,7 @@ export const RegisterPage: React.FC = () => {
                   >
                     Privacy Policy
                   </button>
-                  , and 14-day free trial conditions.
+                  , and ₹1 activation 30-day free trial terms.
                 </span>
               </label>
             </div>
@@ -317,9 +317,9 @@ export const RegisterPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-rose-600 hover:bg-rose-700 text-white py-3.5 px-6 rounded-xl font-bold text-sm transition-all shadow-md shadow-rose-600/20 hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-60 disabled:pointer-events-none flex items-center justify-center space-x-2"
+                className="w-full bg-rose-600 hover:bg-rose-700 text-white py-3.5 px-6 rounded-xl font-bold text-sm transition-all shadow-md shadow-rose-600/20 hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-60 disabled:pointer-events-none flex items-center justify-center space-x-2 cursor-pointer"
               >
-                <span>{loading ? 'Creating your account...' : 'Create Account & Start Trial'}</span>
+                <span>{loading ? 'Creating your account...' : 'Create Account & Unlock with ₹1'}</span>
                 {!loading && <ArrowRight className="w-4 h-4" />}
               </button>
             </div>

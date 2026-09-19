@@ -245,6 +245,8 @@ export const CustomerMenuPage = () => {
     fetchAds();
   }, []);
 
+  const [isSubscriptionActive, setIsSubscriptionActive] = useState(true);
+
   // Fetch Restaurant Details & Menu
   useEffect(() => {
     const fetchMenu = async () => {
@@ -260,6 +262,7 @@ export const CustomerMenuPage = () => {
         setRestaurant(res.data.restaurant);
         setCategories(res.data.categories || []);
         setFoods(res.data.foods || []);
+        setIsSubscriptionActive(res.data.isSubscriptionActive ?? true);
       } catch (err) {
         console.error('Failed to load menu for slug:', slug, err);
         setRestaurant(null);
@@ -302,6 +305,10 @@ export const CustomerMenuPage = () => {
   const total = taxableAmount + tax;
 
   const handlePlaceOrder = async () => {
+    if (!isSubscriptionActive) {
+      setOrderError('Digital ordering is temporarily paused for this restaurant. Please place your order directly with staff.');
+      return;
+    }
     if (!customerName.trim()) {
       setOrderError('Please enter your name');
       return;
@@ -1127,6 +1134,14 @@ export const CustomerMenuPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Paused Subscription Notice Banner */}
+      {!isSubscriptionActive && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-800 font-medium flex items-center justify-center gap-2">
+          <Info className="w-4 h-4 text-amber-600 shrink-0" />
+          <span>Ordering is temporarily paused for this restaurant. Viewing menu only.</span>
+        </div>
+      )}
 
       {/* ─── PROMO & SPONSORED BANNER (100% PURE, CLEAN & UNOBSTRUCTED) ─── */}
       {ads.length > 0 && currentAd && (

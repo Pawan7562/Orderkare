@@ -4,7 +4,8 @@ import api from '../lib/api';
 import { ShoppingBag, IndianRupee, Clock, Grid2X2, RefreshCcw, QrCode, Sparkles, Lock, ArrowRight, Crown } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { io } from 'socket.io-client';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { PaymentModal } from '../components/PaymentModal';
 
 interface DashboardStats {
   todayOrders: number;
@@ -40,6 +41,7 @@ interface FeedbackItem {
 
 export const DashboardPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [stats, setStats] = useState<DashboardStats>({
     todayOrders: 0, todaySales: 0, pendingOrders: 0, activeTables: 0, totalTables: 0
   });
@@ -48,6 +50,7 @@ export const DashboardPage = () => {
   const [recentFeedback, setRecentFeedback] = useState<FeedbackItem[]>([]);
   const [subscription, setSubscription] = useState<any>(null);
   const [notification, setNotification] = useState<{ id: string; title: string; message: string } | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
@@ -245,17 +248,23 @@ export const DashboardPage = () => {
       <motion.div variants={stagger.item} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Operations Live View</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Restaurant Management & Table Ordering Dashboard</p>
+          <p className="text-slate-500 text-sm mt-0.5">Restaurant Management & Master QR Ordering Dashboard</p>
         </div>
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => navigate(subscription?.isSubscribed ? '/dashboard/tables' : '/dashboard/subscription')} 
-            className="flex items-center space-x-2 bg-gradient-to-r from-primary to-orange-500 text-white px-4 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-primary/20 hover:opacity-95 transition-all"
+            onClick={() => {
+              if (subscription?.isSubscribed) {
+                navigate('/dashboard/tables');
+              } else {
+                setShowPaymentModal(true);
+              }
+            }} 
+            className="flex items-center space-x-2 bg-gradient-to-r from-primary to-orange-500 text-white px-4 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-primary/20 hover:opacity-95 transition-all cursor-pointer"
           >
             <QrCode className="w-4 h-4" />
-            <span>{subscription?.isSubscribed ? 'Generate & View Table QRs' : 'Generate QR (Activate)'}</span>
+            <span>{subscription?.isSubscribed ? 'Master QR Standee & Tables' : 'Unlock Master QR (₹1)'}</span>
           </button>
-          <button onClick={fetchData} className="flex items-center space-x-2 bg-white text-slate-600 border border-slate-200 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all">
+          <button onClick={fetchData} className="flex items-center space-x-2 bg-white text-slate-600 border border-slate-200 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all cursor-pointer">
             <RefreshCcw className="w-4 h-4" />
             <span>Refresh</span>
           </button>
@@ -265,10 +274,10 @@ export const DashboardPage = () => {
       {/* QR Code & Subscription Status Hero Banner */}
       <motion.div 
         variants={stagger.item}
-        className={`rounded-3xl border p-6 shadow-sm transition-all ${
+        className={`rounded-3xl border-2 p-6 shadow-sm transition-all ${
           subscription?.isSubscribed 
-            ? 'bg-gradient-to-br from-emerald-50 via-white to-teal-50/40 border-emerald-200/80' 
-            : 'bg-gradient-to-br from-orange-50 via-white to-amber-50/50 border-orange-200/80'
+            ? 'bg-gradient-to-br from-emerald-50 via-white to-teal-50/40 border-emerald-300' 
+            : 'bg-gradient-to-br from-orange-50 via-white to-amber-50/50 border-orange-300'
         }`}
       >
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
@@ -283,22 +292,22 @@ export const DashboardPage = () => {
             <div>
               <div className="flex items-center gap-2.5">
                 <h2 className="text-lg font-extrabold text-slate-900">
-                  {subscription?.isSubscribed ? 'Table QR Codes: Active & Live' : 'Table QR Code Generator'}
+                  {subscription?.isSubscribed ? 'Master Restaurant QR Standee: Live & Active' : 'Master Restaurant QR Standee'}
                 </h2>
                 <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
                   subscription?.isSubscribed 
-                    ? 'bg-emerald-100 text-emerald-800' 
-                    : 'bg-orange-100 text-orange-800'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                    : 'bg-orange-100 text-orange-800 border border-orange-200'
                 }`}>
-                  {subscription?.isSubscribed ? (subscription?.daysLeft !== undefined ? `${subscription.daysLeft} Days Left` : 'Active') : (subscription?.isFirstTime ? '₹1 Activation Needed' : 'Subscription Required')}
+                  {subscription?.isSubscribed ? (subscription?.daysRemaining !== undefined ? `${subscription.daysRemaining} Days Left` : 'Active') : (subscription?.isFirstTime ? '₹1 Activation Needed' : 'Subscription Expired')}
                 </span>
               </div>
               <p className="text-slate-600 text-sm mt-1 max-w-2xl">
                 {subscription?.isSubscribed 
-                  ? `Your dining tables' permanent QR codes are active. Customers scanning any table QR can view your live menu and place orders directly to this dashboard.`
+                  ? `Your restaurant's single master QR standee is active. Guests scanning the QR from any table can view your live menu and place orders straight to this live dashboard.`
                   : subscription?.isFirstTime 
-                    ? 'New account special: Activate your permanent table QR codes for just ₹1 and get your first 30 days completely free!'
-                    : 'Renew your subscription (Monthly, 6 Months, or Annual) to reactivate your permanent table QR codes for customer ordering.'}
+                    ? 'New account special: Complete the one-time ₹1 activation to generate your permanent Master QR standee and receive 30 days completely free!'
+                    : 'Renew your subscription to reactivate your permanent master QR code standee for live customer ordering.'}
               </p>
             </div>
           </div>
@@ -307,19 +316,19 @@ export const DashboardPage = () => {
             {subscription?.isSubscribed ? (
               <button
                 onClick={() => navigate('/dashboard/tables')}
-                className="w-full lg:w-auto flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3 rounded-2xl shadow-md shadow-emerald-200 transition-all"
+                className="w-full lg:w-auto flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3.5 rounded-2xl shadow-md shadow-emerald-200 transition-all cursor-pointer"
               >
                 <QrCode className="w-4 h-4" />
-                <span>Generate & Download QRs</span>
+                <span>View & Print Master Standee</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             ) : (
               <button
-                onClick={() => navigate('/dashboard/subscription')}
-                className="w-full lg:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold px-6 py-3 rounded-2xl shadow-md shadow-orange-200 transition-all"
+                onClick={() => setShowPaymentModal(true)}
+                className="w-full lg:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black px-6 py-3.5 rounded-2xl shadow-lg shadow-orange-500/25 transition-all cursor-pointer active:scale-95"
               >
                 <Sparkles className="w-4 h-4" />
-                <span>{subscription?.isFirstTime ? 'Activate for ₹1 (1 Month Free)' : 'Choose Plan & Unlock QR'}</span>
+                <span>{subscription?.isFirstTime ? 'Pay ₹1 & Unlock QR (30 Days Free)' : 'Renew & Unlock Master QR'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             )}
@@ -547,6 +556,25 @@ export const DashboardPage = () => {
           </div>
         </div>
       </motion.div>
+
+      {/* Payment Modal */}
+      <AnimatePresence>
+        {showPaymentModal && (
+          <PaymentModal
+            planName={subscription?.isFirstTime ? 'First-Time Activation (1 Month Free)' : 'Monthly Plan Renewal'}
+            planId={subscription?.isFirstTime ? 'FIRST_TIME_ACTIVATION' : 'MONTHLY'}
+            amount={subscription?.isFirstTime ? 1 : 249}
+            durationDays={30}
+            upiId={subscription?.payment?.upiId || ''}
+            restaurantName={user?.name || 'Restaurant'}
+            razorpayEnabled={subscription?.payment?.razorpayEnabled ?? true}
+            onClose={() => setShowPaymentModal(false)}
+            onSuccess={() => {
+              fetchData();
+            }}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

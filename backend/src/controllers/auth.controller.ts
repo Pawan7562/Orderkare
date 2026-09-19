@@ -27,10 +27,10 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // 2. Insert Restaurant directly into Neon PostgreSQL
+    // 2. Insert Restaurant directly into Neon PostgreSQL with PENDING status until ₹1 activation
     const restRes = await query(
       `INSERT INTO "Restaurant" ("id", "name", "slug", "address", "phone", "subscriptionStatus", "isActive")
-       VALUES ($1, $2, $3, $4, $5, 'ACTIVE', true)
+       VALUES ($1, $2, $3, $4, $5, 'PENDING', true)
        RETURNING *;`,
       [hotelId, restaurantName, slug, address || 'Main City Plaza', phone || '']
     );
@@ -45,7 +45,16 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     );
     const user = userRes.rows[0];
 
-    // Newly created admin starts with clean state (no dummy dishes, categories or tables)
+    // 4. Create initial PENDING Subscription record
+    const subId = 'sub-' + Math.random().toString(36).substring(2, 8);
+    await query(
+      `INSERT INTO "Subscription" ("id", "status", "planName", "amountPaid", "restaurantId", "createdAt", "updatedAt")
+       VALUES ($1, 'PENDING', 'NONE', 0, $2, NOW(), NOW())
+       ON CONFLICT ("restaurantId") DO NOTHING;`,
+      [subId, hotelId]
+    ).catch(() => {});
+
+    // Newly created admin starts with clean state
     const fullUser = {
       id: user.id,
       email: user.email,

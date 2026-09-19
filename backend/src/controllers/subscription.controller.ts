@@ -168,6 +168,7 @@ const ensureSubscriptionSchema = async () => {
 
     await query(`ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "amountPaid" DOUBLE PRECISION NOT NULL DEFAULT 0;`).catch(() => {});
     await query(`ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "paymentReference" TEXT;`).catch(() => {});
+    await query(`ALTER TABLE "Subscription" ALTER COLUMN "validUntil" DROP NOT NULL;`).catch(() => {});
   } catch (err) {
     // schema already ready
   }
@@ -192,28 +193,43 @@ export const getSubscriptionStatus = async (req: AuthRequest, res: Response): Pr
     const restaurant = restRes.rows[0];
 
     const subRes = await query(`SELECT * FROM "Subscription" WHERE "restaurantId" = $1 LIMIT 1;`, [restaurantId]);
-    let sub = subRes.rows[0] || null;
-
+    const sub = subRes.rows[0] || null;
     const now = new Date();
     let isSubscribed = false;
-    let isFirstTime = !sub || sub.planName === 'NONE' || sub.status === 'PENDING';
     let daysRemaining = 0;
-    let status = sub ? sub.status : 'PENDING';
+    let status = 'PENDING';
 
-    if (sub && sub.validUntil) {
+    // A restaurant is first-time if they have never successfully completed a payment
+    const hasEverPaid = Boolean(
+      sub &&
+      Number(sub.amountPaid || 0) > 0 &&
+      sub.paymentReference &&
+      String(sub.paymentReference).trim() !== ''
+    );
+
+    const isFirstTime = !hasEverPaid;
+
+    if (hasEverPaid && sub && sub.validUntil) {
       const validUntil = new Date(sub.validUntil);
       if (validUntil > now && (sub.status === 'ACTIVE' || sub.status === 'TRIAL')) {
         isSubscribed = true;
+        status = sub.status;
         daysRemaining = Math.max(0, Math.ceil((validUntil.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
       } else {
-        // Expired
+        // Expired after having had an active plan
         status = 'EXPIRED';
         isSubscribed = false;
+        daysRemaining = 0;
         if (sub.status !== 'EXPIRED') {
           await query(`UPDATE "Subscription" SET "status" = 'EXPIRED', "updatedAt" = NOW() WHERE "id" = $1;`, [sub.id]);
           await query(`UPDATE "Restaurant" SET "subscriptionStatus" = 'EXPIRED' WHERE "id" = $1;`, [restaurantId]);
         }
       }
+    } else {
+      // First-time user: never activated before -> strictly PENDING state
+      status = 'PENDING';
+      isSubscribed = false;
+      daysRemaining = 0;
     }
 
     res.json({
@@ -367,12 +383,14 @@ export const verifyRazorpaySubscriptionPayment = async (req: AuthRequest, res: R
     const config = await getRazorpayConfig();
     if (!config.keyId || !config.keySecret) { res.status(503).json({ message: 'Online payment is not configured' }); return; }
     const expected = createHmac('sha256', config.keySecret).update(`${orderId}|${paymentId}`).digest('hex');
-    const signaturesMatch = expected.length === signature.length && timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+    const expectedBuf = Buffer.from(expected, 'utf8');
+    const sigBuf = Buffer.from(String(signature || ''), 'utf8');
+    const signaturesMatch = expectedBuf.length === sigBuf.length && timingSafeEqual(expectedBuf, sigBuf);
     if (!signaturesMatch) { res.status(400).json({ message: 'Payment signature verification failed' }); return; }
 
     let payment = await razorpayRequest(`/payments/${encodeURIComponent(paymentId)}`, 'GET', undefined, config.keyId, config.keySecret);
     if (payment.order_id !== orderId || Number(payment.amount) !== plan.amount * 100) {
-      res.status(400).json({ message: 'Payment was not captured for the selected plan' });
+      res.status(400).json({ message: 'Payment amount or order mismatch' });
       return;
     }
 
@@ -387,12 +405,12 @@ export const verifyRazorpaySubscriptionPayment = async (req: AuthRequest, res: R
     }
 
     if (payment.status !== 'captured') {
-      res.status(400).json({ message: 'Payment was not captured for the selected plan' });
+      res.status(400).json({ message: `Payment is in ${payment.status} state, not captured.` });
       return;
     }
 
     const razorpayOrder = await razorpayRequest(`/orders/${encodeURIComponent(orderId)}`, 'GET', undefined, config.keyId, config.keySecret);
-    if (razorpayOrder.notes?.restaurantId !== restaurantId || razorpayOrder.notes?.planId !== planKey) {
+    if (razorpayOrder.notes?.restaurantId !== restaurantId || String(razorpayOrder.notes?.planId || '').toUpperCase().trim() !== planKey) {
       res.status(403).json({ message: 'Payment does not belong to this restaurant or plan' });
       return;
     }
