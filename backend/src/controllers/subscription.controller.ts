@@ -296,8 +296,23 @@ export const verifyRazorpaySubscriptionPayment = async (req: AuthRequest, res: R
     const signaturesMatch = expected.length === signature.length && timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
     if (!signaturesMatch) { res.status(400).json({ message: 'Payment signature verification failed' }); return; }
 
-    const payment = await razorpayRequest(`/payments/${encodeURIComponent(paymentId)}`, 'GET', undefined, config.keyId, config.keySecret);
-    if (payment.order_id !== orderId || payment.status !== 'captured' || Number(payment.amount) !== plan.amount * 100) {
+    let payment = await razorpayRequest(`/payments/${encodeURIComponent(paymentId)}`, 'GET', undefined, config.keyId, config.keySecret);
+    if (payment.order_id !== orderId || Number(payment.amount) !== plan.amount * 100) {
+      res.status(400).json({ message: 'Payment was not captured for the selected plan' });
+      return;
+    }
+
+    if (payment.status === 'authorized') {
+      payment = await razorpayRequest(
+        `/payments/${encodeURIComponent(paymentId)}/capture`,
+        'POST',
+        { amount: plan.amount * 100, currency: 'INR' },
+        config.keyId,
+        config.keySecret
+      );
+    }
+
+    if (payment.status !== 'captured') {
       res.status(400).json({ message: 'Payment was not captured for the selected plan' });
       return;
     }
