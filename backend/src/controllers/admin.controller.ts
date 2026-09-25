@@ -681,3 +681,36 @@ export const toggleHotelStatus = async (req: AuthRequest, res: Response): Promis
     res.status(500).json({ message: 'Failed to toggle hotel status' });
   }
 };
+
+// ═══════════════════════════════════════════════════════════════════════
+//  DELETE /admin/hotels/:id — permanently delete hotel and all data
+// ═══════════════════════════════════════════════════════════════════════
+export const deleteHotel = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    
+    // 1. Delete associated users for this restaurant
+    await query(`DELETE FROM "User" WHERE "restaurantId" = $1;`, [id]);
+    
+    // 2. Delete feedback and admin notifications referencing this restaurant
+    await query(`DELETE FROM "Feedback" WHERE "restaurantId" = $1;`, [id]).catch(() => {});
+    await query(`DELETE FROM "AdminNotification" WHERE "restaurantId" = $1;`, [id]).catch(() => {});
+
+    // 3. Delete restaurant (cascades to Subscription, Category, FoodItem, Order, OrderItem, Table, Payment)
+    const result = await query(
+      `DELETE FROM "Restaurant" WHERE "id" = $1 RETURNING "id", "name";`,
+      [id]
+    );
+
+    if (!result.rows.length) {
+      res.status(404).json({ message: 'Restaurant not found' });
+      return;
+    }
+
+    res.json({ message: `Restaurant "${result.rows[0].name}" and all associated data deleted successfully.` });
+  } catch (error) {
+    console.error('deleteHotel error:', error);
+    res.status(500).json({ message: 'Failed to delete restaurant' });
+  }
+};
+

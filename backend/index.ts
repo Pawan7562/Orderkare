@@ -1,3 +1,8 @@
+import dns from 'dns';
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {}
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -18,8 +23,8 @@ import adRoutes from './src/routes/ad.routes';
 import planRoutes from './src/routes/plan.routes';
 import settingsRoutes from './src/routes/settings.routes';
 import adminRoutes from './src/routes/admin.routes';
+import devopsRoutes from './src/routes/devops.routes';
 import { initSocket } from './src/utils/socket';
-
 
 dotenv.config();
 
@@ -145,6 +150,10 @@ app.use('/api/admin', adminRoutes);
 app.use('/admin', adminRoutes);
 app.use('/api/v1/super-admin', adminRoutes);
 app.use('/api/super-admin', adminRoutes);
+
+app.use('/api/v1/devops', devopsRoutes);
+app.use('/api/devops', devopsRoutes);
+app.use('/devops', devopsRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

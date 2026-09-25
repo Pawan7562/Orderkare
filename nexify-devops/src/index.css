@@ -1,0 +1,157 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --bg-canvas: #F8FAFC;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #F1F5F9;
+  --text-main: #0F172A;
+  --text-muted: #64748B;
+  --accent-primary: #059669;
+  --accent-glow: rgba(5, 150, 105, 0.12);
+  --accent-text: #047857;
+  --accent-border: rgba(5, 150, 105, 0.25);
+  --card-border: #E2E8F0;
+  --gradient-btn: linear-gradient(135deg, #059669 0%, #047857 100%);
+}
+
+body {
+  margin: 0;
+  background-color: #F8FAFC;
+  background-image: 
+    radial-gradient(1200px 600px at 50% -100px, rgba(5, 150, 105, 0.05), transparent 70%),
+    radial-gradient(800px 400px at 90% 150px, rgba(16, 185, 129, 0.03), transparent 60%);
+  color: #0F172A;
+  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Sleek Scrollbar for White Theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Enterprise White Card Utilities (Stripe/Linear style) */
+.enterprise-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.enterprise-card-hover:hover {
+  border-color: #CBD5E1;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.06), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
+}
+
+.theme-btn-primary {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  color: #FFFFFF;
+  font-weight: 600;
+  box-shadow: 0 2px 8px -1px rgba(5, 150, 105, 0.3);
+  transition: all 0.2s ease;
+}
+.theme-btn-primary:hover {
+  background: linear-gradient(135deg, #047857 0%, #065F46 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px -1px rgba(5, 150, 105, 0.4);
+}
+
+.theme-accent-badge {
+  background-color: #ECFDF5;
+  color: #047857;
+  border: 1px solid #A7F3D0;
+}
+
+/* ── Print Optimization for Enterprise Invoices & Tax Statements ── */
+@media print {
+  body {
+    background: #FFFFFF !important;
+    background-image: none !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .no-print,
+  nav,
+  aside,
+  header,
+  .no-print-area,
+  button,
+  .sidebar,
+  .topbar {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .printable-invoice-sheet,
+  .printable-audit-sheet,
+  .printable-soc2-sheet,
+  .printable-incident-sheet,
+  .printable-api-sheet,
+  .printable-mobile-sheet {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 10mm !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    font-size: 10pt !important;
+    page-break-after: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .printable-invoice-sheet table,
+  .printable-audit-sheet table,
+  .printable-soc2-sheet table,
+  .printable-incident-sheet table,
+  .printable-api-sheet table,
+  .printable-mobile-sheet table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  .printable-invoice-sheet th,
+  .printable-invoice-sheet td,
+  .printable-audit-sheet th,
+  .printable-audit-sheet td,
+  .printable-soc2-sheet th,
+  .printable-soc2-sheet td,
+  .printable-incident-sheet th,
+  .printable-incident-sheet td,
+  .printable-api-sheet th,
+  .printable-api-sheet td,
+  .printable-mobile-sheet th,
+  .printable-mobile-sheet td {
+    border-color: #E2E8F0 !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
+}

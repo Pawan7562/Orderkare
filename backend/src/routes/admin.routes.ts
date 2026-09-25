@@ -8,6 +8,7 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
   toggleHotelStatus,
+  deleteHotel,
 } from '../controllers/admin.controller';
 import { authenticateToken, requireRole } from '../middleware/auth.middleware';
 
@@ -24,5 +25,6 @@ router.get('/notifications', getAdminNotifications);
 router.post('/notifications/read-all', markAllNotificationsRead);
 router.post('/notifications/:id/read', markNotificationRead);
 router.put('/hotels/:id/toggle', toggleHotelStatus);
+router.delete('/hotels/:id', deleteHotel);
 
 export default router;

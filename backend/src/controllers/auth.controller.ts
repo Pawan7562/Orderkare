@@ -1,11 +1,13 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import type { PoolClient } from 'pg';
 import { Role } from '@prisma/client';
 import { generateToken } from '../utils/jwt';
-import { query } from '../lib/db';
+import { db, query } from '../lib/db';
 import { AuthRequest } from '../middleware/auth.middleware';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
+  let client: PoolClient | undefined;
   try {
     const { email, password, name, restaurantName, address, phone } = req.body;
 
@@ -14,30 +16,47 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    if (String(password).length < 6) {
+      res.status(400).json({ message: 'Password must be at least 6 characters long' });
+      return;
+    }
+
+    client = await db.connect();
     const cleanEmail = email.trim().toLowerCase();
     const slug = restaurantName.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.random().toString(36).substring(2, 6);
     const hashedPassword = await bcrypt.hash(password, 10);
     const hotelId = 'hotel-' + Math.random().toString(36).substring(2, 8);
     const userId = 'user-' + Math.random().toString(36).substring(2, 8);
 
+    await client.query('BEGIN');
+
+    // Keep optional payment fields available for older databases before creating the pending subscription.
+    await client.query(`
+      ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "amountPaid" DOUBLE PRECISION NOT NULL DEFAULT 0;
+    `);
+    await client.query(`
+      ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "paymentReference" TEXT;
+    `);
+
     // 1. Check if user exists in Neon DB
-    const existingUser = await query(`SELECT * FROM "User" WHERE "email" = $1 LIMIT 1;`, [cleanEmail]);
+    const existingUser = await client.query(`SELECT * FROM "User" WHERE "email" = $1 LIMIT 1;`, [cleanEmail]);
     if (existingUser.rows && existingUser.rows.length > 0) {
+      await client.query('ROLLBACK');
       res.status(400).json({ message: 'Email already registered. Please sign in.' });
       return;
     }
 
-    // 2. Insert Restaurant directly into Neon PostgreSQL with PENDING status until ₹1 activation
-    const restRes = await query(
-      `INSERT INTO "Restaurant" ("id", "name", "slug", "address", "phone", "subscriptionStatus", "isActive")
-       VALUES ($1, $2, $3, $4, $5, 'PENDING', true)
+    // 2. Insert the restaurant in its initial pending state.
+    const restRes = await client.query(
+      `INSERT INTO "Restaurant" ("id", "name", "slug", "address", "phone")
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *;`,
       [hotelId, restaurantName, slug, address || 'Main City Plaza', phone || '']
     );
     const restaurant = restRes.rows[0];
 
     // 3. Insert User directly into Neon PostgreSQL
-    const userRes = await query(
+    const userRes = await client.query(
       `INSERT INTO "User" ("id", "email", "password", "name", "role", "restaurantId")
        VALUES ($1, $2, $3, $4, 'RESTAURANT_ADMIN', $5)
        RETURNING "id", "email", "name", "role", "restaurantId";`,
@@ -47,12 +66,14 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     // 4. Create initial PENDING Subscription record
     const subId = 'sub-' + Math.random().toString(36).substring(2, 8);
-    await query(
-      `INSERT INTO "Subscription" ("id", "status", "planName", "amountPaid", "restaurantId", "createdAt", "updatedAt")
-       VALUES ($1, 'PENDING', 'NONE', 0, $2, NOW(), NOW())
+    await client.query(
+      `INSERT INTO "Subscription" ("id", "status", "planName", "validUntil", "amountPaid", "restaurantId")
+       VALUES ($1, 'PENDING', 'NONE', NOW(), 0, $2)
        ON CONFLICT ("restaurantId") DO NOTHING;`,
       [subId, hotelId]
-    ).catch(() => {});
+    );
+
+    await client.query('COMMIT');
 
     // Newly created admin starts with clean state
     const fullUser = {
@@ -77,8 +98,11 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       restaurant
     });
   } catch (error) {
+    await client?.query('ROLLBACK').catch(() => {});
     console.error('Register error:', error);
     res.status(500).json({ message: 'Registration failed. Please try again.' });
+  } finally {
+    client?.release();
   }
 };
 

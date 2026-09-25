@@ -71,7 +71,6 @@ const CLIENTS = [
 
 export const LandingPage: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [legalModal, setLegalModal] = useState<'privacy' | 'terms' | null>(null);
   const [email, setEmail] = useState('');
@@ -88,7 +87,6 @@ export const LandingPage: React.FC = () => {
     { label: 'Features', href: '#features' },
     { label: 'How It Works', href: '#how-it-works' },
     { label: 'Platform', href: '#platform' },
-    { label: 'Pricing', href: '#pricing' },
     { label: 'FAQ', href: '#faq' },
   ];
 
@@ -238,55 +236,6 @@ export const LandingPage: React.FC = () => {
     },
   ];
 
-  const [plans, setPlans] = useState<any[]>([
-    {
-      name: 'Starter Plan',
-      price: { monthly: '₹999', yearly: '₹799' },
-      desc: 'Ideal for small cafes, bakeries & food trucks',
-      features: [
-        'Up to 30 Food Items',
-        'Custom Table QR Generator',
-        'Real-time Digital Menu',
-        'Kitchen Display Screen (KDS)',
-        'Basic Daily Analytics',
-        'Email & Chat Support'
-      ],
-      cta: 'Start Free Trial',
-      ctaLink: '/register',
-      popular: false
-    },
-    {
-      name: 'Professional Plan',
-      price: { monthly: '₹1,999', yearly: '₹1,599' },
-      desc: 'For busy restaurants & high-volume dining rooms',
-      features: [
-        'Unlimited Dishes & Categories',
-        'Sub-second WebSocket KDS Feed',
-        'Real-Time Kitchen Audio Ringtone',
-        'Live Customer Feedback & Rating System',
-        'Staff & Waiter Operations Console',
-        '24/7 Priority Support'
-      ],
-      cta: 'Start 14-Day Free Trial',
-      ctaLink: '/register',
-      popular: true
-    },
-    {
-      name: 'Enterprise Plan',
-      price: { monthly: '₹4,999', yearly: '₹3,999' },
-      desc: 'Multi-branch restaurant chains & hotel groups',
-      features: [
-        'Multi-Branch Centralized Console',
-        'White-Label Custom Domain Branding',
-        'Dedicated Account Manager',
-        'Custom Direct UPI Zero Fee Setup',
-        '99.99% Uptime SLA'
-      ],
-      cta: 'Talk to Enterprise Sales',
-      ctaLink: '/register',
-      popular: false
-    }
-  ]);
   const [supportEmail, setSupportEmail] = useState('support@orderkare.com');
   const [supportPhone, setSupportPhone] = useState('+91 98765 43210');
 
@@ -296,25 +245,6 @@ export const LandingPage: React.FC = () => {
         ? 'http://localhost:5000/api/v1'
         : 'https://orderkare-3.onrender.com/api/v1'
     );
-    axios.get(`${API}/plans`)
-      .then(res => {
-        if (res.data?.plans && Array.isArray(res.data.plans) && res.data.plans.length > 0) {
-          const mapped = res.data.plans.map((p: any) => ({
-            name: p.name,
-            price: {
-              monthly: typeof p.priceMonthly === 'number' ? `₹${p.priceMonthly.toLocaleString('en-IN')}` : p.priceMonthly,
-              yearly: typeof p.priceYearly === 'number' ? `₹${p.priceYearly.toLocaleString('en-IN')}` : p.priceYearly,
-            },
-            desc: p.description,
-            features: Array.isArray(p.features) ? p.features : [],
-            cta: p.ctaText || 'Start Free Trial',
-            ctaLink: p.ctaLink || '/register',
-            popular: Boolean(p.isPopular)
-          }));
-          setPlans(mapped);
-        }
-      })
-      .catch(() => {});
 
     axios.get(`${API}/settings/public`)
       .then(res => {
@@ -936,107 +866,6 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* ═══════════════════════════════ PRICING SECTION ═══════════════════════════════ */}
-      <section id="pricing" className="py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: '-60px' }}
-            variants={stagger}
-            className="text-center max-w-2xl mx-auto mb-12 space-y-3"
-          >
-            <motion.p variants={fadeUp} custom={0} className="text-xs font-bold text-orange-600 uppercase tracking-widest">
-              Simple Pricing
-            </motion.p>
-            <motion.h2 variants={fadeUp} custom={1} className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-              0% commission. Keep every rupee.
-            </motion.h2>
-            <motion.p variants={fadeUp} custom={2} className="text-slate-600 text-base">
-              Predictable flat monthly subscription. No per-order cuts or hidden transaction charges.
-            </motion.p>
-
-            {/* Monthly / Yearly Toggle */}
-            <motion.div variants={fadeUp} custom={3} className="flex justify-center pt-3">
-              <div className="inline-flex bg-slate-100 p-1.5 rounded-xl border border-slate-200">
-                {(['monthly', 'yearly'] as const).map(c => (
-                  <button
-                    key={c}
-                    onClick={() => setBillingCycle(c)}
-                    className={`px-6 py-2 rounded-lg text-xs font-bold transition-all ${billingCycle === c ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
-                  >
-                    {c === 'yearly' ? (
-                      <span className="flex items-center gap-1.5">
-                        Yearly <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-1.5 py-0.5 rounded-md">Save 20%</span>
-                      </span>
-                    ) : 'Monthly'}
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          </motion.div>
-
-          {/* Pricing Cards Grid */}
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: '-40px' }}
-            variants={stagger}
-            className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto"
-          >
-            {plans.map((plan, i) => (
-              <motion.div
-                key={i}
-                variants={fadeLeft}
-                custom={i}
-                whileHover={{ y: -5, transition: { duration: 0.2 } }}
-                className={`relative flex flex-col justify-between rounded-2xl p-7 text-left transition-all ${
-                  plan.popular
-                    ? 'bg-white border-2 border-orange-500 shadow-xl shadow-orange-500/10'
-                    : 'bg-white border border-slate-200/90 shadow-xs hover:shadow-md'
-                }`}
-              >
-                {plan.popular && (
-                  <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-orange-500 to-rose-500 text-white text-[11px] font-extrabold uppercase px-3.5 py-1 rounded-full shadow-md shadow-orange-500/30">
-                    Most Popular
-                  </span>
-                )}
-                <div>
-                  <h4 className="text-lg font-bold text-slate-900 mb-1">{plan.name}</h4>
-                  <p className="text-xs text-slate-500 mb-6">{plan.desc}</p>
-                  <div className="flex items-baseline mb-6">
-                    <span className="text-4xl font-black text-slate-900 tracking-tight">
-                      {plan.price[billingCycle]}
-                    </span>
-                    {plan.price[billingCycle] !== 'Custom' && (
-                      <span className="text-xs text-slate-500 ml-1.5 font-medium">/ month</span>
-                    )}
-                  </div>
-                  <ul className="space-y-3 mb-8">
-                    {(plan.features || []).map((feat: string, fi: number) => (
-                      <li key={fi} className="flex items-center gap-2.5 text-xs sm:text-sm text-slate-700">
-                        <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>{feat}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <Link
-                  to={plan.ctaLink || "/register"}
-                  className={`block w-full py-3.5 rounded-xl font-bold text-center text-sm transition-all active:scale-95 ${
-                    plan.popular
-                      ? 'bg-gradient-to-r from-orange-500 to-rose-500 text-white hover:from-orange-600 hover:to-rose-600 shadow-md shadow-orange-500/25'
-                      : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
-                  }`}
-                >
-                  {plan.cta}
-                </Link>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
       {/* ═══════════════════════════════ FAQ SECTION ═══════════════════════════════ */}
       <section id="faq" className="py-24 bg-slate-50/80 border-t border-slate-200/70">
         <div className="max-w-3xl mx-auto px-4 sm:px-6">
@@ -1220,7 +1049,6 @@ export const LandingPage: React.FC = () => {
                 <li><a href="#platform" className="hover:text-orange-600 transition-colors">Kitchen Display (KDS)</a></li>
                 <li><a href="#features" className="hover:text-orange-600 transition-colors">Digital Menu Builder</a></li>
                 <li><a href="#platform" className="hover:text-orange-600 transition-colors">UPI Soundbox Sync</a></li>
-                <li><a href="#pricing" className="hover:text-orange-600 transition-colors">Pricing & Plans</a></li>
               </ul>
             </div>
 
