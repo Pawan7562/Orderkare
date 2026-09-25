@@ -26,7 +26,7 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
     return;
   }
 
-  jwt.verify(token, getJwtSecret(), (err, decoded) => {
+  jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] }, (err, decoded) => {
     if (err) {
       res.status(403).json({ message: 'Invalid or expired token' });
       return;

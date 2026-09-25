@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '../store/authStore';
 import api from '../lib/api';
+import { getSocketUrl } from '../lib/socket';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, ShoppingBag, X, CheckCircle2 } from 'lucide-react';
 
@@ -58,11 +59,7 @@ export const GlobalOrderNotifier: React.FC = () => {
       Notification.requestPermission().catch(() => undefined);
     }
 
-    const socketUrl =
-      import.meta.env.VITE_WS_URL ||
-      (import.meta.env.VITE_API_URL
-        ? import.meta.env.VITE_API_URL.replace(/\/api\/v1\/?$/, '').replace(/\/api\/?$/, '')
-        : 'https://orderkare-3.onrender.com');
+    const socketUrl = getSocketUrl();
 
     const socket: Socket = io(socketUrl, {
       auth: { token },
@@ -99,6 +96,9 @@ export const GlobalOrderNotifier: React.FC = () => {
     let isMounted = true;
 
     const pollPending = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
       try {
         const res = await api.get('/orders?status=PENDING');
         const list: IncomingOrder[] = res.data.orders || res.data || [];
@@ -127,7 +127,7 @@ export const GlobalOrderNotifier: React.FC = () => {
     };
 
     pollPending();
-    const interval = setInterval(pollPending, 4000);
+    const interval = setInterval(pollPending, 20000);
     return () => {
       isMounted = false;
       clearInterval(interval);

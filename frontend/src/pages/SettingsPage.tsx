@@ -7,11 +7,24 @@ import { PaymentModal } from '../components/PaymentModal';
 
 export const SettingsPage = () => {
   const { user } = useAuthStore();
-  const [restaurant, setRestaurant] = useState<any>(null);
-  const [subscription, setSubscription] = useState<any>(null);
+  const [restaurant, setRestaurant] = useState<any>(() => {
+    try {
+      const cached = localStorage.getItem('orderkare_restaurant');
+      return cached ? JSON.parse(cached) : (user as any)?.restaurant || null;
+    } catch {
+      return (user as any)?.restaurant || null;
+    }
+  });
+  const [subscription, setSubscription] = useState<any>(() => {
+    try {
+      const cached = localStorage.getItem('orderkare_dash_sub');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
   const [copied, setCopied] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [loading, setLoading] = useState(true);
 
   const fetchSettings = async () => {
     try {
@@ -19,12 +32,17 @@ export const SettingsPage = () => {
         api.get('/auth/me'),
         api.get('/subscriptions/status').catch(() => ({ data: { isSubscribed: false, isFirstTime: true } })),
       ]);
-      setRestaurant(resMe.data.user?.restaurant);
-      setSubscription(resSub.data);
+      const rest = resMe.data.user?.restaurant;
+      if (rest) {
+        setRestaurant(rest);
+        try { localStorage.setItem('orderkare_restaurant', JSON.stringify(rest)); } catch {}
+      }
+      if (resSub.data) {
+        setSubscription(resSub.data);
+        try { localStorage.setItem('orderkare_dash_sub', JSON.stringify(resSub.data)); } catch {}
+      }
     } catch {
       /* empty */
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -37,10 +55,11 @@ export const SettingsPage = () => {
   const restaurantName = restaurant?.name || user?.name || 'Restaurant';
 
   const menuUrl = (() => {
-    if (!restaurant?.slug) return '';
+    const slug = restaurant?.slug || user?.restaurantId;
+    if (!slug) return '';
     const baseOrigin = import.meta.env.VITE_PUBLIC_APP_URL || window.location.origin;
     const normalizedOrigin = baseOrigin.replace(/\/$/, '');
-    return `${normalizedOrigin}/menu/${restaurant.slug}`;
+    return `${normalizedOrigin}/menu/${slug}`;
   })();
 
   const handleCopy = () => {
@@ -56,15 +75,6 @@ export const SettingsPage = () => {
     link.download = `${restaurant?.name || 'restaurant'}-master-qr.png`;
     link.click();
   };
-
-  if (loading) {
-    return (
-      <div className="animate-pulse space-y-6 max-w-3xl">
-        <div className="h-8 w-48 bg-slate-200 rounded-lg" />
-        <div className="h-64 bg-slate-200 rounded-2xl" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6 max-w-3xl pb-12">

@@ -39,10 +39,30 @@ interface Table {
 export const TablesPage = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const [tables, setTables] = useState<Table[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [restaurant, setRestaurant] = useState<any>(null);
-  const [subscription, setSubscription] = useState<any>(null);
+  const [tables, setTables] = useState<Table[]>(() => {
+    try {
+      const cached = localStorage.getItem('orderkare_tables_cache');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [restaurant, setRestaurant] = useState<any>(() => {
+    try {
+      const cached = localStorage.getItem('orderkare_restaurant');
+      return cached ? JSON.parse(cached) : (user as any)?.restaurant || null;
+    } catch {
+      return (user as any)?.restaurant || null;
+    }
+  });
+  const [subscription, setSubscription] = useState<any>(() => {
+    try {
+      const cached = localStorage.getItem('orderkare_dash_sub');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
 
   // Add Table Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -61,13 +81,21 @@ export const TablesPage = () => {
         api.get('/auth/me'),
         api.get('/subscriptions/status').catch(() => ({ data: { isSubscribed: false, isFirstTime: true } })),
       ]);
-      setTables(resTables.data?.tables || []);
-      setRestaurant(resMe.data?.user?.restaurant);
-      setSubscription(resSub.data);
+      const fetchedTables = resTables.data?.tables || [];
+      const fetchedRest = resMe.data?.user?.restaurant;
+      const fetchedSub = resSub.data;
+
+      setTables(fetchedTables);
+      if (fetchedRest) setRestaurant(fetchedRest);
+      if (fetchedSub) setSubscription(fetchedSub);
+
+      try {
+        localStorage.setItem('orderkare_tables_cache', JSON.stringify(fetchedTables));
+        if (fetchedRest) localStorage.setItem('orderkare_restaurant', JSON.stringify(fetchedRest));
+        if (fetchedSub) localStorage.setItem('orderkare_dash_sub', JSON.stringify(fetchedSub));
+      } catch {}
     } catch (err) {
       console.error('Failed to fetch tables:', err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -188,20 +216,6 @@ export const TablesPage = () => {
       alert(err.response?.data?.message || 'Failed to update table status');
     }
   };
-
-  if (loading) {
-    return (
-      <div className="space-y-6 max-w-6xl mx-auto animate-pulse">
-        <div className="h-8 w-60 bg-slate-200 rounded-xl" />
-        <div className="h-64 bg-slate-100 rounded-3xl border border-slate-200" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="h-40 bg-slate-100 rounded-3xl border border-slate-200" />
-          <div className="h-40 bg-slate-100 rounded-3xl border border-slate-200" />
-          <div className="h-40 bg-slate-100 rounded-3xl border border-slate-200" />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-12">

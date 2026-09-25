@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { io, Socket } from 'socket.io-client';
+import { getSocketUrl } from '../lib/socket';
 import api from '../lib/api';
 
 interface AdminNotification {
@@ -68,11 +69,7 @@ export const SuperAdminLayout = () => {
   useEffect(() => {
     fetchNotifications();
 
-    const socketUrl =
-      import.meta.env.VITE_WS_URL ||
-      (import.meta.env.VITE_API_URL
-        ? import.meta.env.VITE_API_URL.replace(/\/api\/v1\/?$/, '').replace(/\/api\/?$/, '')
-        : 'https://orderkare-3.onrender.com');
+    const socketUrl = getSocketUrl();
 
     const token = localStorage.getItem('token');
     const socket: Socket = io(socketUrl, {

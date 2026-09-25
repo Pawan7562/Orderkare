@@ -4,6 +4,7 @@ import api from '../lib/api';
 import { ShoppingBag, IndianRupee, Clock, Grid2X2, RefreshCcw, QrCode, Sparkles, Lock, ArrowRight, Crown } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { io } from 'socket.io-client';
+import { getSocketUrl } from '../lib/socket';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PaymentModal } from '../components/PaymentModal';
 
@@ -42,42 +43,134 @@ interface FeedbackItem {
 export const DashboardPage = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const [stats, setStats] = useState<DashboardStats>({
-    todayOrders: 0, todaySales: 0, pendingOrders: 0, activeTables: 0, totalTables: 0
+  const [stats, setStats] = useState<DashboardStats>(() => {
+    try {
+      const cached = localStorage.getItem('orderkare_dash_stats');
+      return cached ? JSON.parse(cached) : { todayOrders: 0, todaySales: 0, pendingOrders: 0, activeTables: 0, totalTables: 20 };
+    } catch {
+      return { todayOrders: 0, todaySales: 0, pendingOrders: 0, activeTables: 0, totalTables: 20 };
+    }
   });
-  const [pendingOrders, setPendingOrders] = useState<RecentOrder[]>([]);
-  const [preparingOrders, setPreparingOrders] = useState<RecentOrder[]>([]);
-  const [recentFeedback, setRecentFeedback] = useState<FeedbackItem[]>([]);
-  const [subscription, setSubscription] = useState<any>(null);
+  const [pendingOrders, setPendingOrders] = useState<RecentOrder[]>(() => {
+    try {
+      const cached = localStorage.getItem('orderkare_dash_pending_orders');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [preparingOrders, setPreparingOrders] = useState<RecentOrder[]>(() => {
+    try {
+      const cached = localStorage.getItem('orderkare_dash_prep_orders');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [recentFeedback, setRecentFeedback] = useState<FeedbackItem[]>(() => {
+    try {
+      const cached = localStorage.getItem('orderkare_dash_feedback');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [subscription, setSubscription] = useState<any>(() => {
+    try {
+      const cached = localStorage.getItem('orderkare_dash_sub');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
   const [notification, setNotification] = useState<{ id: string; title: string; message: string } | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData = async (showSyncIndicator = false) => {
+    if (showSyncIndicator) setIsRefreshing(true);
     try {
-      const [statsRes, ordersRes, feedbackRes, subRes] = await Promise.all([
-        api.get('/restaurants/dashboard/stats'),
-        api.get('/orders?status=PENDING,ACCEPTED,PREPARING'),
-        api.get('/orders/feedback'),
-        api.get('/subscriptions/status').catch(() => ({ data: { isSubscribed: false } })),
-      ]);
-      const d = statsRes.data || {};
-      setStats({
-        todayOrders: d.todayOrders || 0,
-        todaySales: d.todaySales ?? d.todayRevenue ?? 0,
-        pendingOrders: d.pendingOrders ?? d.activeOrders ?? 0,
-        activeTables: d.activeTables || 0,
-        totalTables: d.totalTables ?? 0,
-      });
-      const orders = ordersRes.data?.orders || [];
-      setPendingOrders(orders.filter((o: RecentOrder) => o.status === 'PENDING'));
-      setPreparingOrders(orders.filter((o: RecentOrder) => o.status === 'PREPARING' || o.status === 'ACCEPTED'));
-      setRecentFeedback(feedbackRes.data?.feedback || []);
-      setSubscription(subRes.data);
-    } catch (err) {
-      // Silently fail — server may not have data yet
+      // 1. Try single fast overview endpoint
+      const res = await api.get('/restaurants/dashboard/overview');
+      const data = res.data;
+      if (data && data.stats) {
+        const newStats: DashboardStats = {
+          todayOrders: data.stats.todayOrders || 0,
+          todaySales: data.stats.todaySales ?? data.stats.todayRevenue ?? 0,
+          pendingOrders: data.stats.pendingOrders ?? data.stats.activeOrders ?? 0,
+          activeTables: data.stats.activeTables || 0,
+          totalTables: data.stats.totalTables || 20,
+        };
+        setStats(newStats);
+        try { localStorage.setItem('orderkare_dash_stats', JSON.stringify(newStats)); } catch {}
+
+        const rawOrders = data.orders || [];
+        const pending = rawOrders.filter((o: RecentOrder) => o.status === 'PENDING');
+        const preparing = rawOrders.filter((o: RecentOrder) => o.status === 'PREPARING' || o.status === 'ACCEPTED');
+        setPendingOrders(pending);
+        setPreparingOrders(preparing);
+        try {
+          localStorage.setItem('orderkare_dash_pending_orders', JSON.stringify(pending));
+          localStorage.setItem('orderkare_dash_prep_orders', JSON.stringify(preparing));
+        } catch {}
+
+        if (data.subscription) {
+          setSubscription(data.subscription);
+          try { localStorage.setItem('orderkare_dash_sub', JSON.stringify(data.subscription)); } catch {}
+        }
+
+        if (data.feedback) {
+          setRecentFeedback(data.feedback);
+          try { localStorage.setItem('orderkare_dash_feedback', JSON.stringify(data.feedback)); } catch {}
+        }
+        return;
+      }
+    } catch (overviewErr) {
+      // Graceful fallback to separate endpoints
+      try {
+        const [statsRes, ordersRes, fbRes, subRes] = await Promise.allSettled([
+          api.get('/restaurants/dashboard/stats'),
+          api.get('/orders?status=PENDING,ACCEPTED,PREPARING'),
+          api.get('/orders/feedback'),
+          api.get('/subscriptions/status')
+        ]);
+
+        if (statsRes.status === 'fulfilled') {
+          const d = statsRes.value.data || {};
+          const newStats: DashboardStats = {
+            todayOrders: d.todayOrders || 0,
+            todaySales: d.todaySales ?? d.todayRevenue ?? 0,
+            pendingOrders: d.pendingOrders ?? d.activeOrders ?? 0,
+            activeTables: d.activeTables || 0,
+            totalTables: d.totalTables || 20,
+          };
+          setStats(newStats);
+          try { localStorage.setItem('orderkare_dash_stats', JSON.stringify(newStats)); } catch {}
+        }
+
+        if (ordersRes.status === 'fulfilled') {
+          const orders = ordersRes.value.data?.orders || [];
+          const pending = orders.filter((o: RecentOrder) => o.status === 'PENDING');
+          const preparing = orders.filter((o: RecentOrder) => o.status === 'PREPARING' || o.status === 'ACCEPTED');
+          setPendingOrders(pending);
+          setPreparingOrders(preparing);
+          try {
+            localStorage.setItem('orderkare_dash_pending_orders', JSON.stringify(pending));
+            localStorage.setItem('orderkare_dash_prep_orders', JSON.stringify(preparing));
+          } catch {}
+        }
+
+        if (fbRes.status === 'fulfilled') {
+          setRecentFeedback(fbRes.value.data?.feedback || []);
+        }
+
+        if (subRes.status === 'fulfilled') {
+          setSubscription(subRes.value.data);
+          try { localStorage.setItem('orderkare_dash_sub', JSON.stringify(subRes.value.data)); } catch {}
+        }
+      } catch {}
     } finally {
-      setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -89,7 +182,7 @@ export const DashboardPage = () => {
     }
 
     const { token, user } = useAuthStore.getState();
-    const socketUrl = import.meta.env.VITE_WS_URL || (import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/v1\/?$/, '').replace(/\/api\/?$/, '') : 'https://orderkare-3.onrender.com');
+    const socketUrl = getSocketUrl();
     const socket = io(socketUrl, {
       auth: { token },
       transports: ['websocket', 'polling'],
@@ -170,10 +263,12 @@ export const DashboardPage = () => {
       fetchData();
     });
 
-    // Resilient Polling Fallback (every 6s)
+    // Resilient Polling Fallback (every 15s, paused when tab is in background)
     const interval = setInterval(() => {
-      fetchData();
-    }, 6000);
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchData();
+      }
+    }, 15000);
 
     return () => {
       clearInterval(interval);
@@ -209,21 +304,6 @@ export const DashboardPage = () => {
     container: { hidden: {}, show: { transition: { staggerChildren: 0.07 } } },
     item: { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { duration: 0.35 } } },
   };
-
-  if (loading) {
-    return (
-      <div className="animate-pulse space-y-6">
-        <div className="h-8 w-64 bg-slate-200 rounded-lg" />
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-          {[1,2,3,4].map(i => <div key={i} className="h-32 bg-slate-200 rounded-3xl" />)}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 h-80 bg-slate-200 rounded-3xl" />
-          <div className="h-80 bg-slate-200 rounded-3xl" />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <motion.div className="space-y-7" variants={stagger.container} initial="hidden" animate="show">
@@ -264,9 +344,9 @@ export const DashboardPage = () => {
             <QrCode className="w-4 h-4" />
             <span>{subscription?.isSubscribed ? 'Master QR Standee & Tables' : 'Unlock Master QR (₹1)'}</span>
           </button>
-          <button onClick={fetchData} className="flex items-center space-x-2 bg-white text-slate-600 border border-slate-200 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all cursor-pointer">
-            <RefreshCcw className="w-4 h-4" />
-            <span>Refresh</span>
+          <button onClick={() => fetchData(true)} className="flex items-center space-x-2 bg-white text-slate-600 border border-slate-200 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all cursor-pointer">
+            <RefreshCcw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-primary' : ''}`} />
+            <span>{isRefreshing ? 'Syncing...' : 'Refresh'}</span>
           </button>
         </div>
       </motion.div>

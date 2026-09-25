@@ -116,6 +116,9 @@ model Order {
   items        OrderItem[]
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
+
+  @@index([restaurantId, status, createdAt(sort: Desc)])
+  @@index([restaurantId, createdAt(sort: Desc)])
 }
 
 model OrderItem {
@@ -126,4 +129,6 @@ model OrderItem {
   foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
   orderId    String
   order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
 }

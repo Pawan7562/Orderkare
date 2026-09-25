@@ -14,19 +14,28 @@ const plans: Record<string, { amount: number; days: number; status: 'ACTIVE' | '
 
 const getPlan = (value: unknown) => plans[String(value || '').toUpperCase().trim()];
 
+let cachedRazorpayConfig: any = null;
+let lastRazorpayFetch = 0;
+
 const getRazorpayConfig = async () => {
+  const now = Date.now();
+  if (cachedRazorpayConfig && now - lastRazorpayFetch < 60000) {
+    return cachedRazorpayConfig;
+  }
   const result = await query(`
     SELECT "razorpayKeyId", "razorpayKeySecret", "defaultUpiId", COALESCE("paymentMode", 'live') AS "paymentMode"
     FROM "SystemSettings" WHERE "id" = 'default' LIMIT 1;
   `).catch(() => ({ rows: [] }));
   const settings = result.rows[0];
-  return {
+  cachedRazorpayConfig = {
     keyId: process.env.RAZORPAY_KEY_ID?.trim() || settings?.razorpayKeyId?.trim() || '',
     keySecret: process.env.RAZORPAY_KEY_SECRET?.trim() || settings?.razorpayKeySecret?.trim() || '',
     upiId: settings?.defaultUpiId?.trim() || '',
     paymentMode: process.env.RAZORPAY_MODE?.trim() || settings?.paymentMode || 'live',
     webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET?.trim() || '',
   };
+  lastRazorpayFetch = now;
+  return cachedRazorpayConfig;
 };
 
 const razorpayRequest = async (path: string, method: 'GET' | 'POST', body: unknown, keyId: string, keySecret: string) => {
@@ -180,38 +189,51 @@ export const handleRazorpayWebhook = async (req: Request, res: Response): Promis
   }
 };
 
+let schemaEnsured = false;
+let schemaEnsuringPromise: Promise<void> | null = null;
+
 const ensureSubscriptionSchema = async () => {
-  try {
-    // 1. Ensure SubscriptionStatus enum exists or is safe
-    await query(`
-      DO $$ BEGIN
-        CREATE TYPE "SubscriptionStatus" AS ENUM ('ACTIVE', 'TRIAL', 'EXPIRED', 'CANCELLED', 'PENDING');
-      EXCEPTION
-        WHEN duplicate_object THEN null;
-      END $$;
-    `).catch(() => {});
+  if (schemaEnsured) return;
+  if (schemaEnsuringPromise) return schemaEnsuringPromise;
 
-    // 2. Ensure Subscription table exists
-    await query(`
-      CREATE TABLE IF NOT EXISTS "Subscription" (
-        "id" TEXT PRIMARY KEY,
-        "status" TEXT NOT NULL DEFAULT 'PENDING',
-        "planName" TEXT NOT NULL DEFAULT 'NONE',
-        "amountPaid" DOUBLE PRECISION NOT NULL DEFAULT 0,
-        "paymentReference" TEXT,
-        "validUntil" TIMESTAMP(3),
-        "restaurantId" TEXT UNIQUE NOT NULL REFERENCES "Restaurant"("id") ON DELETE CASCADE,
-        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-    `).catch(() => {});
+  schemaEnsuringPromise = (async () => {
+    try {
+      // 1. Ensure SubscriptionStatus enum exists or is safe
+      await query(`
+        DO $$ BEGIN
+          CREATE TYPE "SubscriptionStatus" AS ENUM ('ACTIVE', 'TRIAL', 'EXPIRED', 'CANCELLED', 'PENDING');
+        EXCEPTION
+          WHEN duplicate_object THEN null;
+        END $$;
+      `).catch(() => {});
 
-    await query(`ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "amountPaid" DOUBLE PRECISION NOT NULL DEFAULT 0;`).catch(() => {});
-    await query(`ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "paymentReference" TEXT;`).catch(() => {});
-    await query(`ALTER TABLE "Subscription" ALTER COLUMN "validUntil" DROP NOT NULL;`).catch(() => {});
-  } catch (err) {
-    // schema already ready
-  }
+      // 2. Ensure Subscription table exists
+      await query(`
+        CREATE TABLE IF NOT EXISTS "Subscription" (
+          "id" TEXT PRIMARY KEY,
+          "status" TEXT NOT NULL DEFAULT 'PENDING',
+          "planName" TEXT NOT NULL DEFAULT 'NONE',
+          "amountPaid" DOUBLE PRECISION NOT NULL DEFAULT 0,
+          "paymentReference" TEXT,
+          "validUntil" TIMESTAMP(3),
+          "restaurantId" TEXT UNIQUE NOT NULL REFERENCES "Restaurant"("id") ON DELETE CASCADE,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `).catch(() => {});
+
+      await query(`ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "amountPaid" DOUBLE PRECISION NOT NULL DEFAULT 0;`).catch(() => {});
+      await query(`ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "paymentReference" TEXT;`).catch(() => {});
+      await query(`ALTER TABLE "Subscription" ALTER COLUMN "validUntil" DROP NOT NULL;`).catch(() => {});
+      schemaEnsured = true;
+    } catch (err) {
+      // schema already ready
+    } finally {
+      schemaEnsuringPromise = null;
+    }
+  })();
+
+  return schemaEnsuringPromise;
 };
 
 export const getSubscriptionStatus = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -222,18 +244,34 @@ export const getSubscriptionStatus = async (req: AuthRequest, res: Response): Pr
       return;
     }
 
-    await ensureSubscriptionSchema();
+    // High-performance single-query fetch for Restaurant & Subscription
+    const restRes = await query(`
+      SELECT 
+        r.id, r.name, r.slug, r."isActive", r."subscriptionStatus",
+        s.id as sub_id, s.status as sub_status, s."planName" as sub_plan_name, 
+        s."amountPaid" as sub_amount_paid, s."paymentReference" as sub_payment_reference, 
+        s."validUntil" as sub_valid_until
+      FROM "Restaurant" r
+      LEFT JOIN "Subscription" s ON s."restaurantId" = r.id
+      WHERE r.id = $1 LIMIT 1;
+    `, [restaurantId]);
 
-    // Fetch Restaurant & Subscription
-    const restRes = await query(`SELECT * FROM "Restaurant" WHERE "id" = $1 LIMIT 1;`, [restaurantId]);
     if (!restRes.rows.length) {
       res.status(404).json({ message: 'Restaurant not found' });
       return;
     }
-    const restaurant = restRes.rows[0];
 
-    const subRes = await query(`SELECT * FROM "Subscription" WHERE "restaurantId" = $1 LIMIT 1;`, [restaurantId]);
-    const sub = subRes.rows[0] || null;
+    const row = restRes.rows[0];
+    const restaurant = { id: row.id, name: row.name, slug: row.slug, isActive: row.isActive, subscriptionStatus: row.subscriptionStatus };
+    const sub = row.sub_id ? {
+      id: row.sub_id,
+      status: row.sub_status,
+      planName: row.sub_plan_name,
+      amountPaid: row.sub_amount_paid,
+      paymentReference: row.sub_payment_reference,
+      validUntil: row.sub_valid_until,
+    } : null;
+
     const now = new Date();
     let isSubscribed = false;
     let daysRemaining = 0;
@@ -272,6 +310,8 @@ export const getSubscriptionStatus = async (req: AuthRequest, res: Response): Pr
       daysRemaining = 0;
     }
 
+    const rzConfig = await getRazorpayConfig();
+
     res.json({
       restaurantId,
       restaurantName: restaurant.name,
@@ -284,8 +324,8 @@ export const getSubscriptionStatus = async (req: AuthRequest, res: Response): Pr
       daysRemaining,
       qrCodeAllowed: isSubscribed,
       payment: {
-        razorpayEnabled: Boolean((await getRazorpayConfig()).keyId),
-        upiId: (await getRazorpayConfig()).upiId,
+        razorpayEnabled: Boolean(rzConfig.keyId),
+        upiId: rzConfig.upiId,
       },
       plans: [
         {

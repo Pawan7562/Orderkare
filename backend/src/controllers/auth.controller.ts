@@ -5,6 +5,7 @@ import { Role } from '@prisma/client';
 import { generateToken } from '../utils/jwt';
 import { db, query } from '../lib/db';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { validateRealEmail } from '../utils/emailValidator';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   let client: PoolClient | undefined;
@@ -16,30 +17,33 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    if (String(password).length < 6) {
-      res.status(400).json({ message: 'Password must be at least 6 characters long' });
+    const cleanEmail = String(email).trim().toLowerCase();
+    const emailValidation = await validateRealEmail(cleanEmail);
+    if (!emailValidation.valid) {
+      res.status(400).json({ message: emailValidation.reason || 'Please provide a genuine, active email address.' });
       return;
     }
 
+    if (typeof password !== 'string' || password.length < 6 || password.length > 100) {
+      res.status(400).json({ message: 'Password must be between 6 and 100 characters long.' });
+      return;
+    }
+
+    const cleanName = String(name).trim().slice(0, 100);
+    const cleanRestaurant = String(restaurantName).trim().slice(0, 120);
+    const cleanAddress = String(address || 'Main City Plaza').trim().slice(0, 255);
+    const cleanPhone = String(phone || '').trim().slice(0, 25);
+
     client = await db.connect();
-    const cleanEmail = email.trim().toLowerCase();
-    const slug = restaurantName.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.random().toString(36).substring(2, 6);
+    const slug = cleanRestaurant.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.random().toString(36).substring(2, 6);
     const hashedPassword = await bcrypt.hash(password, 10);
     const hotelId = 'hotel-' + Math.random().toString(36).substring(2, 8);
     const userId = 'user-' + Math.random().toString(36).substring(2, 8);
 
     await client.query('BEGIN');
 
-    // Keep optional payment fields available for older databases before creating the pending subscription.
-    await client.query(`
-      ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "amountPaid" DOUBLE PRECISION NOT NULL DEFAULT 0;
-    `);
-    await client.query(`
-      ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "paymentReference" TEXT;
-    `);
-
     // 1. Check if user exists in Neon DB
-    const existingUser = await client.query(`SELECT * FROM "User" WHERE "email" = $1 LIMIT 1;`, [cleanEmail]);
+    const existingUser = await client.query(`SELECT "id" FROM "User" WHERE "email" = $1 LIMIT 1;`, [cleanEmail]);
     if (existingUser.rows && existingUser.rows.length > 0) {
       await client.query('ROLLBACK');
       res.status(400).json({ message: 'Email already registered. Please sign in.' });
@@ -51,7 +55,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       `INSERT INTO "Restaurant" ("id", "name", "slug", "address", "phone")
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *;`,
-      [hotelId, restaurantName, slug, address || 'Main City Plaza', phone || '']
+      [hotelId, cleanRestaurant, slug, cleanAddress, cleanPhone]
     );
     const restaurant = restRes.rows[0];
 
@@ -60,7 +64,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       `INSERT INTO "User" ("id", "email", "password", "name", "role", "restaurantId")
        VALUES ($1, $2, $3, $4, 'RESTAURANT_ADMIN', $5)
        RETURNING "id", "email", "name", "role", "restaurantId";`,
-      [userId, cleanEmail, hashedPassword, name, hotelId]
+      [userId, cleanEmail, hashedPassword, cleanName, hotelId]
     );
     const user = userRes.rows[0];
 
@@ -269,7 +273,7 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
     res.json({
       message: 'Password reset verification code generated.',
       email: cleanEmail,
-      resetCode, // Returned for instant zero-friction recovery flow
+      ...(process.env.NODE_ENV !== 'production' ? { resetCode } : {}),
       expiresIn: '15 minutes'
     });
   } catch (error) {

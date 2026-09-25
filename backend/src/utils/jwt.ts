@@ -10,9 +10,9 @@ const getJwtSecret = () => {
 const JWT_EXPIRES_IN = '7d';
 
 export const generateToken = (payload: object): string => {
-  return jwt.sign(payload, getJwtSecret(), { expiresIn: JWT_EXPIRES_IN });
+  return jwt.sign(payload, getJwtSecret(), { expiresIn: JWT_EXPIRES_IN, algorithm: 'HS256' });
 };
 
 export const verifyToken = (token: string) => {
-  return jwt.verify(token, getJwtSecret());
+  return jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] });
 };

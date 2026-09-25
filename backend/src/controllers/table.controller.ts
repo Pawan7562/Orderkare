@@ -2,27 +2,41 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { query } from '../lib/db';
 
+let tableSchemaEnsured = false;
+let tableSchemaEnsuringPromise: Promise<void> | null = null;
+
 const ensureTableSchema = async () => {
-  try {
-    await query(`
-      CREATE TABLE IF NOT EXISTS "Table" (
-        "id" TEXT PRIMARY KEY,
-        "tableNumber" TEXT NOT NULL,
-        "qrCodeUrl" TEXT,
-        "isOccupied" BOOLEAN NOT NULL DEFAULT false,
-        "status" TEXT NOT NULL DEFAULT 'FREE',
-        "capacity" INT NOT NULL DEFAULT 4,
-        "restaurantId" TEXT NOT NULL REFERENCES "Restaurant"("id") ON DELETE CASCADE,
-        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    await query(`ALTER TABLE "Table" ADD COLUMN IF NOT EXISTS "capacity" INT DEFAULT 4;`).catch(() => {});
-    await query(`ALTER TABLE "Table" ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'FREE';`).catch(() => {});
-    await query(`ALTER TABLE "Table" ADD COLUMN IF NOT EXISTS "isOccupied" BOOLEAN DEFAULT false;`).catch(() => {});
-  } catch (err) {
-    // schema already valid
-  }
+  if (tableSchemaEnsured) return;
+  if (tableSchemaEnsuringPromise) return tableSchemaEnsuringPromise;
+
+  tableSchemaEnsuringPromise = (async () => {
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS "Table" (
+          "id" TEXT PRIMARY KEY,
+          "tableNumber" TEXT NOT NULL,
+          "qrCodeUrl" TEXT,
+          "isOccupied" BOOLEAN NOT NULL DEFAULT false,
+          "status" TEXT NOT NULL DEFAULT 'FREE',
+          "capacity" INT NOT NULL DEFAULT 4,
+          "restaurantId" TEXT NOT NULL REFERENCES "Restaurant"("id") ON DELETE CASCADE,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      await query(`ALTER TABLE "Table" ADD COLUMN IF NOT EXISTS "capacity" INT DEFAULT 4;`).catch(() => {});
+      await query(`ALTER TABLE "Table" ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'FREE';`).catch(() => {});
+      await query(`ALTER TABLE "Table" ADD COLUMN IF NOT EXISTS "isOccupied" BOOLEAN DEFAULT false;`).catch(() => {});
+      await query(`CREATE INDEX IF NOT EXISTS "idx_table_restaurant" ON "Table"("restaurantId", "tableNumber" ASC);`).catch(() => {});
+      tableSchemaEnsured = true;
+    } catch (err) {
+      // schema already valid
+    } finally {
+      tableSchemaEnsuringPromise = null;
+    }
+  })();
+
+  return tableSchemaEnsuringPromise;
 };
 
 export const getTables = async (req: AuthRequest, res: Response): Promise<void> => {

@@ -17,7 +17,8 @@ import {
   KeyRound,
   RefreshCw,
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -64,9 +65,20 @@ export const LoginPage: React.FC = () => {
     e.preventDefault();
     setError('');
     setSuccessBanner('');
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await api.post('/auth/login', { email, password });
+      const res = await api.post('/auth/login', { email: cleanEmail, password });
       login(res.data.user, res.data.token);
       if (res.data.user.role === 'SUPER_ADMIN') {
         navigate('/admin');
@@ -74,7 +86,12 @@ export const LoginPage: React.FC = () => {
         navigate('/dashboard');
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Invalid email or password. Please try again.');
+      const msg = err.response?.data?.message;
+      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        setError('Server response timed out. Please check your internet connection and try again.');
+      } else {
+        setError(msg || 'Invalid email or password. Please verify your credentials and try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -306,8 +323,17 @@ export const LoginPage: React.FC = () => {
                 disabled={loading}
                 className="w-full bg-rose-600 hover:bg-rose-700 text-white py-3.5 px-6 rounded-xl font-bold text-sm transition-all shadow-md shadow-rose-600/20 hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-60 disabled:pointer-events-none flex items-center justify-center space-x-2 cursor-pointer"
               >
-                <span>{loading ? 'Signing in...' : 'Sign In to Dashboard'}</span>
-                {!loading && <ArrowRight className="w-4 h-4" />}
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Signing in securely...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Sign In to Dashboard</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </div>
           </form>

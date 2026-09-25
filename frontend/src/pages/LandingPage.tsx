@@ -240,11 +240,8 @@ export const LandingPage: React.FC = () => {
   const [supportPhone, setSupportPhone] = useState('+91 98765 43210');
 
   useEffect(() => {
-    const API = import.meta.env.VITE_API_URL || (
-      typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-        ? 'http://localhost:5000/api/v1'
-        : 'https://orderkare-3.onrender.com/api/v1'
-    );
+    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const API = import.meta.env.VITE_API_URL?.trim() || (isLocal ? 'http://localhost:5000/api/v1' : 'https://orderkare-3.onrender.com/api/v1');
 
     axios.get(`${API}/settings/public`)
       .then(res => {

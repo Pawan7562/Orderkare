@@ -23,36 +23,63 @@ interface FoodItem {
 }
 
 export const MenuManagementPage = () => {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [foodItems, setFoodItems] = useState<FoodItem[]>([]);
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Category[]>(() => {
+    try {
+      const cached = localStorage.getItem('orderkare_menu_cats');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [allFoods, setAllFoods] = useState<FoodItem[]>(() => {
+    try {
+      const cached = localStorage.getItem('orderkare_menu_foods');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [activeCategory, setActiveCategory] = useState<string | null>(() => {
+    try {
+      const cached = localStorage.getItem('orderkare_menu_cats');
+      const parsed = cached ? JSON.parse(cached) : [];
+      return parsed.length > 0 ? parsed[0].id : null;
+    } catch {
+      return null;
+    }
+  });
   const [showCatForm, setShowCatForm] = useState(false);
   const [showFoodForm, setShowFoodForm] = useState(false);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [editingFood, setEditingFood] = useState<FoodItem | null>(null);
   const [catName, setCatName] = useState('');
   const [foodForm, setFoodForm] = useState({ name: '', description: '', price: '', isVeg: true, categoryId: '', imageUrl: '' });
-  const [loading, setLoading] = useState(true);
 
-  const fetchCategories = async () => {
+  const foodItems = allFoods.filter(f => !activeCategory || f.categoryId === activeCategory);
+
+  const fetchMenuData = async () => {
     try {
-      const res = await api.get('/categories');
-      setCategories(res.data.categories || []);
-      if (!activeCategory && res.data.categories?.length) {
-        setActiveCategory(res.data.categories[0].id);
+      const [catRes, foodRes] = await Promise.all([
+        api.get('/categories'),
+        api.get('/foods'),
+      ]);
+      const cats = catRes.data.categories || [];
+      const foods = foodRes.data.foods || [];
+      setCategories(cats);
+      setAllFoods(foods);
+      if (cats.length > 0 && !activeCategory) {
+        setActiveCategory(cats[0].id);
       }
+      try {
+        localStorage.setItem('orderkare_menu_cats', JSON.stringify(cats));
+        localStorage.setItem('orderkare_menu_foods', JSON.stringify(foods));
+      } catch {}
     } catch (err) { /* empty */ }
   };
 
-  const fetchFoodItems = async (catId: string) => {
-    try {
-      const res = await api.get(`/foods?categoryId=${catId}`);
-      setFoodItems(res.data.foods || []);
-    } catch (err) { /* empty */ }
-  };
-
-  useEffect(() => { fetchCategories().then(() => setLoading(false)); }, []);
-  useEffect(() => { if (activeCategory) fetchFoodItems(activeCategory); }, [activeCategory]);
+  useEffect(() => {
+    fetchMenuData();
+  }, []);
 
   const handleSaveCategory = async () => {
     try {
@@ -62,7 +89,7 @@ export const MenuManagementPage = () => {
         await api.post('/categories', { name: catName });
       }
       setCatName(''); setShowCatForm(false); setEditingCat(null);
-      fetchCategories();
+      fetchMenuData();
     } catch (err) { console.error(err); }
   };
 
@@ -118,7 +145,7 @@ export const MenuManagementPage = () => {
       }
       setFoodForm({ name: '', description: '', price: '', isVeg: true, categoryId: '', imageUrl: '' });
       setShowFoodForm(false); setEditingFood(null);
-      if (activeCategory) fetchFoodItems(activeCategory);
+      fetchMenuData();
     } catch (err) { console.error(err); }
   };
 
@@ -126,28 +153,18 @@ export const MenuManagementPage = () => {
     if (!confirm('Delete this food item?')) return;
     try {
       await api.delete(`/foods/${id}`);
-      if (activeCategory) fetchFoodItems(activeCategory);
+      fetchMenuData();
     } catch (err) { console.error(err); }
   };
 
   const toggleAvailability = async (food: FoodItem) => {
     try {
+      // Optimistic instant toggle in state
+      setAllFoods(prev => prev.map(f => f.id === food.id ? { ...f, isAvailable: !f.isAvailable } : f));
       await api.put(`/foods/${food.id}`, { isAvailable: !food.isAvailable });
-      if (activeCategory) fetchFoodItems(activeCategory);
+      fetchMenuData();
     } catch (err) { console.error(err); }
   };
-
-  if (loading) {
-    return (
-      <div className="animate-pulse space-y-6">
-        <div className="h-8 w-48 bg-slate-200 rounded-lg" />
-        <div className="flex space-x-4">
-          <div className="w-56 h-96 bg-slate-200 rounded-2xl" />
-          <div className="flex-1 h-96 bg-slate-200 rounded-2xl" />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">

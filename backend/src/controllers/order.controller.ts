@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { notifyNewOrder, notifyOrderStatusUpdate, notifyNewFeedback } from '../utils/socket';
 import { prisma } from '../lib/prisma';
+import { query } from '../lib/db';
 import { OrderStatus } from '@prisma/client';
 
 const feedbackStore: any[] = [];
@@ -162,31 +163,67 @@ export const getOrders = async (req: AuthRequest, res: Response): Promise<void> 
 
     try {
       const take = Math.min(parseInt(limit as string) || 50, 100);
-      const skip = ((parseInt(page as string) || 1) - 1) * take;
+      const currentPage = Math.max(parseInt(page as string) || 1, 1);
+      const skip = (currentPage - 1) * take;
 
-      const where: any = { restaurantId };
+      let statusArray: string[] | null = null;
       if (status && status !== 'ALL') {
-        const statusArray = (status as string).split(',').map(s => s.trim().toUpperCase());
-        where.status = { in: statusArray };
+        statusArray = (status as string).split(',').map(s => s.trim().toUpperCase());
       }
 
-      const [orders, total] = await Promise.all([
-        prisma.order.findMany({
-          where,
-          include: {
-            items: {
-              include: { foodItem: { select: { id: true, name: true, price: true, imageUrl: true } } },
-            },
-          },
-          orderBy: { createdAt: 'desc' },
-          take,
-          skip,
-        }),
-        prisma.order.count({ where }),
-      ]);
+      const resOrders = await query(`
+        SELECT
+          o.id,
+          o."customerName",
+          o."tableNumber",
+          o."phoneNumber",
+          o."specialInstructions" AS notes,
+          o.status,
+          o."totalAmount",
+          o."restaurantId",
+          o."createdAt",
+          o."updatedAt",
+          COUNT(*) OVER() AS full_count,
+          COALESCE(
+            (
+              SELECT json_agg(
+                json_build_object(
+                  'id', oi.id,
+                  'quantity', oi.quantity,
+                  'price', oi.price,
+                  'foodItemId', oi."foodItemId",
+                  'foodItem', json_build_object(
+                    'id', fi.id,
+                    'name', fi.name,
+                    'price', fi.price,
+                    'imageUrl', fi."imageUrl"
+                  )
+                )
+              )
+              FROM "OrderItem" oi
+              LEFT JOIN "FoodItem" fi ON fi.id = oi."foodItemId"
+              WHERE oi."orderId" = o.id
+            ),
+            '[]'::json
+          ) AS items
+        FROM "Order" o
+        WHERE o."restaurantId" = $1
+          AND ($2::text[] IS NULL OR o.status::text = ANY($2::text[]))
+        ORDER BY o."createdAt" DESC
+        LIMIT $3 OFFSET $4;
+      `, [restaurantId, statusArray, take, skip]);
 
-      res.json({ orders, total, page: parseInt(page as string) || 1, totalPages: Math.ceil(total / take) });
+      const total = resOrders.rows.length > 0 ? parseInt(resOrders.rows[0].full_count, 10) : 0;
+      const orders = resOrders.rows.map(({ full_count, ...order }) => order);
+
+      res.json({
+        orders,
+        total,
+        page: currentPage,
+        totalPages: Math.ceil(total / take) || 0
+      });
     } catch (dbError) {
+      console.error('getOrders dbError:', dbError);
       res.status(503).json({ message: 'Database temporarily unavailable' });
     }
   } catch (error) {
@@ -311,6 +348,7 @@ export const getRestaurantFeedback = async (req: AuthRequest, res: Response): Pr
 };
 
 export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
+  console.log('>>> [ORDER_CONTROLLER_FAST] getDashboardStats CALLED at', new Date().toISOString());
   try {
     const restaurantId: string = req.user?.restaurantId as string;
 
@@ -318,31 +356,47 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const [totalOrdersToday, totalRevenueAgg, activeOrdersCount, menuItemsCount] = await Promise.all([
-        prisma.order.count({ where: { restaurantId, createdAt: { gte: today } } }),
-        prisma.order.aggregate({
-          where: { restaurantId, createdAt: { gte: today }, status: { not: 'REJECTED' } },
-          _sum: { totalAmount: true },
-        }),
-        prisma.order.count({
-          where: { restaurantId, status: { in: ['PENDING', 'ACCEPTED', 'PREPARING', 'READY'] } },
-        }),
-        prisma.foodItem.count({ where: { restaurantId } }),
-      ]);
+      const statsRes = await query(`
+        WITH stats AS (
+          SELECT
+            COUNT(*) FILTER (WHERE "createdAt" >= $2) AS today_orders,
+            COALESCE(SUM("totalAmount") FILTER (WHERE "createdAt" >= $2 AND "status" != 'REJECTED'), 0) AS today_revenue,
+            COUNT(*) FILTER (WHERE "status" IN ('PENDING', 'ACCEPTED', 'PREPARING', 'READY')) AS active_orders,
+            COUNT(DISTINCT "tableNumber") FILTER (WHERE "status" IN ('PENDING', 'ACCEPTED', 'PREPARING', 'READY')) AS active_tables
+          FROM "Order"
+          WHERE "restaurantId" = $1
+        ),
+        items AS (
+          SELECT COUNT(*) AS menu_items FROM "FoodItem" WHERE "restaurantId" = $1
+        )
+        SELECT
+          stats.today_orders,
+          stats.today_revenue,
+          stats.active_orders,
+          stats.active_tables,
+          items.menu_items
+        FROM stats CROSS JOIN items;
+      `, [restaurantId, today]);
 
-      const rev = totalRevenueAgg._sum.totalAmount || 0;
+      const row = statsRes.rows[0] || {};
+      const todayOrders = parseInt(row.today_orders || '0', 10);
+      const todayRevenue = parseFloat(row.today_revenue || '0');
+      const activeOrders = parseInt(row.active_orders || '0', 10);
+      const activeTables = parseInt(row.active_tables || '0', 10);
+      const menuItems = parseInt(row.menu_items || '0', 10);
 
       res.json({
-        todayOrders: totalOrdersToday,
-        todayRevenue: rev,
-        todaySales: rev,
-        activeOrders: activeOrdersCount,
-        pendingOrders: activeOrdersCount,
-        menuItems: menuItemsCount,
-        activeTables: 0,
+        todayOrders,
+        todayRevenue,
+        todaySales: todayRevenue,
+        activeOrders,
+        pendingOrders: activeOrders,
+        menuItems,
+        activeTables,
         totalTables: 20
       });
     } catch (dbError) {
+      console.error('getDashboardStats dbError:', dbError);
       res.status(503).json({ message: 'Database temporarily unavailable' });
     }
   } catch (error) {
@@ -350,3 +404,160 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
+export const getDashboardOverview = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const restaurantId: string = req.user?.restaurantId as string;
+    if (!restaurantId) {
+      res.status(403).json({ message: 'Restaurant context required' });
+      return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Parallel fetch for stats, active orders, and subscription
+    const [statsRes, ordersRes, subRes] = await Promise.all([
+      query(`
+        WITH stats AS (
+          SELECT
+            COUNT(*) FILTER (WHERE "createdAt" >= $2) AS today_orders,
+            COALESCE(SUM("totalAmount") FILTER (WHERE "createdAt" >= $2 AND "status" != 'REJECTED'), 0) AS today_revenue,
+            COUNT(*) FILTER (WHERE "status" IN ('PENDING', 'ACCEPTED', 'PREPARING', 'READY')) AS active_orders,
+            COUNT(DISTINCT "tableNumber") FILTER (WHERE "status" IN ('PENDING', 'ACCEPTED', 'PREPARING', 'READY')) AS active_tables
+          FROM "Order"
+          WHERE "restaurantId" = $1
+        ),
+        items AS (
+          SELECT COUNT(*) AS menu_items FROM "FoodItem" WHERE "restaurantId" = $1
+        )
+        SELECT
+          stats.today_orders,
+          stats.today_revenue,
+          stats.active_orders,
+          stats.active_tables,
+          items.menu_items
+        FROM stats CROSS JOIN items;
+      `, [restaurantId, today]).catch(() => ({ rows: [] })),
+
+      query(`
+        SELECT
+          o.id,
+          o."customerName",
+          o."tableNumber",
+          o."phoneNumber",
+          o."specialInstructions" AS notes,
+          o.status,
+          o."totalAmount",
+          o."restaurantId",
+          o."createdAt",
+          o."updatedAt",
+          COALESCE(
+            (
+              SELECT json_agg(
+                json_build_object(
+                  'id', oi.id,
+                  'quantity', oi.quantity,
+                  'price', oi.price,
+                  'foodItemId', oi."foodItemId",
+                  'foodItem', json_build_object(
+                    'id', fi.id,
+                    'name', fi.name,
+                    'price', fi.price,
+                    'imageUrl', fi."imageUrl"
+                  )
+                )
+              )
+              FROM "OrderItem" oi
+              LEFT JOIN "FoodItem" fi ON fi.id = oi."foodItemId"
+              WHERE oi."orderId" = o.id
+            ),
+            '[]'::json
+          ) AS items
+        FROM "Order" o
+        WHERE o."restaurantId" = $1
+          AND o.status::text = ANY(ARRAY['PENDING', 'ACCEPTED', 'PREPARING'])
+        ORDER BY o."createdAt" DESC
+        LIMIT 50;
+      `, [restaurantId]).catch(() => ({ rows: [] })),
+
+      query(`
+        SELECT 
+          r.id, r.name, r.slug, r."isActive", r."subscriptionStatus",
+          s.id as sub_id, s.status as sub_status, s."planName" as sub_plan_name, 
+          s."amountPaid" as sub_amount_paid, s."paymentReference" as sub_payment_reference, 
+          s."validUntil" as sub_valid_until
+        FROM "Restaurant" r
+        LEFT JOIN "Subscription" s ON s."restaurantId" = r.id
+        WHERE r.id = $1 LIMIT 1;
+      `, [restaurantId]).catch(() => ({ rows: [] }))
+    ]);
+
+    const statRow = statsRes.rows[0] || {};
+    const todayOrders = parseInt(statRow.today_orders || '0', 10);
+    const todayRevenue = parseFloat(statRow.today_revenue || '0');
+    const activeOrders = parseInt(statRow.active_orders || '0', 10);
+    const activeTables = parseInt(statRow.active_tables || '0', 10);
+    const menuItems = parseInt(statRow.menu_items || '0', 10);
+
+    const stats = {
+      todayOrders,
+      todayRevenue,
+      todaySales: todayRevenue,
+      activeOrders,
+      pendingOrders: activeOrders,
+      menuItems,
+      activeTables,
+      totalTables: 20
+    };
+
+    const orders = ordersRes.rows || [];
+
+    // Parse subscription
+    let subscription: any = { isSubscribed: false, status: 'PENDING', daysRemaining: 0 };
+    if (subRes.rows.length) {
+      const row = subRes.rows[0];
+      const now = new Date();
+      const hasEverPaid = Boolean(
+        row.sub_id &&
+        Number(row.sub_amount_paid || 0) > 0 &&
+        row.sub_payment_reference &&
+        String(row.sub_payment_reference).trim() !== ''
+      );
+      if (hasEverPaid && row.sub_valid_until) {
+        const validUntil = new Date(row.sub_valid_until);
+        if (validUntil > now && (row.sub_status === 'ACTIVE' || row.sub_status === 'TRIAL')) {
+          subscription = {
+            isSubscribed: true,
+            status: row.sub_status,
+            planName: row.sub_plan_name,
+            validUntil: row.sub_valid_until,
+            daysRemaining: Math.max(0, Math.ceil((validUntil.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))),
+            amountPaid: row.sub_amount_paid
+          };
+        } else {
+          subscription = {
+            isSubscribed: false,
+            status: 'EXPIRED',
+            planName: row.sub_plan_name,
+            validUntil: row.sub_valid_until,
+            daysRemaining: 0
+          };
+        }
+      }
+    }
+
+    const feedback = feedbackStore.filter(f => f.restaurantId === restaurantId);
+
+    res.json({
+      stats,
+      orders,
+      subscription,
+      feedback
+    });
+  } catch (error) {
+    console.error('getDashboardOverview error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+

@@ -14,11 +14,12 @@ import {
   getDevOpsCronJobs,
   getDevOpsAuditLogs,
 } from '../controllers/devops.controller';
-import { authenticateToken } from '../middleware/auth.middleware';
+import { authenticateToken, requireRole } from '../middleware/auth.middleware';
 
 const router = Router();
 
-// Allow optional dev token or authenticated super admin
+// Protect all DevOps infrastructure routes for SUPER_ADMIN role
+router.use(authenticateToken, requireRole(['SUPER_ADMIN']));
 router.get('/overview', getDevOpsOverview);
 router.get('/fleet', getDevOpsFleet);
 router.put('/fleet/:id', updateDevOpsProjectStatus);

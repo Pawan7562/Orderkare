@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
+import { getSocketUrl } from '../lib/socket';
 import { useCartStore } from '../store/cartStore';
 import { 
   ShoppingCart, Plus, Minus, Search, X, CheckCircle2, Clock, 
@@ -395,11 +396,7 @@ export const CustomerMenuPage = () => {
       }
     } catch {}
 
-    const socketUrl = import.meta.env.VITE_WS_URL || (
-      typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-        ? 'http://localhost:5000'
-        : 'https://orderkare-3.onrender.com'
-    );
+    const socketUrl = getSocketUrl();
 
     const socket = io(socketUrl, {
       transports: ['websocket', 'polling'],

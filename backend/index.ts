@@ -1,6 +1,21 @@
 import dns from 'dns';
 try {
   dns.setDefaultResultOrder('ipv4first');
+  const origLookup = dns.lookup;
+  const patchedLookup: any = function (hostname: any, options: any, callback: any) {
+    if (typeof options === 'function') {
+      callback = options;
+      options = {};
+    } else if (typeof options === 'number') {
+      options = { family: options };
+    } else {
+      options = { ...options };
+    }
+    options.family = 4;
+    return origLookup.call(dns, hostname, options, callback);
+  };
+  patchedLookup.__promisify__ = (origLookup as any).__promisify__;
+  (dns as any).lookup = patchedLookup;
 } catch {}
 
 import express from 'express';
@@ -25,12 +40,12 @@ import settingsRoutes from './src/routes/settings.routes';
 import adminRoutes from './src/routes/admin.routes';
 import devopsRoutes from './src/routes/devops.routes';
 import { initSocket } from './src/utils/socket';
+import { db, query } from './src/lib/db';
 
 dotenv.config();
 
 const app = express();
 const server = createServer(app);
-export const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
 const envOrigins = (process.env.CORS_ORIGIN || '')
   .split(',')
@@ -52,7 +67,9 @@ const defaultAllowedOrigins = [
 const allowedOrigins = Array.from(new Set([...defaultAllowedOrigins, ...envOrigins]));
 
 app.set('trust proxy', 1);
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, curl, server-to-server)
@@ -72,7 +89,10 @@ app.use(cors({
       return callback(null, true);
     }
 
-    // Fallback in dev or allow with warning
+    // In development allow local networks, in production reject untrusted origins
+    if (process.env.NODE_ENV === 'production') {
+      return callback(new Error('Blocked by CORS policy: Origin not allowed'));
+    }
     callback(null, true);
   },
   credentials: true,
@@ -168,11 +188,31 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+// 404 Not Found Handler for unmatched routes
+app.use((_req, res) => {
+  res.status(404).json({ message: 'Requested API endpoint not found' });
+});
+
+// Global Production-Safe Error Handler
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('Unhandled Application Error:', err);
+  const status = Number(err.status || err.statusCode || 500);
+  const isProd = process.env.NODE_ENV === 'production';
+  res.status(status).json({
+    message: isProd && status === 500 ? 'Internal server error. Please try again later.' : (err.message || 'Internal server error')
+  });
+});
+
 // Initialize real-time WebSockets
 const start = async () => {
+  // Warm up the DB pool on startup so the first user request is instant
+  query('SELECT 1').then(() => {
+    console.log('✅ Database pool warmed up and ready');
+  }).catch(() => {});
+
   await initSocket(server);
-  server.listen(PORT, () => {
-    console.log(`🚀 OrderKare API and WebSockets running on port ${PORT}`);
+  server.listen(Number(PORT), '0.0.0.0', () => {
+    console.log(`🚀 OrderKare API and WebSockets running on http://localhost:${PORT}`);
   });
 };
 
@@ -184,7 +224,9 @@ void start().catch(error => {
 const shutdown = async (signal: string) => {
   console.log(`${signal} received. Shutting down gracefully.`);
   server.close(async () => {
-    await prisma.$disconnect();
+    try {
+      await db.end();
+    } catch {}
     process.exit(0);
   });
 };

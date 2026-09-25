@@ -17,7 +17,8 @@ import {
   ShieldCheck,
   Sparkles,
   X,
-  Shield
+  Shield,
+  Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -42,9 +43,54 @@ export const RegisterPage: React.FC = () => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  const getPasswordStrength = (pass: string) => {
+    if (!pass) return 0;
+    let score = 0;
+    if (pass.length >= 6) score += 1;
+    if (pass.length >= 8) score += 1;
+    if (/[0-9]/.test(pass) && /[a-zA-Z]/.test(pass)) score += 1;
+    if (/[^A-Za-z0-9]/.test(pass)) score += 1;
+    return score;
+  };
+
+  const passwordStrength = getPasswordStrength(form.password);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    const cleanEmail = form.email.trim().toLowerCase();
+    const cleanName = form.name.trim();
+    const cleanRestaurant = form.restaurantName.trim();
+    const cleanPhone = form.phone.trim();
+    const cleanAddress = form.address.trim();
+
+    if (!cleanName || !cleanEmail || !cleanRestaurant) {
+      setError('Please provide your name, business email, and restaurant name.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    const disposableDomains = [
+      'mailinator.com', 'guerrillamail.com', '10minutemail.com', 'tempmail.com',
+      'temp-mail.org', 'throwawaymail.com', 'yopmail.com', 'trashmail.com',
+      'sharklasers.com', 'dispostable.com', 'getnada.com', 'mohmal.com', 'test.com', 'fake.com'
+    ];
+    const emailDomain = cleanEmail.split('@')[1] || '';
+    if (disposableDomains.includes(emailDomain) || cleanEmail.startsWith('test@') || cleanEmail.startsWith('fake@')) {
+      setError('Please use a real, official email address. Temporary or disposable emails are not accepted.');
+      return;
+    }
+
+    if (form.password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
 
     if (!termsAgreed) {
       setError('Please accept the terms of service to create your account.');
@@ -53,11 +99,25 @@ export const RegisterPage: React.FC = () => {
 
     setLoading(true);
     try {
-      const res = await api.post('/auth/register', form);
+      const res = await api.post('/auth/register', {
+        name: cleanName,
+        email: cleanEmail,
+        password: form.password,
+        restaurantName: cleanRestaurant,
+        phone: cleanPhone,
+        address: cleanAddress
+      });
       login(res.data.user, res.data.token);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Registration failed. Please check your information and try again.');
+      const msg = err.response?.data?.message;
+      if (msg && msg.toLowerCase().includes('already registered')) {
+        setError('This email is already registered. Please sign in instead.');
+      } else if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        setError('Server response timed out. Please verify your connection and try again.');
+      } else {
+        setError(msg || 'Registration failed. Please check your information and try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -130,7 +190,14 @@ export const RegisterPage: React.FC = () => {
               <div className="w-4 h-4 rounded-full bg-rose-200 text-rose-700 flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-bold">
                 !
               </div>
-              <span>{error}</span>
+              <div className="flex-1">
+                <span>{error}</span>
+                {error.includes('already registered') && (
+                  <Link to="/login" className="block mt-1 font-bold text-rose-700 underline hover:text-rose-900">
+                    Click here to sign in with this email →
+                  </Link>
+                )}
+              </div>
             </motion.div>
           )}
 
@@ -251,6 +318,30 @@ export const RegisterPage: React.FC = () => {
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                {/* Password Strength Indicator */}
+                {form.password && (
+                  <div className="mt-2 space-y-1">
+                    <div className="flex items-center space-x-1.5">
+                      <div className={`h-1 flex-1 rounded-full transition-all ${
+                        passwordStrength >= 1 ? (passwordStrength <= 2 ? 'bg-amber-400' : 'bg-emerald-500') : 'bg-rose-500'
+                      }`} />
+                      <div className={`h-1 flex-1 rounded-full transition-all ${
+                        passwordStrength >= 2 ? (passwordStrength <= 2 ? 'bg-amber-400' : 'bg-emerald-500') : 'bg-slate-200'
+                      }`} />
+                      <div className={`h-1 flex-1 rounded-full transition-all ${
+                        passwordStrength >= 3 ? 'bg-emerald-500' : 'bg-slate-200'
+                      }`} />
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] font-semibold text-slate-500">
+                      <span>Password strength:</span>
+                      <span className={
+                        passwordStrength >= 3 ? 'text-emerald-600' : passwordStrength >= 2 ? 'text-amber-600' : 'text-rose-500'
+                      }>
+                        {passwordStrength >= 3 ? 'Strong' : passwordStrength >= 2 ? 'Moderate' : 'Too weak'}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -319,8 +410,17 @@ export const RegisterPage: React.FC = () => {
                 disabled={loading}
                 className="w-full bg-rose-600 hover:bg-rose-700 text-white py-3.5 px-6 rounded-xl font-bold text-sm transition-all shadow-md shadow-rose-600/20 hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-60 disabled:pointer-events-none flex items-center justify-center space-x-2 cursor-pointer"
               >
-                <span>{loading ? 'Creating your account...' : 'Create Account & Unlock with ₹1'}</span>
-                {!loading && <ArrowRight className="w-4 h-4" />}
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Setting up your restaurant...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Create Account & Unlock with ₹1</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </div>
           </form>

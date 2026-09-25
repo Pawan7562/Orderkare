@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import api from '../lib/api';
 import { io } from 'socket.io-client';
+import { getSocketUrl } from '../lib/socket';
 import { useAuthStore } from '../store/authStore';
 import {
   Filter, ChevronDown, Clock, Package, Truck, CheckCircle,
@@ -88,11 +89,7 @@ export const OrdersPage = () => {
   useEffect(() => {
     if (!token) return;
 
-    const socketUrl =
-      import.meta.env.VITE_WS_URL ||
-      (import.meta.env.VITE_API_URL
-        ? import.meta.env.VITE_API_URL.replace(/\/api\/v1\/?$/, '').replace(/\/api\/?$/, '')
-        : 'https://orderkare-3.onrender.com');
+    const socketUrl = getSocketUrl();
 
     const socket = io(socketUrl, {
       auth: { token },

@@ -1,18 +1,25 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { prisma } from '../lib/prisma';
+import { query } from '../lib/db';
 
 export const getCategories = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const restaurantId: string = req.user?.restaurantId as string;
 
     try {
-      const categories = await prisma.category.findMany({
-        where: { restaurantId },
-        orderBy: { orderIndex: 'asc' },
-        include: { _count: { select: { foodItems: true } } },
-      });
-      res.json({ categories });
+      const resCategories = await query(`
+        SELECT 
+          c.id, c.name, c."isActive", c."orderIndex",
+          json_build_object('foodItems', COUNT(f.id)::int) as _count
+        FROM "Category" c
+        LEFT JOIN "FoodItem" f ON f."categoryId" = c.id
+        WHERE c."restaurantId" = $1
+        GROUP BY c.id
+        ORDER BY c."orderIndex" ASC;
+      `, [restaurantId]);
+
+      res.json({ categories: resCategories.rows });
     } catch (dbError) {
       res.status(503).json({ message: 'Database temporarily unavailable' });
     }

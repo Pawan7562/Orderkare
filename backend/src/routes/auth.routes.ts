@@ -21,7 +21,15 @@ const forgotPasswordLimiter = rateLimit({
 	message: { message: 'Too many password reset requests. Please try again later.' },
 });
 
-router.post('/register', register);
+const registerLimiter = rateLimit({
+	windowMs: 60 * 60 * 1000,
+	limit: 15,
+	standardHeaders: 'draft-8',
+	legacyHeaders: false,
+	message: { message: 'Too many registration attempts from this network. Please try again later.' },
+});
+
+router.post('/register', registerLimiter, register);
 router.post('/login', loginLimiter, login);
 router.post('/forgot-password', forgotPasswordLimiter, forgotPassword);
 router.post('/reset-password', forgotPasswordLimiter, resetPassword);

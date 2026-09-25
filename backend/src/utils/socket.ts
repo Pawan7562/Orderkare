@@ -58,17 +58,31 @@ export const initSocket = async (server: HttpServer): Promise<Server> => {
       console.log(`👑 Client ${socket.id} auto-joined super_admin room`);
     }
 
-    // Join super admin room explicitly
+    // Join super admin room explicitly (strictly for SUPER_ADMIN role)
     socket.on('join_super_admin', () => {
-      socket.join('super_admin');
-      console.log(`👑 Client ${socket.id} explicitly joined super_admin room`);
+      if (socket.data.user?.role === 'SUPER_ADMIN') {
+        socket.join('super_admin');
+        console.log(`👑 Client ${socket.id} explicitly joined super_admin room`);
+      } else {
+        console.warn(`🚨 Unauthorized attempt by socket ${socket.id} to join super_admin room`);
+      }
     });
 
-    // Join room based on restaurant ID to receive scoped updates
+    // Join room based on restaurant ID (strictly for matching restaurant or super admin)
     socket.on('join_restaurant', (restaurantId: string) => {
       if (restaurantId && typeof restaurantId === 'string') {
-        socket.join(restaurantId);
-        console.log(`🔌 Client ${socket.id} joined restaurant room: ${restaurantId}`);
+        const user = socket.data.user;
+        const isAuthorized = user && (
+          user.role === 'SUPER_ADMIN' ||
+          user.role === 'ADMIN' ||
+          user.restaurantId === restaurantId
+        );
+        if (isAuthorized) {
+          socket.join(restaurantId);
+          console.log(`🔌 Client ${socket.id} joined restaurant room: ${restaurantId}`);
+        } else {
+          console.warn(`🚨 Unauthorized attempt by socket ${socket.id} to join restaurant room: ${restaurantId}`);
+        }
       }
     });
 

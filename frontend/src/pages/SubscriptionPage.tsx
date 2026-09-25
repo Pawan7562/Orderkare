@@ -59,10 +59,77 @@ interface SubscriptionData {
   };
 }
 
+const DEFAULT_PLANS: SubscriptionData = {
+  restaurantId: '',
+  restaurantName: 'Restaurant',
+  slug: '',
+  isSubscribed: false,
+  isFirstTime: true,
+  status: 'PENDING',
+  planName: 'NONE',
+  validUntil: null,
+  daysRemaining: 0,
+  qrCodeAllowed: false,
+  plans: [
+    {
+      id: 'MONTHLY',
+      name: 'Starter Monthly',
+      price: 249,
+      durationDays: 30,
+      periodText: 'per month',
+      description: 'Standard 30-day dining pass with live order updates.',
+      features: ['Unlimited Orders', 'Live Order Notifier', 'Full QR Menu', 'Digital POS Dashboard'],
+      isPopular: false,
+    },
+    {
+      id: 'SIX_MONTHS',
+      name: 'Growth Half-Yearly',
+      price: 1199,
+      durationDays: 180,
+      periodText: 'for 6 months',
+      description: 'Ideal for growing restaurants seeking uninterrupted digital ordering.',
+      features: ['Everything in Monthly', 'Save ₹295', 'Priority Table Standee QR', 'High Speed Analytics'],
+      isPopular: true,
+    },
+    {
+      id: 'ANNUAL',
+      name: 'Enterprise Annual',
+      price: 1999,
+      durationDays: 365,
+      periodText: 'for 12 months',
+      description: 'Best ROI. 365 days of unlimited digital ordering & VIP support.',
+      features: ['Full Year Unlocked', 'Save ₹989', 'VIP Fast Support', 'Custom Branding & Ads'],
+      isPopular: false,
+    },
+  ],
+  firstTimeOffer: {
+    id: 'FIRST_TIME_ACTIVATION',
+    name: 'First-Time 30 Days Trial',
+    price: 1,
+    durationDays: 30,
+    description: 'Special ₹1 activation offer for new restaurants.',
+  },
+};
+
 export const SubscriptionPage: React.FC = () => {
   const { user } = useAuthStore();
-  const [subData, setSubData] = useState<SubscriptionData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [subData, setSubData] = useState<SubscriptionData>(() => {
+    try {
+      const cached = localStorage.getItem('orderkare_dash_sub');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return {
+          ...DEFAULT_PLANS,
+          ...parsed,
+          plans: parsed.plans && parsed.plans.length ? parsed.plans : DEFAULT_PLANS.plans,
+          firstTimeOffer: parsed.firstTimeOffer || DEFAULT_PLANS.firstTimeOffer,
+        };
+      }
+      return DEFAULT_PLANS;
+    } catch {
+      return DEFAULT_PLANS;
+    }
+  });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedPlanModal, setSelectedPlanModal] = useState<{
     id: string;
@@ -75,11 +142,13 @@ export const SubscriptionPage: React.FC = () => {
     setIsRefreshing(true);
     try {
       const res = await api.get('/subscriptions/status');
-      setSubData(res.data);
+      if (res.data) {
+        setSubData(res.data);
+        try { localStorage.setItem('orderkare_dash_sub', JSON.stringify(res.data)); } catch {}
+      }
     } catch (err) {
       console.error('Failed to load subscription status:', err);
     } finally {
-      setLoading(false);
       setIsRefreshing(false);
     }
   };
@@ -97,20 +166,6 @@ export const SubscriptionPage: React.FC = () => {
   // Calculate validity percentage
   const totalDays = subData?.planName === 'ANNUAL' ? 365 : subData?.planName === 'SIX_MONTHS' ? 180 : 30;
   const progressPercent = Math.min(100, Math.max(0, Math.round((daysLeft / totalDays) * 100)));
-
-  if (loading) {
-    return (
-      <div className="space-y-8 max-w-6xl mx-auto pb-12 font-sans antialiased animate-pulse">
-        <div className="h-10 w-72 bg-slate-200 rounded-2xl" />
-        <div className="h-44 bg-slate-100 rounded-3xl border border-slate-200" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="h-[480px] bg-slate-100 rounded-3xl border border-slate-200" />
-          <div className="h-[480px] bg-slate-100 rounded-3xl border border-slate-200" />
-          <div className="h-[480px] bg-slate-100 rounded-3xl border border-slate-200" />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-14 font-sans antialiased text-slate-800">
