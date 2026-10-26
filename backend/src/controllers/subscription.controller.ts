@@ -5,15 +5,6 @@ import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import { createAdminNotification } from './admin.controller';
 import { notifySuperAdmin, notifySubscriptionUpdated } from '../utils/socket';
 
-const plans: Record<string, { amount: number; days: number; status: 'ACTIVE' | 'TRIAL' }> = {
-  FIRST_TIME_ACTIVATION: { amount: 1, days: 30, status: 'TRIAL' },
-  MONTHLY: { amount: 249, days: 30, status: 'ACTIVE' },
-  SIX_MONTHS: { amount: 1199, days: 180, status: 'ACTIVE' },
-  ANNUAL: { amount: 1999, days: 365, status: 'ACTIVE' },
-};
-
-const getPlan = (value: unknown) => plans[String(value || '').toUpperCase().trim()];
-
 let cachedRazorpayConfig: any = null;
 let lastRazorpayFetch = 0;
 
@@ -91,7 +82,7 @@ const activateSubscription = async (restaurantId: string, planId: string, paymen
       );
     }
 
-    await client.query(`UPDATE "Restaurant" SET "subscriptionStatus" = 'ACTIVE', "isActive" = true, "updatedAt" = NOW() WHERE "id" = $1;`, [restaurantId]);
+    await client.query(`UPDATE "Restaurant" SET "isActive" = true, "updatedAt" = NOW() WHERE "id" = $1;`, [restaurantId]);
     await client.query('COMMIT');
 
     // Notify Super Admin asynchronously
@@ -173,15 +164,24 @@ export const handleRazorpayWebhook = async (req: Request, res: Response): Promis
     }
 
     const razorpayOrder = await razorpayRequest(`/orders/${encodeURIComponent(orderId)}`, 'GET', undefined, config.keyId, config.keySecret);
-    const planKey = String(razorpayOrder.notes?.planId || '').toUpperCase().trim();
+    const planKey = String(razorpayOrder.notes?.planId || '').trim(); // 🟢 FIX: Removed toUpperCase()
     const restaurantId = String(razorpayOrder.notes?.restaurantId || '').trim();
-    const plan = getPlan(planKey);
-    if (!restaurantId || !plan || Number(payment?.amount || order?.amount) !== plan.amount * 100) {
+    
+    if (!restaurantId || !planKey) {
       res.status(400).json({ message: 'Webhook payment metadata is invalid' });
       return;
     }
 
-    await activateSubscription(restaurantId, planKey, paymentId, plan.amount, plan.days, plan.status);
+    // Fetch dynamic plan details from DB instead of hardcoded values
+    const planRes = await query(`SELECT * FROM "PricingPlan" WHERE "id" = $1;`, [planKey]);
+    const plan = planRes.rows[0];
+    
+    if (!plan || Number(payment?.amount || order?.amount) !== Number(plan.priceMonthly) * 100) {
+      res.status(400).json({ message: 'Webhook payment metadata is invalid' });
+      return;
+    }
+
+    await activateSubscription(restaurantId, planKey, paymentId, Number(plan.priceMonthly), Number(plan.days || 30), 'ACTIVE');
     res.status(200).json({ received: true });
   } catch (error) {
     console.error('handleRazorpayWebhook error:', error);
@@ -198,7 +198,6 @@ const ensureSubscriptionSchema = async () => {
 
   schemaEnsuringPromise = (async () => {
     try {
-      // 1. Ensure SubscriptionStatus enum exists or is safe
       await query(`
         DO $$ BEGIN
           CREATE TYPE "SubscriptionStatus" AS ENUM ('ACTIVE', 'TRIAL', 'EXPIRED', 'CANCELLED', 'PENDING');
@@ -207,7 +206,6 @@ const ensureSubscriptionSchema = async () => {
         END $$;
       `).catch(() => {});
 
-      // 2. Ensure Subscription table exists
       await query(`
         CREATE TABLE IF NOT EXISTS "Subscription" (
           "id" TEXT PRIMARY KEY,
@@ -244,10 +242,9 @@ export const getSubscriptionStatus = async (req: AuthRequest, res: Response): Pr
       return;
     }
 
-    // High-performance single-query fetch for Restaurant & Subscription
     const restRes = await query(`
       SELECT 
-        r.id, r.name, r.slug, r."isActive", r."subscriptionStatus",
+        r.id, r.name, r.slug, r."isActive",
         s.id as sub_id, s.status as sub_status, s."planName" as sub_plan_name, 
         s."amountPaid" as sub_amount_paid, s."paymentReference" as sub_payment_reference, 
         s."validUntil" as sub_valid_until
@@ -262,7 +259,7 @@ export const getSubscriptionStatus = async (req: AuthRequest, res: Response): Pr
     }
 
     const row = restRes.rows[0];
-    const restaurant = { id: row.id, name: row.name, slug: row.slug, isActive: row.isActive, subscriptionStatus: row.subscriptionStatus };
+    const restaurant = { id: row.id, name: row.name, slug: row.slug, isActive: row.isActive };
     const sub = row.sub_id ? {
       id: row.sub_id,
       status: row.sub_status,
@@ -277,7 +274,6 @@ export const getSubscriptionStatus = async (req: AuthRequest, res: Response): Pr
     let daysRemaining = 0;
     let status = 'PENDING';
 
-    // A restaurant is first-time if they have never successfully completed a payment
     const hasEverPaid = Boolean(
       sub &&
       Number(sub.amountPaid || 0) > 0 &&
@@ -294,23 +290,45 @@ export const getSubscriptionStatus = async (req: AuthRequest, res: Response): Pr
         status = sub.status;
         daysRemaining = Math.max(0, Math.ceil((validUntil.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
       } else {
-        // Expired after having had an active plan
         status = 'EXPIRED';
         isSubscribed = false;
         daysRemaining = 0;
         if (sub.status !== 'EXPIRED') {
           await query(`UPDATE "Subscription" SET "status" = 'EXPIRED', "updatedAt" = NOW() WHERE "id" = $1;`, [sub.id]);
-          await query(`UPDATE "Restaurant" SET "subscriptionStatus" = 'EXPIRED' WHERE "id" = $1;`, [restaurantId]);
         }
       }
-    } else {
-      // First-time user: never activated before -> strictly PENDING state
-      status = 'PENDING';
-      isSubscribed = false;
-      daysRemaining = 0;
     }
 
     const rzConfig = await getRazorpayConfig();
+
+    const dynamicPlansRes = await query(
+      `SELECT * FROM "PricingPlan" WHERE "isActive" = true ORDER BY "orderIndex" ASC, "priceMonthly" ASC;`
+    );
+
+    const formattedPlans = dynamicPlansRes.rows.map((p: any) => {
+      let parsedFeatures: string[] = [];
+      try {
+        parsedFeatures = typeof p.features === 'string' ? JSON.parse(p.features) : (p.features || []);
+      } catch {
+        parsedFeatures = [];
+      }
+
+      let planDays = 30;
+      const nameLower = p.name.toLowerCase();
+      if (nameLower.includes('6') || nameLower.includes('half')) planDays = 180;
+      if (nameLower.includes('year') || nameLower.includes('annual')) planDays = 365;
+
+      return {
+        id: p.id,
+        name: p.name,
+        price: Number(p.priceMonthly),
+        durationDays: planDays,
+        periodText: planDays === 30 ? 'per month' : `for ${planDays} days`,
+        description: p.description || 'Premium SaaS dining plan.',
+        features: parsedFeatures,
+        isPopular: Boolean(p.isPopular),
+      };
+    });
 
     res.json({
       restaurantId,
@@ -327,57 +345,7 @@ export const getSubscriptionStatus = async (req: AuthRequest, res: Response): Pr
         razorpayEnabled: Boolean(rzConfig.keyId),
         upiId: rzConfig.upiId,
       },
-      plans: [
-        {
-          id: 'MONTHLY',
-          name: 'Monthly Plan',
-          price: 249,
-          durationDays: 30,
-          periodText: 'per month',
-          description: 'Standard monthly plan for ongoing digital QR ordering.',
-          features: [
-            'Permanent Table QR Generation',
-            'Full Digital Menu & Real-Time Orders',
-            'Live Kitchen Dispatch & Audio Notifications',
-            'Customer Reviews & Ratings',
-            'Standard Email Support'
-          ],
-          isPopular: false
-        },
-        {
-          id: 'SIX_MONTHS',
-          name: '6 Months Plan',
-          price: 1199,
-          durationDays: 180,
-          periodText: 'for 6 months (~₹199/mo)',
-          description: 'Most popular choice for steady dining operations. Save 20% compared to monthly.',
-          features: [
-            'Everything in Monthly +',
-            'Save 20% on monthly billing',
-            'Priority Live Order Dispatch',
-            'Table QR Standee Print Presets',
-            'Dedicated WhatsApp Support'
-          ],
-          isPopular: true
-        },
-        {
-          id: 'ANNUAL',
-          name: 'Annual Plan',
-          price: 1999,
-          durationDays: 365,
-          periodText: 'per year (~₹166/mo)',
-          description: 'Best value for year-round dining. Save 33% with total peace of mind.',
-          features: [
-            'Everything in 6 Months +',
-            'Save 33% - Best Value',
-            'Unlimited Table QR Codes',
-            'Comprehensive Revenue Analytics',
-            'Zero Commission on Customer Orders',
-            'VIP 24/7 Phone & Priority Support'
-          ],
-          isPopular: false
-        }
-      ],
+      plans: formattedPlans,
       firstTimeOffer: {
         id: 'FIRST_TIME_ACTIVATION',
         name: 'First-Time Activation (1 Month Free)',
@@ -396,7 +364,7 @@ export const processSubscriptionPayment = async (req: AuthRequest, res: Response
   try {
     const restaurantId = req.user?.restaurantId;
     const { planId, planType, paymentReference } = req.body;
-    const selectedPlan = String(planId || planType || '').toUpperCase().trim();
+    const selectedPlan = String(planId || planType || '').trim();
 
     if (!restaurantId) {
       res.status(403).json({ message: 'Restaurant context required' });
@@ -405,9 +373,11 @@ export const processSubscriptionPayment = async (req: AuthRequest, res: Response
 
     await ensureSubscriptionSchema();
 
-    const plan = getPlan(selectedPlan);
+    const planRes = await query(`SELECT * FROM "PricingPlan" WHERE "id" = $1;`, [selectedPlan]);
+    const plan = planRes.rows[0];
+    
     if (!plan) {
-      res.status(400).json({ message: 'Invalid plan selected. Choose FIRST_TIME_ACTIVATION, MONTHLY, SIX_MONTHS, or ANNUAL.' });
+      res.status(400).json({ message: 'Invalid plan selected.' });
       return;
     }
 
@@ -426,10 +396,26 @@ export const processSubscriptionPayment = async (req: AuthRequest, res: Response
 export const createRazorpaySubscriptionOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const restaurantId = req.user?.restaurantId;
-    const planId = String(req.body.planId || '').toUpperCase().trim();
-    const plan = getPlan(planId);
+    // 🟢 FIX: Removed toUpperCase() to match the exact database ID
+    const planId = String(req.body.planId || '').trim();
+
     if (!restaurantId) { res.status(403).json({ message: 'Restaurant context required' }); return; }
-    if (!plan) { res.status(400).json({ message: 'Invalid plan selected' }); return; }
+
+    let amount = 0;
+
+    if (planId === 'FIRST_TIME_ACTIVATION') {
+      amount = 1;
+    } else {
+      // 🟢 FIX: Match by exact ID
+      const planRes = await query(`SELECT * FROM "PricingPlan" WHERE "id" = $1;`, [planId]);
+      const plan = planRes.rows[0];
+
+      if (!plan) { 
+        res.status(400).json({ message: 'Invalid plan selected' }); 
+        return; 
+      }
+      amount = Number(plan.priceMonthly);
+    }
 
     const config = await getRazorpayConfig();
     if (!config.keyId || !config.keySecret) {
@@ -438,13 +424,21 @@ export const createRazorpaySubscriptionOrder = async (req: AuthRequest, res: Res
     }
 
     const order = await razorpayRequest('/orders', 'POST', {
-      amount: plan.amount * 100,
+      amount: amount * 100, 
       currency: 'INR',
       receipt: `sub_${restaurantId.slice(0, 8)}_${Date.now()}`,
       notes: { restaurantId, planId },
     }, config.keyId, config.keySecret);
 
-    res.json({ gateway: 'razorpay', keyId: config.keyId, orderId: order.id, amount: plan.amount * 100, currency: 'INR', planId, mode: config.paymentMode });
+    res.json({ 
+      gateway: 'razorpay', 
+      keyId: config.keyId, 
+      orderId: order.id, 
+      amount: amount * 100, 
+      currency: 'INR', 
+      planId, 
+      mode: config.paymentMode 
+    });
   } catch (error) {
     console.error('createRazorpaySubscriptionOrder error:', error);
     res.status(502).json({ message: 'Unable to start secure payment. Please try again.' });
@@ -455,21 +449,42 @@ export const verifyRazorpaySubscriptionPayment = async (req: AuthRequest, res: R
   try {
     const restaurantId = req.user?.restaurantId;
     const { planId, razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature } = req.body;
-    const planKey = String(planId || '').toUpperCase().trim();
-    const plan = getPlan(planKey);
+    // 🟢 FIX: Removed toUpperCase() to match the exact database ID
+    const planKey = String(planId || '').trim();
+    
     if (!restaurantId) { res.status(403).json({ message: 'Restaurant context required' }); return; }
-    if (!plan || !orderId || !paymentId || !signature) { res.status(400).json({ message: 'Incomplete payment verification details' }); return; }
+    if (!orderId || !paymentId || !signature) { res.status(400).json({ message: 'Incomplete payment verification details' }); return; }
+
+    let amount = 0;
+    let days = 0;
+    let status: 'ACTIVE' | 'TRIAL' = 'ACTIVE';
+
+    if (planKey === 'FIRST_TIME_ACTIVATION') {
+      amount = 1;
+      days = 30;
+      status = 'TRIAL';
+    } else {
+      const planRes = await query(`SELECT * FROM "PricingPlan" WHERE "id" = $1;`, [planKey]);
+      const plan = planRes.rows[0];
+      if (!plan) { res.status(400).json({ message: 'Invalid plan selected' }); return; }
+      
+      amount = Number(plan.priceMonthly);
+      days = Number(plan.days || 30);
+    }
 
     const config = await getRazorpayConfig();
     if (!config.keyId || !config.keySecret) { res.status(503).json({ message: 'Online payment is not configured' }); return; }
+    
     const expected = createHmac('sha256', config.keySecret).update(`${orderId}|${paymentId}`).digest('hex');
     const expectedBuf = Buffer.from(expected, 'utf8');
     const sigBuf = Buffer.from(String(signature || ''), 'utf8');
     const signaturesMatch = expectedBuf.length === sigBuf.length && timingSafeEqual(expectedBuf, sigBuf);
+    
     if (!signaturesMatch) { res.status(400).json({ message: 'Payment signature verification failed' }); return; }
 
     let payment = await razorpayRequest(`/payments/${encodeURIComponent(paymentId)}`, 'GET', undefined, config.keyId, config.keySecret);
-    if (payment.order_id !== orderId || Number(payment.amount) !== plan.amount * 100) {
+    
+    if (payment.order_id !== orderId || Number(payment.amount) !== amount * 100) {
       res.status(400).json({ message: 'Payment amount or order mismatch' });
       return;
     }
@@ -478,7 +493,7 @@ export const verifyRazorpaySubscriptionPayment = async (req: AuthRequest, res: R
       payment = await razorpayRequest(
         `/payments/${encodeURIComponent(paymentId)}/capture`,
         'POST',
-        { amount: plan.amount * 100, currency: 'INR' },
+        { amount: amount * 100, currency: 'INR' },
         config.keyId,
         config.keySecret
       );
@@ -490,7 +505,7 @@ export const verifyRazorpaySubscriptionPayment = async (req: AuthRequest, res: R
     }
 
     const razorpayOrder = await razorpayRequest(`/orders/${encodeURIComponent(orderId)}`, 'GET', undefined, config.keyId, config.keySecret);
-    if (razorpayOrder.notes?.restaurantId !== restaurantId || String(razorpayOrder.notes?.planId || '').toUpperCase().trim() !== planKey) {
+    if (razorpayOrder.notes?.restaurantId !== restaurantId || String(razorpayOrder.notes?.planId || '').trim() !== planKey) {
       res.status(403).json({ message: 'Payment does not belong to this restaurant or plan' });
       return;
     }
@@ -504,7 +519,8 @@ export const verifyRazorpaySubscriptionPayment = async (req: AuthRequest, res: R
       return;
     }
 
-    const subscription = await activateSubscription(restaurantId, planKey, paymentId, plan.amount, plan.days, plan.status);
+    const subscription = await activateSubscription(restaurantId, planKey, paymentId, amount, days, status);
+    
     res.json({ success: true, message: 'Payment verified. Your QR ordering is now active.', subscription });
   } catch (error) {
     console.error('verifyRazorpaySubscriptionPayment error:', error);

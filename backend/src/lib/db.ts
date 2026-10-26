@@ -20,7 +20,7 @@ try {
   (dns as any).lookup = patchedLookup;
 } catch {}
 
-import { Pool, PoolClient } from 'pg';
+import { Pool, PoolClient,types } from 'pg';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -30,7 +30,7 @@ const connectionString = process.env.DATABASE_URL || process.env.DIRECT_URL;
 if (!connectionString) {
   throw new Error('DATABASE_URL must be configured');
 }
-
+types.setTypeParser(1114, (value: string) => new Date(value.replace(' ', 'T') + 'Z'));
 // Robust PostgreSQL pool directly connected to Neon with IPv4 routing
 export const db = new Pool({
   connectionString,

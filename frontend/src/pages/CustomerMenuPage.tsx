@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { getSocketUrl } from '../lib/socket';
@@ -7,8 +7,8 @@ import {
   ShoppingCart, Plus, Minus, Search, X, CheckCircle2, Clock, 
   Utensils, ChefHat, MapPin, Star, ArrowRight,
   Flame, Leaf, RotateCcw, Info, MessageSquareHeart,
-  Tag, Percent, Sparkles, Send, ThumbsUp, Heart, Check, Radio, Printer,
-  Award, Smile, ThumbsDown
+  Tag, Percent, Sparkles, Send, Heart, Check,
+  Phone, BellRing, Receipt, XCircle
 } from 'lucide-react';
 import axios from 'axios';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
@@ -19,13 +19,42 @@ const API = import.meta.env.VITE_API_URL || (
     : 'https://orderkare-3.onrender.com/api/v1'
 );
 
+const CALL_COOLDOWN_MS = 30 * 1000; // the same table can send the same request only once every 30 seconds
+
+// Anonymous id stored on this phone. It lets the server keep every guest's bill separate, even at a shared table.
+const makeKey = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `g-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+const memoryKey = makeKey();
+const getCustomerKey = () => {
+  try {
+    let k = localStorage.getItem('orderkare_customer_key');
+    if (!k) {
+      k = makeKey();
+      localStorage.setItem('orderkare_customer_key', k);
+    }
+    return k;
+  } catch {
+    return memoryKey;
+  }
+};
+
+type CallType = 'WAITER' | 'BILL';
+
+// An order has one "round" per batch (original order = 1, each add-on = +1)
+const orderRound = (o: any): number =>
+  Math.max(1, ...((o?.items || []).map((i: any) => Number(i?.batch) || 1)));
+const feedbackKey = (orderId: string, round: number) => `feedback_submitted_${orderId}_${round}`;
+
 const statusToStepIndex = (status: string): number => {
   const s = (status || '').toUpperCase();
   if (s === 'PENDING') return 0;
   if (s === 'ACCEPTED') return 1;
   if (s === 'PREPARING') return 2;
   if (s === 'READY') return 3;
-  if (s === 'SERVED' || s === 'COMPLETED') return 4;
+  if (s === 'SERVED') return 4;
+  if (s === 'COMPLETED') return 5;
   return 0;
 };
 
@@ -93,6 +122,7 @@ const ORDER_STEPS = [
   { status: 'PREPARING', label: 'Chef Cooking', icon: ChefHat, desc: 'Food being cooked fresh' },
   { status: 'READY', label: 'Plated & Ready', icon: Flame, desc: 'Plated & heading to your table' },
   { status: 'SERVED', label: 'Served at Table', icon: Utensils, desc: 'Bon Appétit! Enjoy your meal' },
+  { status: 'COMPLETED', label: 'Order Completed', icon: Check, desc: 'Thank you for dining with us' },
 ];
 
 const FEEDBACK_TAGS = [
@@ -145,6 +175,32 @@ export const CustomerMenuPage = () => {
   const [showCart, setShowCart] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState<any>(null);
+  const [timeLeft, setTimeLeft] = useState<string | null>(null);
+
+useEffect(() => {
+  // Agar admin ne time set nahi kiya, ya order serve/complete ho gaya hai
+  if (!orderPlaced?.estimatedReadyAt || ['SERVED', 'COMPLETED', 'REJECTED'].includes(orderPlaced.status)) {
+    setTimeLeft(null);
+    return;
+  }
+
+  const interval = setInterval(() => {
+    const target = new Date(orderPlaced.estimatedReadyAt).getTime();
+    const now = new Date().getTime();
+    const diff = target - now;
+
+    if (diff <= 0) {
+      setTimeLeft('Almost Ready!');
+      clearInterval(interval);
+    } else {
+      const mins = Math.floor(diff / 60000);
+      const secs = Math.floor((diff % 60000) / 1000);
+      setTimeLeft(`${mins}m ${secs}s`);
+    }
+  }, 1000);
+
+  return () => clearInterval(interval);
+}, [orderPlaced]);
 
   // Live order tracker states
   const [orderStatusIdx, setOrderStatusIdx] = useState(1);
@@ -161,6 +217,11 @@ export const CustomerMenuPage = () => {
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackToastMsg, setFeedbackToastMsg] = useState<string | null>(null);
+
+  // Call waiter / ask for bill
+  const [showCallSheet, setShowCallSheet] = useState(false);
+  const [callingType, setCallingType] = useState<CallType | null>(null);
+  const [callSent, setCallSent] = useState<Partial<Record<CallType, number>>>({});
 
   // Sponsored Promo State
   const [currentAdIndex, setCurrentAdIndex] = useState(0);
@@ -186,6 +247,26 @@ export const CustomerMenuPage = () => {
   const [placingOrder, setPlacingOrder] = useState(false);
 
   const cart = useCartStore();
+
+  // Feedback is asked once per round of an order (original order, then once for each add-on)
+  const currentRound = orderRound(orderPlaced);
+  const roundRef = useRef(1);
+  roundRef.current = currentRound;
+  const promptedRef = useRef<Set<string>>(new Set()); // rounds for which the feedback popup was already opened
+
+  useEffect(() => {
+    if (!orderPlaced?.id) return;
+    let done = false;
+    try {
+      done = !!localStorage.getItem(feedbackKey(orderPlaced.id, currentRound));
+    } catch {}
+    setFeedbackSubmitted(done);
+  }, [orderPlaced?.id, currentRound]);
+
+  const showToast = (msg: string) => {
+    setFeedbackToastMsg(msg);
+    setTimeout(() => setFeedbackToastMsg(null), 4000);
+  };
 
   useEffect(() => {
     if (!qrTableParam) {
@@ -329,12 +410,21 @@ export const CustomerMenuPage = () => {
         phoneNumber: phoneNumber ? phoneNumber.trim() : undefined,
         notes: orderNotes ? `${orderNotes}${appliedPromo ? ` [Promo: ${appliedPromo}]` : ''}` : (appliedPromo ? `[Promo: ${appliedPromo}]` : undefined),
         paymentMethod,
+        customerKey: getCustomerKey(),
         items: cart.items.map((i) => ({ foodItemId: i.foodItemId, quantity: i.quantity })),
       });
 
       const newOrder = res.data.order;
       setOrderPlaced(newOrder);
       setOrderStatusIdx(statusToStepIndex(newOrder.status));
+
+      // The backend returns `merged: true` when items are added to an existing open bill
+      if (res.data.merged) {
+        showToast('✅ Items added to your existing table order!');
+      } else {
+        showToast('✅ Order placed successfully!');
+      }
+
       try {
         localStorage.setItem(`orderkare_active_order_${targetSlug}`, JSON.stringify(newOrder));
       } catch {}
@@ -361,20 +451,23 @@ export const CustomerMenuPage = () => {
           axios.get(`${API}/orders/status/${parsed.id}`)
             .then(res => {
               const liveOrder = res.data?.order;
-              if (liveOrder && liveOrder.status !== 'COMPLETED' && liveOrder.status !== 'REJECTED') {
-                setOrderPlaced(liveOrder);
+              if (liveOrder) {
+                const round = orderRound(liveOrder);
+                const key = feedbackKey(liveOrder.id, round);
+                const alreadyDone = !!localStorage.getItem(key);
                 const stepIdx = statusToStepIndex(liveOrder.status);
+
+                // A completed order is only shown again if its feedback is still pending
+                if (stepIdx >= 5 && alreadyDone) return;
+
+                setOrderPlaced(liveOrder);
                 setOrderStatusIdx(stepIdx);
                 if (liveOrder.tableNumber) setTableNumber(liveOrder.tableNumber);
 
-                // Auto-open feedback if served and not yet submitted
-                if (stepIdx >= 4) {
-                  const alreadyDone = localStorage.getItem(`feedback_submitted_${liveOrder.id}`);
-                  if (!alreadyDone) {
-                    setShowFeedbackModal(true);
-                  } else {
-                    setFeedbackSubmitted(true);
-                  }
+                // Open the feedback form once the order is completed
+                if (stepIdx >= 5 && !alreadyDone) {
+                  promptedRef.current.add(key);
+                  setShowFeedbackModal(true);
                 }
               }
             })
@@ -388,13 +481,6 @@ export const CustomerMenuPage = () => {
   useEffect(() => {
     if (!orderPlaced?.id) return;
     const orderId = orderPlaced.id;
-
-    // Check if feedback was already submitted for this order
-    try {
-      if (localStorage.getItem(`feedback_submitted_${orderId}`)) {
-        setFeedbackSubmitted(true);
-      }
-    } catch {}
 
     const socketUrl = getSocketUrl();
 
@@ -410,14 +496,15 @@ export const CustomerMenuPage = () => {
       const newIdx = statusToStepIndex(newStatus);
       setOrderStatusIdx(newIdx);
 
-      // Auto-open feedback modal when food is served!
-      if (newIdx >= 4) {
+      // Open the feedback form once, only when the admin marks the order as completed
+      if (newIdx >= 5) {
+        const key = feedbackKey(orderId, roundRef.current);
+        let done = false;
         try {
-          const alreadyDone = localStorage.getItem(`feedback_submitted_${orderId}`);
-          if (!alreadyDone) {
-            setShowFeedbackModal(true);
-          }
-        } catch {
+          done = !!localStorage.getItem(key);
+        } catch {}
+        if (!done && !promptedRef.current.has(key)) {
+          promptedRef.current.add(key);
           setShowFeedbackModal(true);
         }
       }
@@ -446,6 +533,8 @@ export const CustomerMenuPage = () => {
         const res = await axios.get(`${API}/orders/status/${orderId}`);
         if (res.data?.order?.status) {
           updateStatus(res.data.order.status);
+          const eta = res.data.order.estimatedReadyAt ?? null;
+          setOrderPlaced((prev: any) => (prev ? { ...prev, estimatedReadyAt: eta } : prev));
         }
       } catch {}
     }, 3500);
@@ -469,7 +558,7 @@ export const CustomerMenuPage = () => {
   };
 
   const handleReturnToMenu = (withToast?: boolean | any) => {
-    const showToast = typeof withToast === 'boolean' ? withToast : false;
+    const showThanks = typeof withToast === 'boolean' ? withToast : false;
     try {
       Object.keys(localStorage).forEach(key => {
         if (key.startsWith('orderkare_active_order_') || key.startsWith('active_order_')) {
@@ -480,11 +569,42 @@ export const CustomerMenuPage = () => {
       localStorage.removeItem(`orderkare_active_order_${targetSlug}`);
     } catch {}
     setShowFeedbackModal(false);
+    setShowCart(false);
+    setShowCheckout(false);
     setOrderPlaced(null);
     setFeedbackSubmitted(false);
-    if (showToast) {
-      setFeedbackToastMsg('🎉 Thank you for your review! Enjoy your meal & visit again.');
-      setTimeout(() => setFeedbackToastMsg(null), 4000);
+    try {
+      window.scrollTo({ top: 0 });
+    } catch {}
+    if (showThanks) {
+      showToast('🎉 Thank you for your review! Enjoy your meal & visit again.');
+    }
+  };
+
+  // Adds the previous order's dishes to the cart and returns to the menu (Order Again)
+  const handleReorder = () => {
+    const prevItems: any[] = orderPlaced?.items || [];
+    let added = 0;
+
+    prevItems.forEach((it: any) => {
+      const id = it.foodItemId || it.foodItem?.id;
+      const food = foods.find(f => f.id === id);
+      if (!food || !food.isAvailable) return; // no longer on the menu or sold out
+      cart.addItem({
+        foodItemId: food.id,
+        name: food.name,
+        price: food.price,
+        isVeg: food.isVeg,
+      });
+      if ((it.quantity || 1) > 1) cart.updateQuantity(food.id, it.quantity);
+      added += 1;
+    });
+
+    handleReturnToMenu();
+    if (added > 0) {
+      showToast('Your previous items were added to the cart. Tap the cart bar when you are ready to order.');
+    } else {
+      showToast('Your previous items are currently unavailable. Please choose from the menu.');
     }
   };
 
@@ -512,7 +632,7 @@ export const CustomerMenuPage = () => {
       });
 
       try {
-        localStorage.setItem(`feedback_submitted_${orderId}`, 'true');
+        localStorage.setItem(feedbackKey(orderId, roundRef.current), 'true');
       } catch {}
     } catch (err) {
       console.error('Feedback submit error:', err);
@@ -520,6 +640,35 @@ export const CustomerMenuPage = () => {
       setSubmittingFeedback(false);
       // Immediately redirect customer back to the menu!
       handleReturnToMenu(true);
+    }
+  };
+
+  // Call a waiter or ask for the bill: the admin dashboard is notified in real time
+  const handleCallStaff = async (type: CallType) => {
+    const last = callSent[type];
+    if (last && Date.now() - last < CALL_COOLDOWN_MS) {
+      setShowCallSheet(false);
+      showToast('Your request has already been sent. A staff member will be with you shortly.');
+      return;
+    }
+
+    setCallingType(type);
+    try {
+      const targetSlug = slug || restaurant?.slug || restaurant?.id;
+      const cleanTable = String(orderPlaced?.tableNumber || tableNumber).replace(/^Table\s*#?/i, '').trim() || '1';
+      await axios.post(`${API}/orders/call-staff/${targetSlug}`, {
+        tableNumber: cleanTable,
+        type,
+        customerName: customerName.trim() || orderPlaced?.customerName || undefined,
+      });
+      setCallSent(prev => ({ ...prev, [type]: Date.now() }));
+      showToast(type === 'WAITER' ? 'A waiter has been notified and will be with you shortly.' : 'Your bill request has been sent.');
+    } catch (err) {
+      console.error('Call staff error:', err);
+      showToast('Unable to send your request. Please try again.');
+    } finally {
+      setCallingType(null);
+      setShowCallSheet(false);
     }
   };
 
@@ -532,6 +681,114 @@ export const CustomerMenuPage = () => {
 
   const activeRating = hoverRating !== null ? hoverRating : feedbackRating;
   const ratingLabels = ['Poor 😞', 'Fair 😕', 'Average 😐', 'Good! 😊', 'Outstanding! 🌟'];
+
+  // ─── Shared UI: call button, call sheet and toast (menu and tracking screens) ───
+  const callButton = (
+    <button
+      type="button"
+      onClick={() => setShowCallSheet(true)}
+      aria-label="Call staff"
+      title="Call staff"
+      className="w-9 h-9 rounded-full bg-white border border-orange-200 text-orange-600 hover:bg-orange-500 hover:text-white flex items-center justify-center shadow-sm active:scale-95 transition-all shrink-0"
+    >
+      <Phone className="w-4 h-4" />
+    </button>
+  );
+
+  const callSheet = (
+    <AnimatePresence>
+      {showCallSheet && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => setShowCallSheet(false)}
+        >
+          <motion.div
+            initial={{ y: '100%', opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: '100%', opacity: 0 }}
+            transition={{ type: 'spring', damping: 26, stiffness: 300 }}
+            className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl border border-slate-200 text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-base font-black text-slate-900">Need any help?</h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Table #{orderPlaced?.tableNumber || tableNumber}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCallSheet(false)}
+                className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                disabled={callingType !== null}
+                onClick={() => handleCallStaff('WAITER')}
+                className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-orange-200 bg-orange-50 hover:bg-orange-100 transition-colors text-left active:scale-98 disabled:opacity-60"
+              >
+                <div className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0">
+                  <BellRing className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-extrabold text-slate-900">Call the waiter</p>
+                  <p className="text-[11px] text-slate-500">A staff member will come to your table</p>
+                </div>
+                {callingType === 'WAITER' && (
+                  <span className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                disabled={callingType !== null}
+                onClick={() => handleCallStaff('BILL')}
+                className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors text-left active:scale-98 disabled:opacity-60"
+              >
+                <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0">
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-extrabold text-slate-900">Ask for bill</p>
+                  <p className="text-[11px] text-slate-500">The bill will be brought to your table</p>
+                </div>
+                {callingType === 'BILL' && (
+                  <span className="w-4 h-4 border-2 border-slate-700 border-t-transparent rounded-full animate-spin" />
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  const toastBanner = (
+    <AnimatePresence>
+      {feedbackToastMsg && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          className="fixed top-0 left-0 right-0 max-w-md mx-auto bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 text-center z-[80] shadow-md flex items-center justify-between"
+        >
+          <span>{feedbackToastMsg}</span>
+          <button onClick={() => setFeedbackToastMsg(null)} className="p-1 hover:bg-white/20 rounded">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 
   if (loading) {
     return (
@@ -560,10 +817,19 @@ export const CustomerMenuPage = () => {
   // ─── LIVE ORDER TRACKING & FEEDBACK SCREEN
   // ═══════════════════════════════════════════════════════════════════════════
   if (orderPlaced) {
-    const isDelivered = orderStatusIdx >= 4;
+    const isServed = orderStatusIdx >= 4;      // food served at the table
+    const isCompleted = orderStatusIdx >= 5;   // admin marked the order as completed
+    const isRejected = String(orderPlaced.status || '').toUpperCase() === 'REJECTED'; // admin rejected the order
+    // Time set by the restaurant for this order (null = not set yet, the default countdown is shown)
+    const adminSecs: number | null = orderPlaced.estimatedReadyAt
+      ? Math.max(0, Math.round((new Date(orderPlaced.estimatedReadyAt).getTime() - Date.now()) / 1000))
+      : null;
 
     return (
       <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-between max-w-md mx-auto relative overflow-hidden font-sans border-x border-slate-200 shadow-xl">
+        {toastBanner}
+        {callSheet}
+
         <div className="p-4 sm:p-5 space-y-4 overflow-y-auto">
           {/* Top Bar */}
           <div className="flex items-center justify-between">
@@ -573,11 +839,14 @@ export const CustomerMenuPage = () => {
               className="text-xs uppercase tracking-wider text-orange-600 font-extrabold bg-orange-50 border border-orange-200 px-3 py-1 rounded-full flex items-center gap-1.5"
             >
               <span className="w-2 h-2 bg-orange-500 rounded-full animate-ping" />
-              <span>Live Kitchen Dispatch</span>
+              <span>{isRejected ? 'Order Update' : 'Live Kitchen Dispatch'}</span>
             </motion.div>
-            <span className="text-xs font-black font-mono bg-white border border-slate-200 text-slate-800 px-3 py-1 rounded-full shadow-sm">
-              Table #{orderPlaced.tableNumber}
-            </span>
+            <div className="flex items-center gap-2">
+              {callButton}
+              <span className="text-xs font-black font-mono bg-white border border-slate-200 text-slate-800 px-3 py-1 rounded-full shadow-sm">
+                Table #{orderPlaced.tableNumber}
+              </span>
+            </div>
           </div>
 
           {/* Hero Header */}
@@ -589,11 +858,15 @@ export const CustomerMenuPage = () => {
             <div className="absolute top-0 right-0 w-32 h-32 bg-orange-100/50 rounded-full blur-2xl pointer-events-none" />
 
             <motion.div
-              animate={isDelivered ? { scale: [1, 1.15, 1] } : { y: [0, -4, 0] }}
+              animate={isRejected ? { scale: 1 } : isServed ? { scale: [1, 1.15, 1] } : { y: [0, -4, 0] }}
               transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-              className="w-14 h-14 bg-gradient-to-br from-orange-500 to-rose-500 rounded-2xl mx-auto flex items-center justify-center text-white shadow-md shadow-orange-500/20"
+              className={`w-14 h-14 bg-gradient-to-br rounded-2xl mx-auto flex items-center justify-center text-white shadow-md ${
+                isRejected ? 'from-red-600 to-red-500 shadow-red-500/20' : 'from-orange-500 to-rose-500 shadow-orange-500/20'
+              }`}
             >
-              {isDelivered ? (
+              {isRejected ? (
+                <XCircle className="w-7 h-7 stroke-[2.5]" />
+              ) : isServed ? (
                 <CheckCircle2 className="w-7 h-7 stroke-[2.5]" />
               ) : (
                 <ChefHat className="w-7 h-7 stroke-[2.5]" />
@@ -601,27 +874,34 @@ export const CustomerMenuPage = () => {
             </motion.div>
 
             <h1 className="text-xl font-black text-slate-900 tracking-tight">
-              {isDelivered ? 'Order Served! Enjoy Your Meal' : 'Chef is Cooking Your Order!'}
+              {isRejected ? 'Order Rejected' : isCompleted ? 'Order Completed' : isServed ? 'Order Served! Enjoy Your Meal' : 'Chef is Cooking Your Order!'}
             </h1>
 
             <p className="text-slate-500 text-xs font-medium">
-              Order #{String(orderPlaced.id || '').slice(-6).toUpperCase()} • Dispatched to Kitchen Display
+              Order #{String(orderPlaced.id || '').slice(-6).toUpperCase()} • {isRejected ? 'Rejected' : isCompleted ? 'Completed' : 'Dispatched to Kitchen Display'}
             </p>
 
-            {/* Estimated Prep Countdown */}
-            {!isDelivered && (
-              <div className="pt-2">
-                <div className="inline-flex items-center gap-2 bg-orange-50 border border-orange-200 px-3.5 py-1.5 rounded-full text-xs font-bold text-orange-700 font-mono">
-                  <Clock className="w-3.5 h-3.5 text-orange-500 animate-spin" />
-                  <span>
-                    Est. Time: {String(remainingMinutes).padStart(2, '0')}:{String(remainingSeconds).padStart(2, '0')} mins
-                  </span>
-                </div>
-              </div>
+            {isRejected && (
+              <p className="text-sm text-red-700 font-semibold leading-relaxed">
+                We are sorry, the restaurant could not accept this order. Please speak to a staff member or place a new order.
+              </p>
             )}
+
+            {/* Estimated Prep Countdown */}
+             {!isServed && !isRejected && timeLeft && (
+           <div className="pt-2">
+    <div className="inline-flex items-center gap-2 bg-orange-50 border border-orange-200 px-3.5 py-1.5 rounded-full text-xs font-bold text-orange-700 font-mono">
+      <Clock className="w-3.5 h-3.5 text-orange-500 animate-spin" />
+      <span>
+        Est. Ready in: {timeLeft}
+      </span>
+    </div>
+  </div>
+)}
           </motion.div>
 
-          {/* Stepper tracker */}
+          {/* Stepper tracker (hidden for a rejected order) */}
+          {!isRejected && (
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
@@ -641,6 +921,7 @@ export const CustomerMenuPage = () => {
                 const Icon = step.icon;
                 const isPassed = idx <= orderStatusIdx;
                 const isCurrent = idx === orderStatusIdx;
+                const isFinal = step.status === 'COMPLETED' && isCurrent;
 
                 return (
                   <div key={step.status} className="flex items-start space-x-3 relative z-10">
@@ -648,7 +929,9 @@ export const CustomerMenuPage = () => {
                       animate={isCurrent ? { scale: [1, 1.08, 1] } : {}}
                       transition={{ duration: 1.5, repeat: Infinity }}
                       className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 border transition-all ${
-                        isCurrent
+                        isFinal
+                          ? 'bg-emerald-500 text-white border-emerald-500 shadow-md shadow-emerald-500/30'
+                          : isCurrent
                           ? 'bg-orange-500 text-white border-orange-500 shadow-md shadow-orange-500/30'
                           : isPassed
                           ? 'bg-emerald-500 text-white border-emerald-500'
@@ -663,8 +946,14 @@ export const CustomerMenuPage = () => {
                           {step.label}
                         </h3>
                         {isCurrent && (
-                          <span className="text-[9px] bg-orange-50 border border-orange-200 text-orange-600 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider animate-pulse">
-                            Active
+                          <span
+                            className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                              isFinal
+                                ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                                : 'bg-orange-50 border border-orange-200 text-orange-600 animate-pulse'
+                            }`}
+                          >
+                            {isFinal ? 'Done' : 'Active'}
                           </span>
                         )}
                       </div>
@@ -675,6 +964,7 @@ export const CustomerMenuPage = () => {
               })}
             </div>
           </motion.div>
+          )}
 
           {/* Ordered Dishes Summary */}
           <motion.div
@@ -702,7 +992,7 @@ export const CustomerMenuPage = () => {
             </div>
 
             <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs font-bold">
-              <span className="text-slate-600">Total Bill Amount</span>
+              <span className="text-slate-600">{isRejected ? 'Order Value (not charged)' : 'Total Bill Amount'}</span>
               <span className="text-orange-600 font-mono text-sm font-extrabold">₹{orderPlaced.totalAmount}</span>
             </div>
 
@@ -713,29 +1003,22 @@ export const CustomerMenuPage = () => {
               </div>
             )}
 
-            {/* Quick Actions for Customer */}
-            <div className="pt-2 flex gap-2">
+            {/* Quick Action for Customer (print receipt option removed) */}
+            <div className="pt-2">
               <button
                 onClick={handleReturnToMenu}
-                className="flex-1 py-2 bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-700 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-2xs"
+                className="w-full py-2.5 bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-700 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-2xs"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Add More Dishes</span>
-              </button>
-              <button
-                onClick={() => window.print()}
-                className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5"
-                title="Print Receipt"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Print Receipt</span>
+                <span>{isRejected ? 'Back to Menu' : 'Add More Dishes'}</span>
               </button>
             </div>
           </motion.div>
 
-          {/* ─── CUSTOMER FEEDBACK SECTION ─── show only after food is served ─── */}
+          {/* ─── CUSTOMER FEEDBACK SECTION ─── not shown for a rejected order ─── */}
+          {!isRejected && (
           <AnimatePresence>
-            {isDelivered ? (
+            {isServed ? (
               <motion.div
                 key="feedback-card"
                 initial={{ opacity: 0, y: 20, scale: 0.98 }}
@@ -803,6 +1086,16 @@ export const CustomerMenuPage = () => {
                     </button>
                   </div>
                 )}
+
+                {/* Order Again: customers can reorder from the feedback card too */}
+                <button
+                  type="button"
+                  onClick={handleReorder}
+                  className="w-full py-2.5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 active:scale-98"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-orange-400" />
+                  <span>Order Again</span>
+                </button>
               </motion.div>
             ) : (
               /* Waiting state — shown while order is still being prepared */
@@ -822,6 +1115,7 @@ export const CustomerMenuPage = () => {
               </motion.div>
             )}
           </AnimatePresence>
+          )}
         </div>
 
         {/* ─── PROFESSIONAL AUTOMATIC FEEDBACK MODAL ─── */}
@@ -879,12 +1173,19 @@ export const CustomerMenuPage = () => {
                     <p className="text-xs text-slate-500 max-w-xs mx-auto">
                       Thank you for dining with us. Your ratings and suggestions have been forwarded directly to the culinary & management team.
                     </p>
-                    <div className="pt-3">
+                    <div className="pt-3 space-y-2">
+                      <button
+                        onClick={handleReorder}
+                        className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-extrabold rounded-xl text-xs shadow-md transition-all flex items-center justify-center space-x-2 active:scale-98"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Order Again</span>
+                      </button>
                       <button
                         onClick={handleReturnToMenu}
                         className="w-full py-3 bg-slate-900 hover:bg-black text-white font-extrabold rounded-xl text-xs shadow-md transition-all flex items-center justify-center space-x-2 active:scale-98"
                       >
-                        <RotateCcw className="w-3.5 h-3.5 text-orange-400" />
+                        <Utensils className="w-3.5 h-3.5 text-orange-400" />
                         <span>Return to Digital Menu</span>
                       </button>
                     </div>
@@ -994,7 +1295,7 @@ export const CustomerMenuPage = () => {
                       />
                     </div>
 
-                    {/* Submit & Cancel Buttons */}
+                    {/* Submit & Skip Buttons */}
                     <div className="flex gap-2 pt-1">
                       <button
                         type="button"
@@ -1021,6 +1322,16 @@ export const CustomerMenuPage = () => {
                         )}
                       </button>
                     </div>
+
+                    {/* Order Again (skip the review and order again) */}
+                    <button
+                      type="button"
+                      onClick={handleReorder}
+                      className="w-full py-3 bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-700 font-extrabold rounded-xl text-xs transition-all flex items-center justify-center gap-2 active:scale-98"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Order Again</span>
+                    </button>
                   </form>
                 )}
               </motion.div>
@@ -1084,22 +1395,8 @@ export const CustomerMenuPage = () => {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 max-w-md mx-auto relative pb-28 font-sans border-x border-slate-200 shadow-xl">
       
-      {/* Toast Notification */}
-      <AnimatePresence>
-        {feedbackToastMsg && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 text-center sticky top-0 z-50 shadow-md flex items-center justify-between"
-          >
-            <span>{feedbackToastMsg}</span>
-            <button onClick={() => setFeedbackToastMsg(null)} className="p-1 hover:bg-white/20 rounded">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {toastBanner}
+      {callSheet}
 
       {/* ─── 1. CLEAN RESTAURANT HEADER ─── */}
       <div className="bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 py-3 text-left sticky top-0 z-40 shadow-xs">
@@ -1125,9 +1422,12 @@ export const CustomerMenuPage = () => {
             </div>
           </div>
 
-          {/* Table Badge */}
-          <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-black px-3.5 py-1.5 rounded-full shrink-0 flex items-center gap-1.5 shadow-sm font-mono tracking-wide">
-            <Utensils className="w-3.5 h-3.5" /> Table #{tableNumber}
+          {/* Round call button + table badge */}
+          <div className="flex items-center gap-2 shrink-0">
+            {callButton}
+            <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-black px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm font-mono tracking-wide">
+              <Utensils className="w-3.5 h-3.5" /> Table #{tableNumber}
+            </div>
           </div>
         </div>
       </div>

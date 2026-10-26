@@ -6,16 +6,10 @@ import {
   Plus,
   Edit2,
   Trash2,
-  Sparkles,
   Check,
   X,
   Star,
   Power,
-  Layers,
-  TrendingUp,
-  Percent,
-  ArrowRight,
-  ShieldCheck,
   AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -95,7 +89,7 @@ export const SuperAdminPlans: React.FC = () => {
   const fetchPlans = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/plans/all');
+      const res = await api.get('/plans/admin/all');
       if (res.data?.plans) {
         setPlans(res.data.plans);
       }
@@ -117,7 +111,7 @@ export const SuperAdminPlans: React.FC = () => {
       name: '',
       description: '',
       priceMonthly: 1999,
-      priceYearly: 1599,
+      priceYearly: 19190, // Pre-calculated as 1999 * 12 * 0.8
       maxItems: 'Unlimited Items',
       features: [
         'Instant Table QR Generator',
@@ -158,7 +152,7 @@ export const SuperAdminPlans: React.FC = () => {
   const handleToggleActive = async (plan: Plan) => {
     try {
       const updatedStatus = !plan.isActive;
-      await api.put(`/plans/${plan.id}`, { isActive: updatedStatus });
+      await api.put(`/plans/admin/${plan.id}`, { isActive: updatedStatus });
       setPlans(prev => prev.map(p => p.id === plan.id ? { ...p, isActive: updatedStatus } : p));
       setSuccessMsg(`Plan "${plan.name}" ${updatedStatus ? 'activated' : 'deactivated'}.`);
       setTimeout(() => setSuccessMsg(''), 3000);
@@ -170,7 +164,7 @@ export const SuperAdminPlans: React.FC = () => {
   const handleTogglePopular = async (plan: Plan) => {
     try {
       const updatedPopular = !plan.isPopular;
-      await api.put(`/plans/${plan.id}`, { isPopular: updatedPopular });
+      await api.put(`/plans/admin/${plan.id}`, { isPopular: updatedPopular });
       setPlans(prev => prev.map(p => p.id === plan.id ? { ...p, isPopular: updatedPopular } : p));
       setSuccessMsg(`Plan "${plan.name}" marked as ${updatedPopular ? 'Most Popular' : 'Standard'}.`);
       setTimeout(() => setSuccessMsg(''), 3000);
@@ -182,7 +176,7 @@ export const SuperAdminPlans: React.FC = () => {
   const handleDelete = async (id: string, name: string) => {
     if (!window.confirm(`Are you sure you want to permanently delete "${name}"?`)) return;
     try {
-      await api.delete(`/plans/${id}`);
+      await api.delete(`/plans/admin/${id}`);
       setPlans(prev => prev.filter(p => p.id !== id));
       setSuccessMsg(`Plan "${name}" has been deleted.`);
       setTimeout(() => setSuccessMsg(''), 3000);
@@ -216,16 +210,19 @@ export const SuperAdminPlans: React.FC = () => {
       const payload = {
         ...form,
         priceMonthly: parseFloat(String(form.priceMonthly)),
-        priceYearly: parseFloat(String(form.priceYearly || Math.round(Number(form.priceMonthly) * 0.8))),
+        // If priceYearly is empty, calculate it safely
+        priceYearly: form.priceYearly 
+          ? parseFloat(String(form.priceYearly)) 
+          : Math.round(Number(form.priceMonthly) * 12 * 0.8),
         orderIndex: Number(form.orderIndex) || 0,
       };
 
       if (editingPlan) {
-        const res = await api.put(`/plans/${editingPlan.id}`, payload);
+        const res = await api.put(`/plans/admin/${editingPlan.id}`, payload);
         setPlans(prev => prev.map(p => p.id === editingPlan.id ? res.data.plan : p));
         setSuccessMsg(`Plan "${form.name}" updated successfully!`);
       } else {
-        const res = await api.post('/plans', payload);
+        const res = await api.post('/plans/admin', payload);
         setPlans(prev => [...prev, res.data.plan]);
         setSuccessMsg(`New SaaS tier "${form.name}" created successfully!`);
       }
@@ -416,9 +413,13 @@ export const SuperAdminPlans: React.FC = () => {
                       <span className="text-3xl font-black text-slate-950 font-mono tracking-tight">₹{plan.priceMonthly}</span>
                       <span className="text-xs text-slate-500 font-bold ml-1">/ mo</span>
                     </div>
+
                     <div className="text-right">
-                      <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md font-mono">
-                        ₹{plan.priceYearly}/mo (annual)
+                      <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md font-mono block">
+                        ₹{Math.round(plan.priceYearly / 12)}/mo
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium mt-0.5 block">
+                        Billed ₹{plan.priceYearly} yearly
                       </span>
                     </div>
                   </div>
@@ -555,11 +556,12 @@ export const SuperAdminPlans: React.FC = () => {
                       value={form.priceMonthly}
                       onChange={e => {
                         const val = e.target.value;
-                        setForm({
-                          ...form,
+                        setForm(prev => ({
+                          ...prev,
                           priceMonthly: val,
-                          priceYearly: val ? Math.round(Number(val) * 0.8) : ''
-                        });
+                          // ✅ FIX: Only auto-calculate if CREATING. If editing, keep the existing yearly price.
+                          priceYearly: !editingPlan && val ? Math.round(Number(val) * 12 * 0.8) : prev.priceYearly
+                        }));
                       }}
                       placeholder="1999"
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black font-mono outline-none focus:bg-white focus:border-rose-600 transition-all text-slate-900"
@@ -568,7 +570,7 @@ export const SuperAdminPlans: React.FC = () => {
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Yearly (₹/mo) *
+                      Yearly Price (₹/year) *
                     </label>
                     <input
                       type="number"
@@ -576,7 +578,7 @@ export const SuperAdminPlans: React.FC = () => {
                       min="0"
                       value={form.priceYearly}
                       onChange={e => setForm({ ...form, priceYearly: e.target.value })}
-                      placeholder="1599"
+                      placeholder="19190"
                       className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black font-mono outline-none focus:bg-white focus:border-rose-600 transition-all text-emerald-700"
                     />
                   </div>

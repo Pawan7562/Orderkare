@@ -89,10 +89,45 @@
     height: 22px;
   }
 
-  @media (max-width: 1024px) {
-    flex-direction: column;
-    text-align: center;
+ /* ─── PRINT STYLES FOR KOT / BILL ─── */
+@media print {
+  /* 1. Hide the entire page */
+  body * {
+    visibility: hidden;
   }
+
+  /* 2. Show only the receipt container */
+  .print-receipt, .print-receipt * {
+    visibility: visible;
+  }
+
+  /* 3. Set the paper size to standard 80mm thermal roll */
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  /* 4. Position and style the receipt perfectly */
+  .print-receipt {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 80mm !important;
+    margin: 0 !important;
+    padding: 5px !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: white !important;
+    color: black !important;
+    z-index: 9999999 !important;
+  }
+
+  /* 5. Hide print buttons and dark background */
+  .no-print {
+    display: none !important;
+  }
+}
 }
 
 #docs {

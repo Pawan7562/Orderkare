@@ -20,6 +20,7 @@ import { TablesPage } from './pages/TablesPage';
 import { WorkersPage } from './pages/WorkersPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { SubscriptionPage } from './pages/SubscriptionPage';
+import { FeedbackPage } from './pages/Feedback';
 
 function App() {
   return (
@@ -44,6 +45,7 @@ function App() {
             <Route path="/dashboard/analytics" element={<AnalyticsPage />} />
             <Route path="/dashboard/settings" element={<SettingsPage />} />
             <Route path="/dashboard/subscription" element={<SubscriptionPage />} />
+            <Route path="/dashboard/feedback" element={<FeedbackPage />} />
           </Route>
         </Route>
 

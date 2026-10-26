@@ -237,7 +237,7 @@ export const LandingPage: React.FC = () => {
   ];
 
   const [supportEmail, setSupportEmail] = useState('support@orderkare.com');
-  const [supportPhone, setSupportPhone] = useState('+91 98765 43210');
+  const [supportPhone, setSupportPhone] = useState('+91 6201945618');
 
   useEffect(() => {
     const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');

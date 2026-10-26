@@ -38,10 +38,17 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 
 export const requireRole = (roles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
+    // 👈 ADD THIS DEBUG LOG
+    console.log("🔍 [Auth Middleware] Checking Role. User object:", req.user);
+    
     if (!req.user) {
       res.status(401).json({ message: 'Unauthorized' });
       return;
     }
+    
+    // 👈 ADD THIS DEBUG LOG
+    console.log("🔍 [Auth Middleware] Required roles:", roles, "| User role:", req.user.role);
+
     if (!roles.includes(req.user.role)) {
       res.status(403).json({ message: 'Forbidden: Insufficient privileges' });
       return;

@@ -17,6 +17,7 @@ export const AdminLayout = () => {
     { label: 'Analytics', path: '/dashboard/analytics', icon: BarChart3 },
     { label: 'Settings', path: '/dashboard/settings', icon: Settings },
     { label: 'Subscription', path: '/dashboard/subscription', icon: CreditCard },
+    {label:'Feedback', path:'/dashboard/feedback', icon:Bell}
   ];
 
   return (

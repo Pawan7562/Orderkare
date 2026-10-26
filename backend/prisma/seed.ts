@@ -123,7 +123,49 @@ async function main() {
       },
     ],
   });
-  console.log('🍲 Seeded default menu food items.');
+
+  // suscription plan 
+  
+  const plans = [
+    {
+      code: 'FIRST_TIME_ACTIVATION',
+      name: 'First-Time Activation',
+      amount: 1,
+      days: 30,
+      status: 'TRIAL' as const,
+    },
+    {
+      code: 'MONTHLY',
+      name: 'Monthly',
+      amount: 249,
+      days: 30,
+      status: 'ACTIVE' as const,
+    },
+    {
+      code: 'SIX_MONTHS',
+      name: 'Six Months',
+      amount: 1199,
+      days: 180,
+      status: 'ACTIVE' as const,
+    },
+    {
+      code: 'ANNUAL',
+      name: 'Annual',
+      amount: 1999,
+      days: 365,
+      status: 'ACTIVE' as const,
+    },
+  ];
+
+  for (const plan of plans) {
+    await prisma.subscriptionPlan.upsert({
+      where: { code: plan.code },
+      update: {},
+      create: plan,
+    });
+  }
+
+  console.log('💳 Subscription plans seeded successfully.');
   console.log('✅ Seeding completed successfully!');
 }
 

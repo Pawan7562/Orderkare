@@ -126,7 +126,8 @@ export const MenuManagementPage = () => {
     if (!confirm('Delete this category and all its items?')) return;
     try {
       await api.delete(`/categories/${id}`);
-      fetchCategories();
+      // fetchCategories to setCategories
+      setCategories([]);
       if (activeCategory === id) setActiveCategory(null);
     } catch (err) { console.error(err); }
   };

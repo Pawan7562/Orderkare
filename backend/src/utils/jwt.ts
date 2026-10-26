@@ -7,7 +7,7 @@ const getJwtSecret = () => {
   }
   return secret;
 };
-const JWT_EXPIRES_IN = '7d';
+const JWT_EXPIRES_IN = '24h';
 
 export const generateToken = (payload: object): string => {
   return jwt.sign(payload, getJwtSecret(), { expiresIn: JWT_EXPIRES_IN, algorithm: 'HS256' });

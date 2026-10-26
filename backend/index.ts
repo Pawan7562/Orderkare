@@ -24,6 +24,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
+import cron from 'node-cron';
 import { PrismaClient } from '@prisma/client';
 import authRoutes from './src/routes/auth.routes';
 import categoryRoutes from './src/routes/category.routes';
@@ -41,6 +42,7 @@ import adminRoutes from './src/routes/admin.routes';
 import devopsRoutes from './src/routes/devops.routes';
 import { initSocket } from './src/utils/socket';
 import { db, query } from './src/lib/db';
+import { prisma } from './src/lib/prisma';
 
 dotenv.config();
 
@@ -214,7 +216,51 @@ const start = async () => {
   server.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`🚀 OrderKare API and WebSockets running on http://localhost:${PORT}`);
   });
+
+ //  excute it every night at 2 am 
+cron.schedule('0 2 * * *', async () => {
+  try {
+    console.log('Running 30-day cleanup job...');
+    
+    // find date 30 days ago
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // find 30 days old order
+    const oldOrders = await prisma.order.findMany({
+      where: { 
+        createdAt: { lt: thirtyDaysAgo },
+        status: 'COMPLETED' // delete only completed order
+      },
+      select: { id: true }
+    });
+
+    const oldOrderIds = oldOrders.map(o => o.id);
+
+    if (oldOrderIds.length > 0) {
+      // delete order items first
+      await prisma.orderItem.deleteMany({
+        where: { orderId: { in: oldOrderIds } }
+      });
+
+      // order delete karein
+      await prisma.order.deleteMany({
+        where: { id: { in: oldOrderIds } }
+      });
+
+      console.log(` Deleted ${oldOrderIds.length} old orders.`);
+    } else {
+      console.log('No old orders to delete.');
+    }
+  } catch (error) {
+    console.error('Error cleaning up old orders:', error);
+  }
+});
 };
+
+
+
+
 
 void start().catch(error => {
   console.error('Failed to start server:', error);

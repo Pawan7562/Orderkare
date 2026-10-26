@@ -42,7 +42,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     await client.query('BEGIN');
 
-    // 1. Check if user exists in Neon DB
+    // 1. Check if user exists
     const existingUser = await client.query(`SELECT "id" FROM "User" WHERE "email" = $1 LIMIT 1;`, [cleanEmail]);
     if (existingUser.rows && existingUser.rows.length > 0) {
       await client.query('ROLLBACK');
@@ -50,42 +50,43 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // 2. Insert the restaurant in its initial pending state.
+    // 2. Insert Restaurant (USING CLIENT, NOT QUERY)
     const restRes = await client.query(
-      `INSERT INTO "Restaurant" ("id", "name", "slug", "address", "phone")
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *;`,
-      [hotelId, cleanRestaurant, slug, cleanAddress, cleanPhone]
+      `INSERT INTO "Restaurant" (
+        "id", "slug", "name", "address", "phone", "isActive", "createdAt", "updatedAt"
+      ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) RETURNING *;`,
+      [hotelId, slug, cleanRestaurant, cleanAddress, cleanPhone, true]
     );
     const restaurant = restRes.rows[0];
 
-    // 3. Insert User directly into Neon PostgreSQL
+    // 3. Insert User (ONLY ONCE, USING CLIENT)
     const userRes = await client.query(
-      `INSERT INTO "User" ("id", "email", "password", "name", "role", "restaurantId")
-       VALUES ($1, $2, $3, $4, 'RESTAURANT_ADMIN', $5)
+      `INSERT INTO "User" (
+        "id", "email", "password", "name", "role", "restaurantId", "createdAt", "updatedAt"
+      ) VALUES ($1, $2, $3, $4, 'RESTAURANT_ADMIN', $5, NOW(), NOW())
        RETURNING "id", "email", "name", "role", "restaurantId";`,
       [userId, cleanEmail, hashedPassword, cleanName, hotelId]
     );
     const user = userRes.rows[0];
 
-    // 4. Create initial PENDING Subscription record
+    // 4. Create initial PENDING Subscription record (USING CLIENT)
     const subId = 'sub-' + Math.random().toString(36).substring(2, 8);
     await client.query(
-      `INSERT INTO "Subscription" ("id", "status", "planName", "validUntil", "amountPaid", "restaurantId")
-       VALUES ($1, 'PENDING', 'NONE', NOW(), 0, $2)
+      `INSERT INTO "Subscription" (
+        "id", "status", "planName", "validUntil", "amountPaid", "restaurantId", "createdAt", "updatedAt"
+      ) VALUES ($1, 'PENDING', 'NONE', NOW(), 0, $2, NOW(), NOW())
        ON CONFLICT ("restaurantId") DO NOTHING;`,
       [subId, hotelId]
     );
 
     await client.query('COMMIT');
 
-    // Newly created admin starts with clean state
     const fullUser = {
       id: user.id,
       email: user.email,
       name: user.name,
       role: user.role,
-      restaurantId: hotelId,
+      restaurantId: restaurant.id,
       restaurant
     };
 
@@ -109,7 +110,6 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     client?.release();
   }
 };
-
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;

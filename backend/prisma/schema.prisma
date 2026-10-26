@@ -46,32 +46,35 @@ model User {
 }
 
 model Restaurant {
-  id             String        @id @default(uuid())
-  slug           String        @unique // Used for QR code URL (e.g., hotel-a-8F3K2)
-  name           String
-  address        String
-  phone          String?
-  logoUrl        String?
-  bannerUrl      String?
-  isActive       Boolean       @default(true)
-  subscription   Subscription?
-  categories     Category[]
-  foodItems      FoodItem[]
-  orders         Order[]
-  users          User[]
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id           String        @id @default(uuid())
+  slug         String        @unique // Used for QR code URL (e.g., hotel-a-8F3K2)
+  name         String
+  address      String
+  phone        String?
+  logoUrl      String?
+  bannerUrl    String?
+  isActive     Boolean       @default(true)
+  subscription Subscription?
+  categories   Category[]
+  foodItems    FoodItem[]
+  orders       Order[]
+  feedbacks    Feedback[]
+  users        User[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 }
 
 model Subscription {
-  id           String             @id @default(uuid())
-  status       SubscriptionStatus @default(TRIAL)
-  planName     String
-  validUntil   DateTime
-  restaurantId String             @unique
-  restaurant   Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  id               String             @id @default(uuid())
+  status           SubscriptionStatus @default(TRIAL)
+  planName         String
+  validUntil       DateTime
+  amountPaid       Float              @default(0)
+  paymentReference String?
+  restaurantId     String             @unique
+  restaurant       Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 }
 
 model Category {
@@ -105,12 +108,23 @@ model FoodItem {
 
 model Order {
   id           String      @id @default(uuid())
+  billNo       Int?        @default(autoincrement())
+  billedAt     DateTime?
+  customerKey  String?
   customerName String
   tableNumber  String
   phoneNumber  String?
   notes        String?     @map("specialInstructions")
   status       OrderStatus @default(PENDING)
   totalAmount  Float
+  estimatedReadyAt DateTime?
+  // Saved when the final bill is closed. A closed bill is never recalculated.
+  gstEnabled       Boolean?
+  serviceChargePct Int?
+  gstAmount        Float?
+  serviceAmount    Float?
+  finalAmount      Float?
+
   restaurantId String
   restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   items        OrderItem[]
@@ -124,11 +138,65 @@ model Order {
 model OrderItem {
   id         String   @id @default(uuid())
   quantity   Int
-  price      Float    // Price at the time of order
+  price      Float // Price at the time of order
+  batch      Int      @default(1)
   foodItemId String
   foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
   orderId    String
   order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
+}
+
+model Feedback {
+  id             String     @id @default(uuid())
+  rating         Int
+  comment        String?
+  customerName   String
+  tableNumber    String?
+  foodName       String?
+  tags           String[]
+  favoriteDishes String[]
+  orderId        String?
+  restaurantId   String
+  restaurant     Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  createdAt      DateTime   @default(now())
+
+  @@index([restaurantId, createdAt(sort: Desc)])
+}
+
+model SubscriptionPlan {
+  id        String             @id @default(uuid())
+  code      String             @unique // FIRST_TIME_ACTIVATION, MONTHLY, etc.
+  name      String
+  amount    Int // Price in INR (whole rupees)
+  days      Int
+  status    SubscriptionStatus @default(ACTIVE)
+  isVisible Boolean            @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SystemSettings {
+  id                     String   @id @default("default")
+  platformName           String   @default("OrderKare")
+  supportEmail           String   @default("support@orderkare.com")
+  supportPhone           String?
+  platformUrl            String?  @default("http://localhost:3000")
+  currencySymbol         String   @default("₹")
+  defaultCurrency        String   @default("INR")
+  stripePublishableKey   String?
+  stripeSecretKey        String?
+  razorpayKeyId          String?
+  razorpayKeySecret      String?
+  defaultUpiId           String?
+  paymentMode            String   @default("RAZORPAY")
+  maintenanceMode        Boolean  @default(false)
+  maintenanceMessage     String?
+  autoApproveRestaurants Boolean  @default(false)
+  freeTrialDays          Int      @default(14)
+  enableCustomerFeedback Boolean  @default(true)
+  enableAudioAlerts      Boolean  @default(true)
+  updatedAt              DateTime @updatedAt
 }

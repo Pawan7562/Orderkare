@@ -13,7 +13,7 @@ const initPlanTable = async () => {
         "priceMonthly" DOUBLE PRECISION NOT NULL,
         "priceYearly" DOUBLE PRECISION NOT NULL,
         "maxItems" VARCHAR(255) NOT NULL DEFAULT 'Unlimited Items',
-        "features" TEXT NOT NULL, -- JSON string array of features
+        "features" TEXT NOT NULL,
         "isPopular" BOOLEAN NOT NULL DEFAULT false,
         "isActive" BOOLEAN NOT NULL DEFAULT true,
         "ctaText" VARCHAR(255) NOT NULL DEFAULT 'Start 14-Day Trial',
@@ -24,85 +24,19 @@ const initPlanTable = async () => {
       );
     `);
 
-    // Check if initial plans exist, if empty, seed default tiers
+    // Seed defaults if empty
     const countRes = await query(`SELECT COUNT(*) as count FROM "PricingPlan";`);
     if (countRes.rows[0]?.count === '0' || countRes.rows[0]?.count === 0) {
-      const defaultFeaturesBasic = JSON.stringify([
-        '1 Restaurant Location',
-        'Custom Table QR Generator',
-        'Customer Digital Menu & Ordering',
-        'Real-Time Kitchen Order Pipeline',
-        'Basic Daily Revenue Analytics',
-        'Email Support'
-      ]);
-
-      const defaultFeaturesPro = JSON.stringify([
-        'Everything in Basic +',
-        'Unlimited Dishes & Categories',
-        'Real-Time Kitchen Audio Ringtone',
-        'Live Customer Feedback & Rating System',
-        'Staff & Waiter Operations Console',
-        'Promotional Ads & Sponsored Banners',
-        'Priority 24/7 WhatsApp & Phone Support'
-      ]);
-
-      const defaultFeaturesEnterprise = JSON.stringify([
-        'Everything in Pro +',
-        'Multi-Outlet & Multi-Branch Dashboard',
-        'Custom Domain & White-Label Branding',
-        'Super Admin Central Inventory Hub',
-        'Custom Payment Gateway (Zero Fee Direct UPI)',
-        'Dedicated Account Manager',
-        '99.99% Uptime SLA'
-      ]);
+      const defaultFeaturesBasic = JSON.stringify(['1 Restaurant Location', 'Custom Table QR Generator', 'Customer Digital Menu & Ordering']);
+      const defaultFeaturesPro = JSON.stringify(['Everything in Basic +', 'Unlimited Dishes & Categories', 'Real-Time Kitchen Audio Ringtone']);
 
       await query(`
         INSERT INTO "PricingPlan" 
         ("id", "name", "description", "priceMonthly", "priceYearly", "maxItems", "features", "isPopular", "isActive", "ctaText", "ctaLink", "orderIndex")
         VALUES 
-        (
-          'plan-starter', 
-          'Starter Plan', 
-          'Designed for standalone cafes, food trucks, and quick-service diners.', 
-          999, 
-          799, 
-          'Up to 30 Items', 
-          $1, 
-          false, 
-          true, 
-          'Start Free Trial', 
-          '/register', 
-          1
-        ),
-        (
-          'plan-professional', 
-          'Professional Plan', 
-          'Ideal for bustling dine-in restaurants and family multi-cuisine kitchens.', 
-          1999, 
-          1599, 
-          'Unlimited Items', 
-          $2, 
-          true, 
-          true, 
-          'Start 14-Day Free Trial', 
-          '/register', 
-          2
-        ),
-        (
-          'plan-enterprise', 
-          'Enterprise Plan', 
-          'Tailored for multi-branch restaurant chains, cloud kitchens, and luxury hotels.', 
-          4999, 
-          3999, 
-          'Unlimited Everything', 
-          $3, 
-          false, 
-          true, 
-          'Talk to Enterprise Sales', 
-          '/register', 
-          3
-        );
-      `, [defaultFeaturesBasic, defaultFeaturesPro, defaultFeaturesEnterprise]);
+        ('plan-starter', 'Starter Plan', 'Designed for standalone cafes.', 999, 9589, 'Up to 30 Items', $1, false, true, 'Start Free Trial', '/register', 1),
+        ('plan-professional', 'Professional Plan', 'Ideal for bustling dine-in restaurants.', 1999, 19189, 'Unlimited Items', $2, true, true, 'Start 14-Day Free Trial', '/register', 2);
+      `, [defaultFeaturesBasic, defaultFeaturesPro]);
     }
   } catch (err) {
     console.warn('PricingPlan table init warning:', err);
@@ -111,7 +45,6 @@ const initPlanTable = async () => {
 
 void initPlanTable();
 
-// Parse plan features helper
 const formatPlan = (row: any) => {
   let parsedFeatures: string[] = [];
   try {
@@ -119,7 +52,6 @@ const formatPlan = (row: any) => {
   } catch {
     parsedFeatures = typeof row.features === 'string' ? row.features.split(',').map((s: string) => s.trim()) : [];
   }
-
   return {
     ...row,
     features: parsedFeatures,
@@ -141,12 +73,10 @@ export const getActivePlans = async (_req: Request, res: Response): Promise<void
   }
 };
 
-// Super Admin: Get all plans (active + drafts)
+// Super Admin: Get all plans
 export const getAllPlans = async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const result = await query(
-      `SELECT * FROM "PricingPlan" ORDER BY "orderIndex" ASC, "createdAt" ASC;`
-    );
+    const result = await query(`SELECT * FROM "PricingPlan" ORDER BY "orderIndex" ASC, "createdAt" ASC;`);
     res.json({ plans: result.rows.map(formatPlan) });
   } catch (error) {
     console.error('Error fetching all plans:', error);
@@ -157,19 +87,7 @@ export const getAllPlans = async (_req: AuthRequest, res: Response): Promise<voi
 // Super Admin: Create new Plan
 export const createPlan = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const {
-      name,
-      description,
-      priceMonthly,
-      priceYearly,
-      maxItems = 'Unlimited Items',
-      features = [],
-      isPopular = false,
-      isActive = true,
-      ctaText = 'Start Free Trial',
-      ctaLink = '/register',
-      orderIndex = 0
-    } = req.body;
+    const { name, description, priceMonthly, priceYearly, maxItems = 'Unlimited Items', features = [], isPopular = false, isActive = true, ctaText = 'Start Free Trial', ctaLink = '/register', orderIndex = 0 } = req.body;
 
     if (!name || priceMonthly === undefined || priceMonthly === null) {
       res.status(400).json({ message: 'Plan name and monthly price are required.' });
@@ -178,29 +96,19 @@ export const createPlan = async (req: AuthRequest, res: Response): Promise<void>
 
     const id = `plan-${Date.now()}`;
     const featuresJson = JSON.stringify(Array.isArray(features) ? features : [features]);
-    const computedYearly = priceYearly !== undefined && priceYearly !== '' ? Number(priceYearly) : Math.round(Number(priceMonthly) * 0.8);
+    
+    // FIX: Correct yearly calculation (12 months * 0.8 discount)
+    const computedYearly = priceYearly !== undefined && priceYearly !== '' 
+      ? Number(priceYearly) 
+      : Math.round(Number(priceMonthly) * 12 * 0.8);
 
     const result = await query(
       `
       INSERT INTO "PricingPlan" 
       ("id", "name", "description", "priceMonthly", "priceYearly", "maxItems", "features", "isPopular", "isActive", "ctaText", "ctaLink", "orderIndex")
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-      RETURNING *;
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *;
       `,
-      [
-        id,
-        name.trim(),
-        (description || '').trim(),
-        Number(priceMonthly),
-        computedYearly,
-        maxItems,
-        featuresJson,
-        Boolean(isPopular),
-        Boolean(isActive),
-        ctaText,
-        ctaLink,
-        Number(orderIndex) || 0
-      ]
+      [id, name.trim(), (description || '').trim(), Number(priceMonthly), computedYearly, maxItems, featuresJson, Boolean(isPopular), Boolean(isActive), ctaText, ctaLink, Number(orderIndex) || 0]
     );
 
     res.status(201).json({ plan: formatPlan(result.rows[0]), message: 'Pricing plan created successfully.' });
@@ -213,20 +121,8 @@ export const createPlan = async (req: AuthRequest, res: Response): Promise<void>
 // Super Admin: Update Plan
 export const updatePlan = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
-    const {
-      name,
-      description,
-      priceMonthly,
-      priceYearly,
-      maxItems,
-      features,
-      isPopular,
-      isActive,
-      ctaText,
-      ctaLink,
-      orderIndex
-    } = req.body;
+    const id = String(req.params.id); // FIX: Cast to string for TS
+    const { name, description, priceMonthly, priceYearly, maxItems, features, isPopular, isActive, ctaText, ctaLink, orderIndex } = req.body;
 
     const existing = await query(`SELECT * FROM "PricingPlan" WHERE "id" = $1;`, [id]);
     if (!existing.rows.length) {
@@ -235,9 +131,7 @@ export const updatePlan = async (req: AuthRequest, res: Response): Promise<void>
     }
 
     const current = existing.rows[0];
-    const updatedFeatures = features !== undefined
-      ? JSON.stringify(Array.isArray(features) ? features : [features])
-      : current.features;
+    const updatedFeatures = features !== undefined ? JSON.stringify(Array.isArray(features) ? features : [features]) : current.features;
 
     const result = await query(
       `
@@ -255,23 +149,9 @@ export const updatePlan = async (req: AuthRequest, res: Response): Promise<void>
         "ctaLink" = COALESCE($10, "ctaLink"),
         "orderIndex" = COALESCE($11, "orderIndex"),
         "updatedAt" = NOW()
-      WHERE "id" = $12
-      RETURNING *;
+      WHERE "id" = $12 RETURNING *;
       `,
-      [
-        name !== undefined ? name.trim() : null,
-        description !== undefined ? description.trim() : null,
-        priceMonthly !== undefined ? Number(priceMonthly) : null,
-        priceYearly !== undefined ? Number(priceYearly) : null,
-        maxItems !== undefined ? maxItems : null,
-        updatedFeatures,
-        isPopular !== undefined ? Boolean(isPopular) : null,
-        isActive !== undefined ? Boolean(isActive) : null,
-        ctaText !== undefined ? ctaText : null,
-        ctaLink !== undefined ? ctaLink : null,
-        orderIndex !== undefined ? Number(orderIndex) : null,
-        id
-      ]
+      [name ? name.trim() : null, description ? description.trim() : null, priceMonthly ? Number(priceMonthly) : null, priceYearly ? Number(priceYearly) : null, maxItems || null, updatedFeatures, isPopular !== undefined ? Boolean(isPopular) : null, isActive !== undefined ? Boolean(isActive) : null, ctaText || null, ctaLink || null, orderIndex !== undefined ? Number(orderIndex) : null, id]
     );
 
     res.json({ plan: formatPlan(result.rows[0]), message: 'Pricing plan updated successfully.' });
@@ -284,7 +164,7 @@ export const updatePlan = async (req: AuthRequest, res: Response): Promise<void>
 // Super Admin: Delete Plan
 export const deletePlan = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id); // FIX: Cast to string for TS
     await query(`DELETE FROM "PricingPlan" WHERE "id" = $1;`, [id]);
     res.json({ message: 'Pricing plan deleted successfully.' });
   } catch (error) {

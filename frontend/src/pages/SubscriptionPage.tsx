@@ -10,18 +10,8 @@ import {
   QrCode,
   ArrowRight,
   ShieldCheck,
-  Lock,
-  Unlock,
   CheckCircle2,
-  Clock,
-  Calendar,
-  Layers,
-  FileText,
-  CreditCard,
-  Building2,
-  ExternalLink,
   ChevronRight,
-  HelpCircle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../store/authStore';
@@ -41,7 +31,7 @@ interface SubscriptionData {
   qrCodeAllowed: boolean;
   payment?: { razorpayEnabled: boolean; upiId: string };
   plans: {
-    id: 'MONTHLY' | 'SIX_MONTHS' | 'ANNUAL';
+    id: string; // Changed from strict enum to string to support dynamic UUIDs
     name: string;
     price: number;
     durationDays: number;
@@ -59,78 +49,32 @@ interface SubscriptionData {
   };
 }
 
-const DEFAULT_PLANS: SubscriptionData = {
-  restaurantId: '',
-  restaurantName: 'Restaurant',
-  slug: '',
-  isSubscribed: false,
-  isFirstTime: true,
-  status: 'PENDING',
-  planName: 'NONE',
-  validUntil: null,
-  daysRemaining: 0,
-  qrCodeAllowed: false,
-  plans: [
-    {
-      id: 'MONTHLY',
-      name: 'Starter Monthly',
-      price: 249,
-      durationDays: 30,
-      periodText: 'per month',
-      description: 'Standard 30-day dining pass with live order updates.',
-      features: ['Unlimited Orders', 'Live Order Notifier', 'Full QR Menu', 'Digital POS Dashboard'],
-      isPopular: false,
-    },
-    {
-      id: 'SIX_MONTHS',
-      name: 'Growth Half-Yearly',
-      price: 1199,
-      durationDays: 180,
-      periodText: 'for 6 months',
-      description: 'Ideal for growing restaurants seeking uninterrupted digital ordering.',
-      features: ['Everything in Monthly', 'Save ₹295', 'Priority Table Standee QR', 'High Speed Analytics'],
-      isPopular: true,
-    },
-    {
-      id: 'ANNUAL',
-      name: 'Enterprise Annual',
-      price: 1999,
-      durationDays: 365,
-      periodText: 'for 12 months',
-      description: 'Best ROI. 365 days of unlimited digital ordering & VIP support.',
-      features: ['Full Year Unlocked', 'Save ₹989', 'VIP Fast Support', 'Custom Branding & Ads'],
-      isPopular: false,
-    },
-  ],
-  firstTimeOffer: {
-    id: 'FIRST_TIME_ACTIVATION',
-    name: 'First-Time 30 Days Trial',
-    price: 1,
-    durationDays: 30,
-    description: 'Special ₹1 activation offer for new restaurants.',
-  },
-};
-
 export const SubscriptionPage: React.FC = () => {
   const { user } = useAuthStore();
-  const [subData, setSubData] = useState<SubscriptionData>(() => {
-    try {
-      const cached = localStorage.getItem('orderkare_dash_sub');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        return {
-          ...DEFAULT_PLANS,
-          ...parsed,
-          plans: parsed.plans && parsed.plans.length ? parsed.plans : DEFAULT_PLANS.plans,
-          firstTimeOffer: parsed.firstTimeOffer || DEFAULT_PLANS.firstTimeOffer,
-        };
-      }
-      return DEFAULT_PLANS;
-    } catch {
-      return DEFAULT_PLANS;
-    }
+
+  const [subData, setSubData] = useState<SubscriptionData>({
+    restaurantId: '',
+    restaurantName: 'Restaurant',
+    slug: '',
+    isSubscribed: false,
+    isFirstTime: true,
+    status: 'PENDING',
+    planName: 'NONE',
+    validUntil: null,
+    daysRemaining: 0,
+    qrCodeAllowed: false,
+    plans: [], // Starts empty, API will fill it
+    firstTimeOffer: {
+      id: 'FIRST_TIME_ACTIVATION',
+      name: 'First-Time 30 Days Trial',
+      price: 1,
+      durationDays: 30,
+      description: 'Special ₹1 activation offer for new restaurants.',
+    },
   });
+
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadingPlans, setLoadingPlans] = useState(true);
   const [selectedPlanModal, setSelectedPlanModal] = useState<{
     id: string;
     name: string;
@@ -141,21 +85,50 @@ export const SubscriptionPage: React.FC = () => {
   const fetchStatus = async () => {
     setIsRefreshing(true);
     try {
+      // 1. Fetch subscription status
       const res = await api.get('/subscriptions/status');
+      
+      // 2. Fetch dynamic plans from Superadmin database
+     // const plansRes = await api.get('/plans/active');
+      const plansRes = await api.get('/plans/active'); 
+      
       if (res.data) {
-        setSubData(res.data);
-        try { localStorage.setItem('orderkare_dash_sub', JSON.stringify(res.data)); } catch {}
+        // Map DB plans to your UI format
+        const formattedPlans = (plansRes.data.plans || []).map((p: any) => {
+          let days = 30;
+          const nameLower = p.name.toLowerCase();
+          if (nameLower.includes('6') || nameLower.includes('half')) days = 180;
+          if (nameLower.includes('year') || nameLower.includes('annual')) days = 365;
+
+          return {
+            id: p.id,
+            name: p.name,
+            price: p.priceMonthly,
+            durationDays: days,
+            periodText: days === 30 ? 'per month' : `for ${days} days`,
+            description: p.description || 'Premium SaaS dining plan.',
+            features: p.features || [],
+            isPopular: p.isPopular,
+          };
+        });
+
+        setSubData({
+          ...res.data,
+          plans: formattedPlans.length > 0 ? formattedPlans : [] 
+        });
+        
+        
       }
     } catch (err) {
-      console.error('Failed to load subscription status:', err);
+      console.error('Failed to load subscription status or plans:', err);
     } finally {
       setIsRefreshing(false);
+      setLoadingPlans(false);
     }
   };
-
-  useEffect(() => {
-    fetchStatus();
-  }, []);
+useEffect(() => {
+  fetchStatus();
+}, []);
 
   const isSubscribed = subData?.isSubscribed ?? false;
   const isFirstTime = subData?.isFirstTime ?? true;
@@ -166,6 +139,9 @@ export const SubscriptionPage: React.FC = () => {
   // Calculate validity percentage
   const totalDays = subData?.planName === 'ANNUAL' ? 365 : subData?.planName === 'SIX_MONTHS' ? 180 : 30;
   const progressPercent = Math.min(100, Math.max(0, Math.round((daysLeft / totalDays) * 100)));
+
+  // Find the first plan for the header quick-renew button
+  const firstAvailablePlan = subData.plans[0];
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-14 font-sans antialiased text-slate-800">
@@ -314,9 +290,9 @@ export const SubscriptionPage: React.FC = () => {
               <button
                 onClick={() =>
                   setSelectedPlanModal({
-                    id: isFirstTime ? 'FIRST_TIME_ACTIVATION' : 'MONTHLY',
-                    name: isFirstTime ? 'First-Time Activation (1 Month Free)' : 'Monthly Plan Renewal',
-                    price: isFirstTime ? 1 : 249,
+                    id: isFirstTime ? 'FIRST_TIME_ACTIVATION' : (firstAvailablePlan?.id || 'MONTHLY'),
+                    name: isFirstTime ? 'First-Time Activation (1 Month Free)' : (firstAvailablePlan?.name || 'Plan Renewal'),
+                    price: isFirstTime ? 1 : (firstAvailablePlan?.price || 249),
                     days: 30,
                   })
                 }
@@ -328,16 +304,16 @@ export const SubscriptionPage: React.FC = () => {
             ) : (
               <button
                 onClick={() =>
-                  setSelectedPlanModal({
-                    id: 'SIX_MONTHS',
-                    name: '6 Months Plan Extension',
-                    price: 1199,
-                    days: 180,
+                  firstAvailablePlan && setSelectedPlanModal({
+                    id: firstAvailablePlan.id,
+                    name: firstAvailablePlan.name,
+                    price: firstAvailablePlan.price,
+                    days: firstAvailablePlan.durationDays,
                   })
                 }
                 className="px-5 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-900 font-extrabold text-xs rounded-2xl transition-all shadow-xs active:scale-95 cursor-pointer flex items-center gap-2"
               >
-                <span>Extend Validity (+180 Days)</span>
+                <span>Extend Validity</span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </button>
             )}
@@ -345,7 +321,7 @@ export const SubscriptionPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ── First-Time Introductory Card (High-Impact Promotion) ── */}
+      {/* ── First-Time Introductory Card ── */}
       {isFirstTime && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -385,7 +361,7 @@ export const SubscriptionPage: React.FC = () => {
         </motion.div>
       )}
 
-      {/* ── Pricing Matrix (Monthly, 6 Months, Annual) ── */}
+      {/* ── Dynamic Pricing Matrix ── */}
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
@@ -402,182 +378,78 @@ export const SubscriptionPage: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* 1. Monthly Plan */}
-          <div className="bg-white border-2 border-slate-200/90 rounded-3xl p-6 sm:p-7 shadow-xs flex flex-col justify-between hover:border-slate-300 hover:shadow-md transition-all">
-            <div className="space-y-5">
-              <div className="flex items-center justify-between">
-                <div className="w-12 h-12 bg-slate-100 text-slate-800 rounded-2xl flex items-center justify-center font-bold">
-                  <Zap className="w-6 h-6 text-slate-700" />
-                </div>
-                <span className="text-[10px] font-extrabold text-slate-600 bg-slate-100 px-3 py-1 rounded-full uppercase tracking-wider">
-                  30 Days
-                </span>
-              </div>
-
-              <div>
-                <h3 className="text-xl font-black text-slate-900">Monthly Plan</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Flexible month-to-month digital dining</p>
-              </div>
-
-              <div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-black text-slate-900 font-mono">₹249</span>
-                  <span className="text-xs text-slate-400 font-semibold">/ month</span>
-                </div>
-                <span className="text-[11px] text-slate-500 font-medium">Billed monthly • Cancel anytime</span>
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 space-y-3">
-                {[
-                  'Single Master QR Code Standee',
-                  'Full Digital Menu & Real-Time Orders',
-                  'Live Kitchen Audio Ringtone (KDS)',
-                  'Customer Reviews & Feedback Ratings',
-                  'Standard Email Support',
-                ].map((feat, i) => (
-                  <div key={i} className="flex items-center gap-2.5 text-xs text-slate-700 font-medium">
-                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>{feat}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <button
-              onClick={() =>
-                setSelectedPlanModal({
-                  id: 'MONTHLY',
-                  name: 'Monthly Plan Renewal',
-                  price: 249,
-                  days: 30,
-                })
-              }
-              className="mt-8 w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs rounded-2xl transition-all shadow-md active:scale-98 cursor-pointer"
+          {subData.plans.map((plan, index) => (
+            <div 
+              key={plan.id}
+              className={`bg-white rounded-3xl p-6 sm:p-7 flex flex-col justify-between transition-all ${
+                plan.isPopular 
+                  ? 'border-2 border-orange-500 shadow-xl relative transform md:-translate-y-2' 
+                  : 'border-2 border-slate-200/90 shadow-xs hover:border-slate-300 hover:shadow-md'
+              }`}
             >
-              Select Monthly (₹249)
-            </button>
-          </div>
-
-          {/* 2. 6 Months Plan (Most Popular) */}
-          <div className="bg-white border-2 border-orange-500 rounded-3xl p-6 sm:p-7 shadow-xl relative flex flex-col justify-between hover:shadow-2xl transition-all transform md:-translate-y-2">
-            <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500 text-white text-[10px] font-black uppercase tracking-wider px-4 py-1 rounded-full shadow-md">
-              ★ Most Popular — Save 20%
-            </div>
-
-            <div className="space-y-5">
-              <div className="flex items-center justify-between">
-                <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center font-bold">
-                  <Crown className="w-6 h-6 text-orange-600" />
+              {plan.isPopular && (
+                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500 text-white text-[10px] font-black uppercase tracking-wider px-4 py-1 rounded-full shadow-md">
+                  ★ Most Popular
                 </div>
-                <span className="text-[10px] font-extrabold text-orange-700 bg-orange-50 px-3 py-1 rounded-full uppercase tracking-wider border border-orange-200">
-                  180 Days
-                </span>
-              </div>
+              )}
 
-              <div>
-                <h3 className="text-xl font-black text-slate-900">6 Months Plan</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Best choice for active dining outlets</p>
-              </div>
-
-              <div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-black text-slate-900 font-mono">₹1,199</span>
-                  <span className="text-xs text-slate-400 font-semibold">/ 6 mos</span>
-                </div>
-                <span className="text-[11px] text-orange-600 font-bold">
-                  Equivalent to ~₹199 / month (Save 20%)
-                </span>
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 space-y-3">
-                {[
-                  'Everything in Monthly Plan +',
-                  'Save 20% on recurring monthly fee',
-                  'Permanent Master QR Never Changes',
-                  'Table Standee Print Templates',
-                  'Dedicated WhatsApp Support',
-                ].map((feat, i) => (
-                  <div key={i} className="flex items-center gap-2.5 text-xs text-slate-800 font-bold">
-                    <Check className="w-4 h-4 text-orange-500 shrink-0" />
-                    <span>{feat}</span>
+              <div className="space-y-5">
+                <div className="flex items-center justify-between">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold ${
+                    plan.isPopular ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-800'
+                  }`}>
+                    {index === 0 ? <Zap className="w-6 h-6" /> : index === 1 ? <Crown className="w-6 h-6" /> : <Shield className="w-6 h-6" />}
                   </div>
-                ))}
-              </div>
-            </div>
-
-            <button
-              onClick={() =>
-                setSelectedPlanModal({
-                  id: 'SIX_MONTHS',
-                  name: '6 Months Plan Renewal',
-                  price: 1199,
-                  days: 180,
-                })
-              }
-              className="mt-8 w-full py-3.5 bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-xs rounded-2xl transition-all shadow-lg shadow-orange-500/25 active:scale-98 cursor-pointer"
-            >
-              Select 6 Months (₹1,199)
-            </button>
-          </div>
-
-          {/* 3. Annual Plan (Best Value) */}
-          <div className="bg-white border-2 border-slate-200/90 rounded-3xl p-6 sm:p-7 shadow-xs flex flex-col justify-between hover:border-purple-300 hover:shadow-md transition-all">
-            <div className="space-y-5">
-              <div className="flex items-center justify-between">
-                <div className="w-12 h-12 bg-purple-100 text-purple-700 rounded-2xl flex items-center justify-center font-bold">
-                  <Shield className="w-6 h-6 text-purple-700" />
+                  <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider ${
+                    plan.isPopular ? 'text-orange-700 bg-orange-50 border border-orange-200' : 'text-slate-600 bg-slate-100'
+                  }`}>
+                    {plan.durationDays} Days
+                  </span>
                 </div>
-                <span className="text-[10px] font-extrabold text-purple-700 bg-purple-50 px-3 py-1 rounded-full uppercase tracking-wider border border-purple-200">
-                  365 Days • Save 33%
-                </span>
-              </div>
 
-              <div>
-                <h3 className="text-xl font-black text-slate-900">Annual Plan</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Year-round peace of mind operations</p>
-              </div>
-
-              <div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-black text-slate-900 font-mono">₹1,999</span>
-                  <span className="text-xs text-slate-400 font-semibold">/ year</span>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900">{plan.name}</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">{plan.description}</p>
                 </div>
-                <span className="text-[11px] text-purple-600 font-bold">
-                  Equivalent to ~₹166 / month (Save 33%)
-                </span>
-              </div>
 
-              <div className="pt-3 border-t border-slate-100 space-y-3">
-                {[
-                  'Everything in 6 Months Plan +',
-                  'Save 33% — Highest Value Discount',
-                  'Universal Master QR Standees',
-                  'Comprehensive Revenue Analytics',
-                  'Zero Commission on Customer Orders',
-                  'VIP 24/7 Phone & Priority Support',
-                ].map((feat, i) => (
-                  <div key={i} className="flex items-center gap-2.5 text-xs text-slate-700 font-medium">
-                    <Check className="w-4 h-4 text-purple-600 shrink-0" />
-                    <span>{feat}</span>
+                <div>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl font-black text-slate-900 font-mono">
+                      ₹{plan.price.toLocaleString('en-IN')}
+                    </span>
+                    <span className="text-xs text-slate-400 font-semibold">/ {plan.durationDays === 30 ? 'mo' : `${plan.durationDays} days`}</span>
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
 
-            <button
-              onClick={() =>
-                setSelectedPlanModal({
-                  id: 'ANNUAL',
-                  name: 'Annual Plan Renewal',
-                  price: 1999,
-                  days: 365,
-                })
-              }
-              className="mt-8 w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs rounded-2xl transition-all shadow-md shadow-purple-200 active:scale-98 cursor-pointer"
-            >
-              Select Annual (₹1,999)
-            </button>
-          </div>
+                <div className="pt-3 border-t border-slate-100 space-y-3">
+                  {plan.features.map((feat, i) => (
+                    <div key={i} className="flex items-center gap-2.5 text-xs text-slate-700 font-medium">
+                      <Check className={`w-4 h-4 shrink-0 ${plan.isPopular ? 'text-orange-500' : 'text-emerald-600'}`} />
+                      <span>{feat}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={() =>
+                  setSelectedPlanModal({
+                    id: plan.id,
+                    name: plan.name,
+                    price: plan.price,
+                    days: plan.durationDays,
+                  })
+                }
+                className={`mt-8 w-full py-3.5 font-extrabold text-xs rounded-2xl transition-all shadow-md active:scale-98 cursor-pointer ${
+                  plan.isPopular
+                    ? 'bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-orange-500/25'
+                    : 'bg-slate-900 hover:bg-slate-800 text-white'
+                }`}
+              >
+                Select {plan.name} (₹{plan.price.toLocaleString('en-IN')})
+              </button>
+            </div>
+          ))}
         </div>
       </div>
 

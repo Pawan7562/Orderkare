@@ -10,13 +10,24 @@ import { authenticateToken, requireRole } from '../middleware/auth.middleware';
 
 const router = Router();
 
-// Public: View active plans for landing page / pricing table
-router.get('/', getActivePlans);
+// 🟢 PUBLIC: View active plans (For the Pricing/Subscription page)
+// URL: GET /api/v1/plans/active
+router.get('/active', getActivePlans);
 
-// Super Admin Protected Routes
-router.get('/all', authenticateToken, requireRole(['SUPER_ADMIN']), getAllPlans);
-router.post('/', authenticateToken, requireRole(['SUPER_ADMIN']), createPlan);
-router.put('/:id', authenticateToken, requireRole(['SUPER_ADMIN']), updatePlan);
-router.delete('/:id', authenticateToken, requireRole(['SUPER_ADMIN']), deletePlan);
+// 🔴 SUPER ADMIN: View all plans (For Superadmin dashboard)
+// URL: GET /api/v1/plans/admin/all
+router.get('/admin/all', authenticateToken, requireRole(['SUPER_ADMIN']), getAllPlans);
+
+// 🔴 SUPER ADMIN: Create a plan
+// URL: POST /api/v1/plans/admin
+router.post('/admin', authenticateToken, requireRole(['SUPER_ADMIN']), createPlan);
+
+// 🔴 SUPER ADMIN: Update a plan
+// URL: PUT /api/v1/plans/admin/:id
+router.put('/admin/:id', authenticateToken, requireRole(['SUPER_ADMIN']), updatePlan);
+
+// 🔴 SUPER ADMIN: Delete a plan
+// URL: DELETE /api/v1/plans/admin/:id
+router.delete('/admin/:id', authenticateToken, requireRole(['SUPER_ADMIN']), deletePlan);
 
 export default router;

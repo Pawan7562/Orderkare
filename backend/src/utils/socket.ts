@@ -109,6 +109,14 @@ export const getIO = (): Server => {
   }
   return io;
 };
+
+export const notifyStaffCall = (
+  restaurantId: string,
+  payload: { tableNumber: string; type: 'WAITER' | 'BILL'; customerName?: string; at: string }
+) => {
+  io.to(restaurantId).emit('staff_call', payload);
+};
+
 import { sendOrderPushNotification } from './push';
 
 export const notifyNewOrder = (restaurantId: string, order: any) => {
