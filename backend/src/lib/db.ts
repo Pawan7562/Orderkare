@@ -74,10 +74,7 @@ export const query = async (text: string, params?: any[]) => {
   }
 };
 
-/**
- * Enterprise-grade safe transaction executor
- * Guarantees client release and automatic ROLLBACK on errors
- */
+
 export const withTransaction = async <T>(
   callback: (client: PoolClient) => Promise<T>
 ): Promise<T> => {

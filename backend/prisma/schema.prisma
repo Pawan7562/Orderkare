@@ -118,7 +118,6 @@ model Order {
   status       OrderStatus @default(PENDING)
   totalAmount  Float
   estimatedReadyAt DateTime?
-  // Saved when the final bill is closed. A closed bill is never recalculated.
   gstEnabled       Boolean?
   serviceChargePct Int?
   gstAmount        Float?

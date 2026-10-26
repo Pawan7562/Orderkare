@@ -162,7 +162,7 @@ export const notifySubscriptionUpdated = (restaurantId: string, subscription: an
   if (io) {
     io.to(restaurantId).emit('subscription_updated', subscription);
     io.emit(`subscription_updated_${restaurantId}`, subscription);
-    console.log(`💳 Emitted subscription_updated to restaurant ${restaurantId}`);
+    console.log(` Emitted subscription_updated to restaurant ${restaurantId}`);
   }
 };
 

@@ -396,7 +396,7 @@ export const processSubscriptionPayment = async (req: AuthRequest, res: Response
 export const createRazorpaySubscriptionOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const restaurantId = req.user?.restaurantId;
-    // 🟢 FIX: Removed toUpperCase() to match the exact database ID
+  
     const planId = String(req.body.planId || '').trim();
 
     if (!restaurantId) { res.status(403).json({ message: 'Restaurant context required' }); return; }
@@ -406,7 +406,7 @@ export const createRazorpaySubscriptionOrder = async (req: AuthRequest, res: Res
     if (planId === 'FIRST_TIME_ACTIVATION') {
       amount = 1;
     } else {
-      // 🟢 FIX: Match by exact ID
+    
       const planRes = await query(`SELECT * FROM "PricingPlan" WHERE "id" = $1;`, [planId]);
       const plan = planRes.rows[0];
 
@@ -449,7 +449,7 @@ export const verifyRazorpaySubscriptionPayment = async (req: AuthRequest, res: R
   try {
     const restaurantId = req.user?.restaurantId;
     const { planId, razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature } = req.body;
-    // 🟢 FIX: Removed toUpperCase() to match the exact database ID
+    
     const planKey = String(planId || '').trim();
     
     if (!restaurantId) { res.status(403).json({ message: 'Restaurant context required' }); return; }

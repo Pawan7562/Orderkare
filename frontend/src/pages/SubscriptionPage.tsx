@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from "react";
 import {
   Check,
   Sparkles,
@@ -12,11 +12,11 @@ import {
   ShieldCheck,
   CheckCircle2,
   ChevronRight,
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useAuthStore } from '../store/authStore';
-import api from '../lib/api';
-import { PaymentModal } from '../components/PaymentModal';
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useAuthStore } from "../store/authStore";
+import api from "../lib/api";
+import { PaymentModal } from "../components/PaymentModal";
 
 interface SubscriptionData {
   restaurantId: string;
@@ -24,7 +24,7 @@ interface SubscriptionData {
   slug: string;
   isSubscribed: boolean;
   isFirstTime: boolean;
-  status: 'PENDING' | 'TRIAL' | 'ACTIVE' | 'EXPIRED' | 'CANCELLED';
+  status: "PENDING" | "TRIAL" | "ACTIVE" | "EXPIRED" | "CANCELLED";
   planName: string;
   validUntil: string | null;
   daysRemaining: number;
@@ -53,23 +53,23 @@ export const SubscriptionPage: React.FC = () => {
   const { user } = useAuthStore();
 
   const [subData, setSubData] = useState<SubscriptionData>({
-    restaurantId: '',
-    restaurantName: 'Restaurant',
-    slug: '',
+    restaurantId: "",
+    restaurantName: "Restaurant",
+    slug: "",
     isSubscribed: false,
     isFirstTime: true,
-    status: 'PENDING',
-    planName: 'NONE',
+    status: "PENDING",
+    planName: "NONE",
     validUntil: null,
     daysRemaining: 0,
     qrCodeAllowed: false,
     plans: [], // Starts empty, API will fill it
     firstTimeOffer: {
-      id: 'FIRST_TIME_ACTIVATION',
-      name: 'First-Time 30 Days Trial',
+      id: "FIRST_TIME_ACTIVATION",
+      name: "First-Time 30 Days Trial",
       price: 1,
       durationDays: 30,
-      description: 'Special ₹1 activation offer for new restaurants.',
+      description: "Special ₹1 activation offer for new restaurants.",
     },
   });
 
@@ -86,27 +86,28 @@ export const SubscriptionPage: React.FC = () => {
     setIsRefreshing(true);
     try {
       // 1. Fetch subscription status
-      const res = await api.get('/subscriptions/status');
-      
+      const res = await api.get("/subscriptions/status");
+
       // 2. Fetch dynamic plans from Superadmin database
-     // const plansRes = await api.get('/plans/active');
-      const plansRes = await api.get('/plans/active'); 
-      
+
+      const plansRes = await api.get("/plans/active");
+
       if (res.data) {
         // Map DB plans to your UI format
         const formattedPlans = (plansRes.data.plans || []).map((p: any) => {
           let days = 30;
           const nameLower = p.name.toLowerCase();
-          if (nameLower.includes('6') || nameLower.includes('half')) days = 180;
-          if (nameLower.includes('year') || nameLower.includes('annual')) days = 365;
+          if (nameLower.includes("6") || nameLower.includes("half")) days = 180;
+          if (nameLower.includes("year") || nameLower.includes("annual"))
+            days = 365;
 
           return {
             id: p.id,
             name: p.name,
             price: p.priceMonthly,
             durationDays: days,
-            periodText: days === 30 ? 'per month' : `for ${days} days`,
-            description: p.description || 'Premium SaaS dining plan.',
+            periodText: days === 30 ? "per month" : `for ${days} days`,
+            description: p.description || "Premium SaaS dining plan.",
             features: p.features || [],
             isPopular: p.isPopular,
           };
@@ -114,31 +115,37 @@ export const SubscriptionPage: React.FC = () => {
 
         setSubData({
           ...res.data,
-          plans: formattedPlans.length > 0 ? formattedPlans : [] 
+          plans: formattedPlans.length > 0 ? formattedPlans : [],
         });
-        
-        
       }
     } catch (err) {
-      console.error('Failed to load subscription status or plans:', err);
+      console.error("Failed to load subscription status or plans:", err);
     } finally {
       setIsRefreshing(false);
       setLoadingPlans(false);
     }
   };
-useEffect(() => {
-  fetchStatus();
-}, []);
+  useEffect(() => {
+    fetchStatus();
+  }, []);
 
   const isSubscribed = subData?.isSubscribed ?? false;
   const isFirstTime = subData?.isFirstTime ?? true;
-  const status = subData?.status ?? 'PENDING';
+  const status = subData?.status ?? "PENDING";
   const daysLeft = subData?.daysRemaining ?? 0;
-  const restaurantName = subData?.restaurantName || user?.name || 'Restaurant';
+  const restaurantName = subData?.restaurantName || user?.name || "Restaurant";
 
   // Calculate validity percentage
-  const totalDays = subData?.planName === 'ANNUAL' ? 365 : subData?.planName === 'SIX_MONTHS' ? 180 : 30;
-  const progressPercent = Math.min(100, Math.max(0, Math.round((daysLeft / totalDays) * 100)));
+  const totalDays =
+    subData?.planName === "ANNUAL"
+      ? 365
+      : subData?.planName === "SIX_MONTHS"
+        ? 180
+        : 30;
+  const progressPercent = Math.min(
+    100,
+    Math.max(0, Math.round((daysLeft / totalDays) * 100)),
+  );
 
   // Find the first plan for the header quick-renew button
   const firstAvailablePlan = subData.plans[0];
@@ -152,9 +159,12 @@ useEffect(() => {
             <Crown className="w-3.5 h-3.5 text-orange-500" />
             <span>OrderKare Enterprise Billing & Licensing</span>
           </div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">QR Ordering & Plan Management</h1>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">
+            QR Ordering & Plan Management
+          </h1>
           <p className="text-slate-500 text-xs sm:text-sm mt-1 max-w-2xl font-medium">
-            Manage your restaurant master QR license, renew active dining plans, and unlock 0% commission digital ordering.
+            Manage your restaurant master QR license, renew active dining plans,
+            and unlock 0% commission digital ordering.
           </p>
         </div>
 
@@ -163,8 +173,10 @@ useEffect(() => {
           disabled={isRefreshing}
           className="self-start sm:self-auto inline-flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-2xl transition-all shadow-xs cursor-pointer active:scale-95 disabled:opacity-50"
         >
-          <RefreshCcw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-orange-500' : ''}`} />
-          <span>{isRefreshing ? 'Syncing...' : 'Refresh Status'}</span>
+          <RefreshCcw
+            className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-orange-500" : ""}`}
+          />
+          <span>{isRefreshing ? "Syncing..." : "Refresh Status"}</span>
         </button>
       </div>
 
@@ -172,10 +184,10 @@ useEffect(() => {
       <div
         className={`rounded-3xl p-6 sm:p-8 transition-all relative overflow-hidden shadow-sm border-2 ${
           isSubscribed
-            ? 'bg-gradient-to-br from-emerald-500/10 via-teal-50/50 to-white border-emerald-400/80 shadow-emerald-500/5'
-            : status === 'EXPIRED'
-            ? 'bg-gradient-to-br from-rose-500/10 via-red-50/50 to-white border-rose-300 shadow-rose-500/5'
-            : 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white border-slate-800 shadow-xl'
+            ? "bg-gradient-to-br from-emerald-500/10 via-teal-50/50 to-white border-emerald-400/80 shadow-emerald-500/5"
+            : status === "EXPIRED"
+              ? "bg-gradient-to-br from-rose-500/10 via-red-50/50 to-white border-rose-300 shadow-rose-500/5"
+              : "bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white border-slate-800 shadow-xl"
         }`}
       >
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -183,15 +195,15 @@ useEffect(() => {
             <div
               className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-md ${
                 isSubscribed
-                  ? 'bg-emerald-500 text-white shadow-emerald-500/30'
-                  : status === 'EXPIRED'
-                  ? 'bg-rose-500 text-white shadow-rose-500/30'
-                  : 'bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-orange-500/30'
+                  ? "bg-emerald-500 text-white shadow-emerald-500/30"
+                  : status === "EXPIRED"
+                    ? "bg-rose-500 text-white shadow-rose-500/30"
+                    : "bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-orange-500/30"
               }`}
             >
               {isSubscribed ? (
                 <CheckCircle2 className="w-7 h-7" />
-              ) : status === 'EXPIRED' ? (
+              ) : status === "EXPIRED" ? (
                 <AlertCircle className="w-7 h-7" />
               ) : (
                 <Sparkles className="w-7 h-7" />
@@ -203,28 +215,28 @@ useEffect(() => {
                 <span
                   className={`text-[10px] font-black uppercase tracking-wider px-3 py-0.5 rounded-full ${
                     isSubscribed
-                      ? status === 'TRIAL'
-                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                      : status === 'EXPIRED'
-                      ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                      : 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+                      ? status === "TRIAL"
+                        ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                        : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                      : status === "EXPIRED"
+                        ? "bg-rose-100 text-rose-800 border border-rose-200"
+                        : "bg-orange-500/20 text-orange-300 border border-orange-500/30"
                   }`}
                 >
                   {isSubscribed
-                    ? status === 'TRIAL'
-                      ? '1-Month Free Trial Active'
-                      : 'Active Commercial License'
-                    : status === 'EXPIRED'
-                    ? 'Subscription Expired'
-                    : 'Introductory Activation Required'}
+                    ? status === "TRIAL"
+                      ? "1-Month Free Trial Active"
+                      : "Active Commercial License"
+                    : status === "EXPIRED"
+                      ? "Subscription Expired"
+                      : "Introductory Activation Required"}
                 </span>
 
                 <span
                   className={`text-xs font-bold px-2.5 py-0.5 rounded-lg border ${
-                    !isSubscribed && status === 'PENDING'
-                      ? 'bg-white/10 text-slate-300 border-white/15'
-                      : 'bg-white/80 text-slate-700 border-slate-200/80'
+                    !isSubscribed && status === "PENDING"
+                      ? "bg-white/10 text-slate-300 border-white/15"
+                      : "bg-white/80 text-slate-700 border-slate-200/80"
                   }`}
                 >
                   {restaurantName}
@@ -240,30 +252,36 @@ useEffect(() => {
 
               <h2
                 className={`text-xl sm:text-2xl font-black tracking-tight ${
-                  !isSubscribed && status === 'PENDING' ? 'text-white' : 'text-slate-900'
+                  !isSubscribed && status === "PENDING"
+                    ? "text-white"
+                    : "text-slate-900"
                 }`}
               >
                 {isSubscribed
                   ? `${daysLeft} Days of Active Master QR Ordering Remaining`
-                  : status === 'EXPIRED'
-                  ? 'Your Master QR Code is Currently Paused (Renew to Reactivate)'
-                  : 'Complete ₹1 Introductory Payment to Activate 1 Month Free'}
+                  : status === "EXPIRED"
+                    ? "Your Master QR Code is Currently Paused (Renew to Reactivate)"
+                    : "Complete ₹1 Introductory Payment to Activate 1 Month Free"}
               </h2>
 
               <p
                 className={`text-xs sm:text-sm max-w-2xl leading-relaxed ${
-                  !isSubscribed && status === 'PENDING' ? 'text-slate-300' : 'text-slate-600'
+                  !isSubscribed && status === "PENDING"
+                    ? "text-slate-300"
+                    : "text-slate-600"
                 }`}
               >
                 {isSubscribed
-                  ? `Your dining standees are live until ${new Date(subData?.validUntil || '').toLocaleDateString('en-IN', {
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric',
+                  ? `Your dining standees are live until ${new Date(
+                      subData?.validUntil || "",
+                    ).toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
                     })}. Customers can scan any table to order seamlessly without reprinting codes.`
-                  : status === 'EXPIRED'
-                  ? 'Your universal QR codes remain saved permanently in the cloud. Renew any plan below to immediately re-enable table ordering without altering your physical standees.'
-                  : 'New restaurant setups require a one-time ₹1 gateway authorization fee via Razorpay to generate your permanent Master QR standee and receive 30 full days of unlimited dining orders.'}
+                  : status === "EXPIRED"
+                    ? "Your universal QR codes remain saved permanently in the cloud. Renew any plan below to immediately re-enable table ordering without altering your physical standees."
+                    : "New restaurant setups require a one-time ₹1 gateway authorization fee via Razorpay to generate your permanent Master QR standee and receive 30 full days of unlimited dining orders."}
               </p>
 
               {/* Progress Bar when Subscribed */}
@@ -271,7 +289,9 @@ useEffect(() => {
                 <div className="pt-2 max-w-md space-y-1">
                   <div className="flex justify-between text-[11px] font-bold text-slate-500">
                     <span>Plan Expiration Progress</span>
-                    <span className="font-mono text-emerald-700">{daysLeft} Days Left ({progressPercent}%)</span>
+                    <span className="font-mono text-emerald-700">
+                      {daysLeft} Days Left ({progressPercent}%)
+                    </span>
                   </div>
                   <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
                     <div
@@ -290,21 +310,30 @@ useEffect(() => {
               <button
                 onClick={() =>
                   setSelectedPlanModal({
-                    id: isFirstTime ? 'FIRST_TIME_ACTIVATION' : (firstAvailablePlan?.id || 'MONTHLY'),
-                    name: isFirstTime ? 'First-Time Activation (1 Month Free)' : (firstAvailablePlan?.name || 'Plan Renewal'),
-                    price: isFirstTime ? 1 : (firstAvailablePlan?.price || 249),
+                    id: isFirstTime
+                      ? "FIRST_TIME_ACTIVATION"
+                      : firstAvailablePlan?.id || "MONTHLY",
+                    name: isFirstTime
+                      ? "First-Time Activation (1 Month Free)"
+                      : firstAvailablePlan?.name || "Plan Renewal",
+                    price: isFirstTime ? 1 : firstAvailablePlan?.price || 249,
                     days: 30,
                   })
                 }
                 className="px-6 py-4 bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-xs sm:text-sm rounded-2xl transition-all shadow-xl shadow-orange-500/25 active:scale-95 cursor-pointer flex items-center gap-2"
               >
-                <span>{isFirstTime ? '⚡ Pay ₹1 & Activate 1 Month Free' : '🔄 Renew Subscription'}</span>
+                <span>
+                  {isFirstTime
+                    ? "⚡ Pay ₹1 & Activate 1 Month Free"
+                    : "🔄 Renew Subscription"}
+                </span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             ) : (
               <button
                 onClick={() =>
-                  firstAvailablePlan && setSelectedPlanModal({
+                  firstAvailablePlan &&
+                  setSelectedPlanModal({
                     id: firstAvailablePlan.id,
                     name: firstAvailablePlan.name,
                     price: firstAvailablePlan.price,
@@ -339,15 +368,18 @@ useEffect(() => {
                 First-Time Setup: Pay ₹1 & Get 1 Full Month Free!
               </h3>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                Activate your restaurant account with an introductory ₹1 payment via Razorpay. Instantly unlock universal Master QR standees, sub-second Kitchen Display alerts, live ordering, and digital menus for 30 full days with 0% commissions.
+                Activate your restaurant account with an introductory ₹1 payment
+                via Razorpay. Instantly unlock universal Master QR standees,
+                sub-second Kitchen Display alerts, live ordering, and digital
+                menus for 30 full days with 0% commissions.
               </p>
             </div>
 
             <button
               onClick={() =>
                 setSelectedPlanModal({
-                  id: 'FIRST_TIME_ACTIVATION',
-                  name: 'First-Time Activation (1 Month Free)',
+                  id: "FIRST_TIME_ACTIVATION",
+                  name: "First-Time Activation (1 Month Free)",
                   price: 1,
                   days: 30,
                 })
@@ -369,7 +401,8 @@ useEffect(() => {
               Subscription Tiers for Continuous Dining
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Select an ongoing subscription plan. All plans include 0% order commissions and permanent QR standees.
+              Select an ongoing subscription plan. All plans include 0% order
+              commissions and permanent QR standees.
             </p>
           </div>
           <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 self-start sm:self-auto">
@@ -379,12 +412,12 @@ useEffect(() => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {subData.plans.map((plan, index) => (
-            <div 
+            <div
               key={plan.id}
               className={`bg-white rounded-3xl p-6 sm:p-7 flex flex-col justify-between transition-all ${
-                plan.isPopular 
-                  ? 'border-2 border-orange-500 shadow-xl relative transform md:-translate-y-2' 
-                  : 'border-2 border-slate-200/90 shadow-xs hover:border-slate-300 hover:shadow-md'
+                plan.isPopular
+                  ? "border-2 border-orange-500 shadow-xl relative transform md:-translate-y-2"
+                  : "border-2 border-slate-200/90 shadow-xs hover:border-slate-300 hover:shadow-md"
               }`}
             >
               {plan.isPopular && (
@@ -395,36 +428,64 @@ useEffect(() => {
 
               <div className="space-y-5">
                 <div className="flex items-center justify-between">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold ${
-                    plan.isPopular ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-800'
-                  }`}>
-                    {index === 0 ? <Zap className="w-6 h-6" /> : index === 1 ? <Crown className="w-6 h-6" /> : <Shield className="w-6 h-6" />}
+                  <div
+                    className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold ${
+                      plan.isPopular
+                        ? "bg-orange-100 text-orange-600"
+                        : "bg-slate-100 text-slate-800"
+                    }`}
+                  >
+                    {index === 0 ? (
+                      <Zap className="w-6 h-6" />
+                    ) : index === 1 ? (
+                      <Crown className="w-6 h-6" />
+                    ) : (
+                      <Shield className="w-6 h-6" />
+                    )}
                   </div>
-                  <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider ${
-                    plan.isPopular ? 'text-orange-700 bg-orange-50 border border-orange-200' : 'text-slate-600 bg-slate-100'
-                  }`}>
+                  <span
+                    className={`text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider ${
+                      plan.isPopular
+                        ? "text-orange-700 bg-orange-50 border border-orange-200"
+                        : "text-slate-600 bg-slate-100"
+                    }`}
+                  >
                     {plan.durationDays} Days
                   </span>
                 </div>
 
                 <div>
-                  <h3 className="text-xl font-black text-slate-900">{plan.name}</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">{plan.description}</p>
+                  <h3 className="text-xl font-black text-slate-900">
+                    {plan.name}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {plan.description}
+                  </p>
                 </div>
 
                 <div>
                   <div className="flex items-baseline gap-1">
                     <span className="text-4xl font-black text-slate-900 font-mono">
-                      ₹{plan.price.toLocaleString('en-IN')}
+                      ₹{plan.price.toLocaleString("en-IN")}
                     </span>
-                    <span className="text-xs text-slate-400 font-semibold">/ {plan.durationDays === 30 ? 'mo' : `${plan.durationDays} days`}</span>
+                    <span className="text-xs text-slate-400 font-semibold">
+                      /{" "}
+                      {plan.durationDays === 30
+                        ? "mo"
+                        : `${plan.durationDays} days`}
+                    </span>
                   </div>
                 </div>
 
                 <div className="pt-3 border-t border-slate-100 space-y-3">
                   {plan.features.map((feat, i) => (
-                    <div key={i} className="flex items-center gap-2.5 text-xs text-slate-700 font-medium">
-                      <Check className={`w-4 h-4 shrink-0 ${plan.isPopular ? 'text-orange-500' : 'text-emerald-600'}`} />
+                    <div
+                      key={i}
+                      className="flex items-center gap-2.5 text-xs text-slate-700 font-medium"
+                    >
+                      <Check
+                        className={`w-4 h-4 shrink-0 ${plan.isPopular ? "text-orange-500" : "text-emerald-600"}`}
+                      />
                       <span>{feat}</span>
                     </div>
                   ))}
@@ -442,11 +503,11 @@ useEffect(() => {
                 }
                 className={`mt-8 w-full py-3.5 font-extrabold text-xs rounded-2xl transition-all shadow-md active:scale-98 cursor-pointer ${
                   plan.isPopular
-                    ? 'bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-orange-500/25'
-                    : 'bg-slate-900 hover:bg-slate-800 text-white'
+                    ? "bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-orange-500/25"
+                    : "bg-slate-900 hover:bg-slate-800 text-white"
                 }`}
               >
-                Select {plan.name} (₹{plan.price.toLocaleString('en-IN')})
+                Select {plan.name} (₹{plan.price.toLocaleString("en-IN")})
               </button>
             </div>
           ))}
@@ -459,9 +520,14 @@ useEffect(() => {
           <QrCode className="w-7 h-7 text-orange-500" />
         </div>
         <div className="flex-1 space-y-1">
-          <h4 className="font-extrabold text-slate-900 text-base">Permanent Universal QR Standee Guarantee</h4>
+          <h4 className="font-extrabold text-slate-900 text-base">
+            Permanent Universal QR Standee Guarantee
+          </h4>
           <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-medium">
-            Your restaurant uses one master QR link across all dining tables. Once printed and placed on acrylic standees or tables, the QR code is permanently bound to your restaurant. When your plan is renewed, your existing standees automatically reactivate without reprinting.
+            Your restaurant uses one master QR link across all dining tables.
+            Once printed and placed on acrylic standees or tables, the QR code
+            is permanently bound to your restaurant. When your plan is renewed,
+            your existing standees automatically reactivate without reprinting.
           </p>
         </div>
       </div>
@@ -473,8 +539,12 @@ useEffect(() => {
             <ShieldCheck className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-900">256-Bit SSL Encrypted</p>
-            <p className="text-[11px] text-slate-400">Bank-grade security powered by Razorpay</p>
+            <p className="text-xs font-bold text-slate-900">
+              256-Bit SSL Encrypted
+            </p>
+            <p className="text-[11px] text-slate-400">
+              Bank-grade security powered by Razorpay
+            </p>
           </div>
         </div>
 
@@ -483,8 +553,12 @@ useEffect(() => {
             <Zap className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-900">Instant QR Unlock</p>
-            <p className="text-[11px] text-slate-400">Live ordering unlocks automatically in seconds</p>
+            <p className="text-xs font-bold text-slate-900">
+              Instant QR Unlock
+            </p>
+            <p className="text-[11px] text-slate-400">
+              Live ordering unlocks automatically in seconds
+            </p>
           </div>
         </div>
 
@@ -493,8 +567,12 @@ useEffect(() => {
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-900">0% Commission Promise</p>
-            <p className="text-[11px] text-slate-400">You keep 100% of your customer food revenue</p>
+            <p className="text-xs font-bold text-slate-900">
+              0% Commission Promise
+            </p>
+            <p className="text-[11px] text-slate-400">
+              You keep 100% of your customer food revenue
+            </p>
           </div>
         </div>
       </div>
@@ -507,7 +585,7 @@ useEffect(() => {
             planId={selectedPlanModal.id}
             amount={selectedPlanModal.price}
             durationDays={selectedPlanModal.days}
-            upiId={subData?.payment?.upiId || ''}
+            upiId={subData?.payment?.upiId || ""}
             restaurantName={restaurantName}
             razorpayEnabled={subData?.payment?.razorpayEnabled ?? true}
             onClose={() => setSelectedPlanModal(null)}

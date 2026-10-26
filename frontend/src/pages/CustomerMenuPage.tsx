@@ -420,9 +420,9 @@ useEffect(() => {
 
       // The backend returns `merged: true` when items are added to an existing open bill
       if (res.data.merged) {
-        showToast('✅ Items added to your existing table order!');
+        showToast(' Items added to your existing table order!');
       } else {
-        showToast('✅ Order placed successfully!');
+        showToast(' Order placed successfully!');
       }
 
       try {
