@@ -147,36 +147,36 @@ export const getAdminStats = async (_req: AuthRequest, res: Response): Promise<v
 export const getAdminHotels = async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
     const result = await query(`
-      SELECT
-        r."id",
-        r."name",
-        r."slug",
-        r."address",
-        r."phone",
-        r."isActive",
-        r."subscriptionStatus",
-        r."createdAt",
-        u."name"  AS "adminName",
-        u."email" AS "adminEmail",
-        s."status" AS "subStatus",
-        s."planName",
-        s."amountPaid",
-        s."validUntil",
-        s."paymentReference",
-        COALESCE(o."orderCount", 0) AS "ordersCount",
-        COALESCE(o."totalRevenue", 0) AS "totalRevenue"
-      FROM "Restaurant" r
-      LEFT JOIN "User" u ON u."restaurantId" = r."id" AND u."role" = 'RESTAURANT_ADMIN'
-      LEFT JOIN "Subscription" s ON s."restaurantId" = r."id"
-      LEFT JOIN (
-        SELECT "restaurantId",
-               COUNT(*) AS "orderCount",
-               COALESCE(SUM("totalAmount"), 0) AS "totalRevenue"
-        FROM "Order"
-        GROUP BY "restaurantId"
-      ) o ON o."restaurantId" = r."id"
-      ORDER BY r."createdAt" DESC;
-    `);
+  SELECT
+    r."id",
+    r."name",
+    r."slug",
+    r."address",
+    r."phone",
+    r."isActive",
+    s."status" AS "subscriptionStatus", -- 👈 Yahan change kiya hai
+    r."createdAt",
+    u."name"  AS "adminName",
+    u."email" AS "adminEmail",
+    s."status" AS "subStatus",
+    s."planName",
+    s."amountPaid",
+    s."validUntil",
+    s."paymentReference",
+    COALESCE(o."orderCount", 0) AS "ordersCount",
+    COALESCE(o."totalRevenue", 0) AS "totalRevenue"
+  FROM "Restaurant" r
+  LEFT JOIN "User" u ON u."restaurantId" = r."id" AND u."role" = 'RESTAURANT_ADMIN'
+  LEFT JOIN "Subscription" s ON s."restaurantId" = r."id"
+  LEFT JOIN (
+    SELECT "restaurantId",
+           COUNT(*) AS "orderCount",
+           COALESCE(SUM("totalAmount"), 0) AS "totalRevenue"
+    FROM "Order"
+    GROUP BY "restaurantId"
+  ) o ON o."restaurantId" = r."id"
+  ORDER BY r."createdAt" DESC;
+`);
 
     const hotels = result.rows.map((row: any) => {
       const now = new Date();
