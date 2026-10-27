@@ -21,7 +21,9 @@ import { WorkersPage } from './pages/WorkersPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { SubscriptionPage } from './pages/SubscriptionPage';
 import { FeedbackPage } from './pages/Feedback';
-
+import {RefundPolicy} from './pages/RefundPolicy';
+import {TermsOfService} from './pages/TermsOfService';
+import {PrivacyPolicy} from './pages/PrivacyPolicy';
 function App() {
   return (
     <BrowserRouter>
@@ -30,6 +32,9 @@ function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="/terms-of-service" element={<TermsOfService />} />
+         <Route path="/refund-policy" element={<RefundPolicy />} />
 
         {/* Public: Customer QR Menu */}
         <Route path="/menu/:slug" element={<CustomerMenuPage />} />

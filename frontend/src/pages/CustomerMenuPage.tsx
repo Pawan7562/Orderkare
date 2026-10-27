@@ -1576,6 +1576,7 @@ useEffect(() => {
       {/* ─── 2. STICKY SEARCH & CATEGORY BAR ─── */}
       <div className="bg-white/95 backdrop-blur-sm z-30 px-3 py-2.5 border-b border-slate-200 shadow-xs space-y-2 text-left">
         {/* Search Input */}
+                {/* Search Input */}
         <div className="bg-slate-100 rounded-xl flex items-center px-3 py-2 border border-slate-200 focus-within:bg-white focus-within:border-orange-500 transition-colors">
           <Search className="w-3.5 h-3.5 text-slate-400 mr-2 shrink-0" />
           <input
@@ -1583,7 +1584,8 @@ useEffect(() => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search delicious dishes or drinks..."
-            className="flex-1 text-xs outline-none bg-transparent text-slate-900 placeholder-slate-400 font-medium"
+            className="flex-1 text-xs outline-none bg-transparent !text-slate-900 placeholder:!text-slate-400 font-medium"
+            style={{ color: '#0f172a' }} // 👈 Ye line add karein (text color force karne ke liye)
           />
           {search && (
             <button onClick={() => setSearch('')} className="p-0.5 text-slate-400 hover:text-slate-600">

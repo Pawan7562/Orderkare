@@ -5,11 +5,11 @@ import { prisma } from '../lib/prisma';
 import { query } from '../lib/db';
 import { OrderStatus } from '@prisma/client';
 
-// feedback lives for 90 days
+// Feedback database me 90 din tak store rehta hai
 const FEEDBACK_RETENTION_DAYS = 90;
 let lastFeedbackPurge = 0;
 
-// delet feedback after 90 days
+// 90 din se purana feedback delete karta hai 
 const purgeOldFeedback = async () => {
   const now = Date.now();
   if (now - lastFeedbackPurge < 6 * 60 * 60 * 1000) return;
@@ -23,11 +23,10 @@ const purgeOldFeedback = async () => {
   }
 };
 
-// protect from spam
 const lastCallAt = new Map<string, number>();
 
-// While a guest's bill is not finalized, new orders from that guest join it for this long
-const MERGE_WINDOW_MS = 6 * 60 * 60 * 1000; // 6 ghante
+// While a guest's bill is not finalized
+const MERGE_WINDOW_MS = 6 * 60 * 60 * 1000; 
 
 export const createOrder = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -182,7 +181,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         return { order: created, merged: false };
       });
 
-      console.log(` Order ${merged ? 'merged' : 'created'}: BillNo=#${order.billNo}, Table=${order.tableNumber}, Restaurant=${restaurant.name}`);
+      console.log(`✅ Order ${merged ? 'merged' : 'created'}: BillNo=#${order.billNo}, Table=${order.tableNumber}, Restaurant=${restaurant.name}`);
 
       // Real-time notification to the restaurant dashboard (the merged flag marks an add-on)
       notifyNewOrder(restaurant.id, { ...order, merged });
@@ -212,7 +211,7 @@ export const getTableBill = async (req: any, res: Response): Promise<void> => {
       return;
     }
 
-    // open bill of this table
+    // Open bills of this table (final bill not printed yet)
     const orders = await prisma.order.findMany({
       where: {
         restaurantId,
@@ -417,7 +416,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response): Promis
   }
 };
 
-
+// Closes (finalizes) a bill. The server calculates GST and service charge and stores them with the order,
 // so a finalized bill can never be changed or recalculated later (reprints always use the stored values).
 const BILL_GST_RATE = 0.05;
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -475,7 +474,7 @@ export const closeBill = async (req: AuthRequest, res: Response): Promise<void> 
   }
 };
 
-// Admin sets  the estimated preparation time of one order. The customer sees it on the tracking screen.
+// Admin sets (or clears) the estimated preparation time of one order. The customer sees it on the tracking screen.
 export const setOrderEstimate = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const restaurantId = req.user?.restaurantId as string;
@@ -515,7 +514,7 @@ export const setOrderEstimate = async (req: AuthRequest, res: Response): Promise
   }
 };
 
-// ─── FEEDBACK
+// ─── FEEDBACK (stored in the database for 90 days) ───
 export const submitOrderFeedback = async (req: Request, res: Response): Promise<void> => {
   try {
     const idParam = req.params.id;
@@ -543,7 +542,7 @@ export const submitOrderFeedback = async (req: Request, res: Response): Promise<
       order.items.map((item: any) => item.foodItem?.name || item.name).filter(Boolean).join(', ') ||
       'Custom Dining Order';
 
-    //  save in Database 
+    // Database me save
     const saved = await prisma.feedback.create({
       data: {
         orderId: id,
@@ -558,10 +557,10 @@ export const submitOrderFeedback = async (req: Request, res: Response): Promise<
       },
     });
 
-    // clears old feedback
+    // 90 din se purana feedback saaf karo (background me)
     void purgeOldFeedback();
 
-    // Real-time notification to the restaurant dashboard
+    // Real-time notification admin dashboard ko
     notifyNewFeedback(restaurantId, saved);
 
     res.status(201).json({ feedback: saved, message: 'Thank you! Your feedback has been received.' });
@@ -818,7 +817,7 @@ export const getDashboardOverview = async (req: AuthRequest, res: Response): Pro
 
       query(`
         SELECT 
-          r.id, r.name, r.slug, r."isActive", r."subscriptionStatus",
+          r.id, r.name, r.slug, r."isActive",
           s.id as sub_id, s.status as sub_status, s."planName" as sub_plan_name, 
           s."amountPaid" as sub_amount_paid, s."paymentReference" as sub_payment_reference, 
           s."validUntil" as sub_valid_until
@@ -882,7 +881,7 @@ export const getDashboardOverview = async (req: AuthRequest, res: Response): Pro
       }
     }
 
-    // Latest feedback come from database
+    // Latest feedback ab database se aata hai
     const feedback = await prisma.feedback.findMany({
       where: { restaurantId },
       orderBy: { createdAt: 'desc' },
@@ -901,8 +900,8 @@ export const getDashboardOverview = async (req: AuthRequest, res: Response): Pro
   }
 };
 
-
-// GET /orders/range-stats?from=YYYY-MM-DD&to=YYYY-MM-DD  
+// ─── DASHBOARD: kisi bhi din / date range ka hisaab (calendar ke liye) ───
+// GET /orders/range-stats?from=YYYY-MM-DD&to=YYYY-MM-DD   (dates India time IST me)
 export const getRangeStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const restaurantId = req.user?.restaurantId as string;
@@ -927,7 +926,7 @@ export const getRangeStats = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    
+    // createdAt UTC me store hota hai, usse India time (IST) me badal kar din ke hisaab se group karte hain
     const LOCAL = `((o."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata')`;
     const WHERE = `o."restaurantId" = $1 AND ${LOCAL} >= $2::date AND ${LOCAL} < ($3::date + INTERVAL '1 day')`;
     const params = [restaurantId, from, to];

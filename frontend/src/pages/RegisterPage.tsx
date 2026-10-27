@@ -170,7 +170,7 @@ export const RegisterPage: React.FC = () => {
           <div className="space-y-2 mb-8 text-center sm:text-left">
             <div className="inline-flex items-center space-x-1.5 bg-orange-50 text-orange-800 border border-orange-200 px-3 py-1 rounded-full text-xs font-bold mb-1">
               <Sparkles className="w-3.5 h-3.5 text-orange-600" />
-              <span>₹1 One-Time Activation • 30 Days Free Full Access</span>
+              <span>₹11 One-Time Activation • 15 Days Free Full Access</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-950">
               Register your restaurant
@@ -398,7 +398,7 @@ export const RegisterPage: React.FC = () => {
                   >
                     Privacy Policy
                   </button>
-                  , and ₹1 activation 30-day free trial terms.
+                  , and ₹11 activation 15-day free trial terms.
                 </span>
               </label>
             </div>
@@ -417,7 +417,7 @@ export const RegisterPage: React.FC = () => {
                   </>
                 ) : (
                   <>
-                    <span>Create Account & Unlock with ₹1</span>
+                    <span>Create Account</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
