@@ -31,7 +31,7 @@ interface SubscriptionData {
   qrCodeAllowed: boolean;
   payment?: { razorpayEnabled: boolean; upiId: string };
   plans: {
-    id: string; // Changed from strict enum to string to support dynamic UUIDs
+    id: string;
     name: string;
     price: number;
     durationDays: number;
@@ -63,13 +63,13 @@ export const SubscriptionPage: React.FC = () => {
     validUntil: null,
     daysRemaining: 0,
     qrCodeAllowed: false,
-    plans: [], // Starts empty, API will fill it
+    plans: [],
     firstTimeOffer: {
       id: "FIRST_TIME_ACTIVATION",
-      name: "First-Time 30 Days Trial",
-      price: 1,
-      durationDays: 30,
-      description: "Special ₹1 activation offer for new restaurants.",
+      name: "First-Time 14 Days Trial", 
+      price: 11,
+      durationDays: 14, 
+      description: "Special ₹11 activation offer for new restaurants.",
     },
   });
 
@@ -85,21 +85,15 @@ export const SubscriptionPage: React.FC = () => {
   const fetchStatus = async () => {
     setIsRefreshing(true);
     try {
-      // 1. Fetch subscription status
       const res = await api.get("/subscriptions/status");
-
-      // 2. Fetch dynamic plans from Superadmin database
-
       const plansRes = await api.get("/plans/active");
 
       if (res.data) {
-        // Map DB plans to your UI format
         const formattedPlans = (plansRes.data.plans || []).map((p: any) => {
           let days = 30;
           const nameLower = p.name.toLowerCase();
           if (nameLower.includes("6") || nameLower.includes("half")) days = 180;
-          if (nameLower.includes("year") || nameLower.includes("annual"))
-            days = 365;
+          if (nameLower.includes("year") || nameLower.includes("annual")) days = 365;
 
           return {
             id: p.id,
@@ -125,6 +119,7 @@ export const SubscriptionPage: React.FC = () => {
       setLoadingPlans(false);
     }
   };
+  
   useEffect(() => {
     fetchStatus();
   }, []);
@@ -135,19 +130,15 @@ export const SubscriptionPage: React.FC = () => {
   const daysLeft = subData?.daysRemaining ?? 0;
   const restaurantName = subData?.restaurantName || user?.name || "Restaurant";
 
-  // Calculate validity percentage
   const totalDays =
-    subData?.planName === "ANNUAL"
-      ? 365
-      : subData?.planName === "SIX_MONTHS"
-        ? 180
+    subData?.planName === "ANNUAL" ? 365
+      : subData?.planName === "SIX_MONTHS" ? 180
         : 30;
   const progressPercent = Math.min(
     100,
     Math.max(0, Math.round((daysLeft / totalDays) * 100)),
   );
 
-  // Find the first plan for the header quick-renew button
   const firstAvailablePlan = subData.plans[0];
 
   return (
@@ -225,7 +216,7 @@ export const SubscriptionPage: React.FC = () => {
                 >
                   {isSubscribed
                     ? status === "TRIAL"
-                      ? "1-Month Free Trial Active"
+                      ? "14-Day Free Trial Active" 
                       : "Active Commercial License"
                     : status === "EXPIRED"
                       ? "Subscription Expired"
@@ -261,7 +252,7 @@ export const SubscriptionPage: React.FC = () => {
                   ? `${daysLeft} Days of Active Master QR Ordering Remaining`
                   : status === "EXPIRED"
                     ? "Your Master QR Code is Currently Paused (Renew to Reactivate)"
-                    : "Complete ₹1 Introductory Payment to Activate 1 Month Free"}
+                    : "Complete ₹11 Introductory Payment to Activate 14 Days Free"} 
               </h2>
 
               <p
@@ -281,10 +272,9 @@ export const SubscriptionPage: React.FC = () => {
                     })}. Customers can scan any table to order seamlessly without reprinting codes.`
                   : status === "EXPIRED"
                     ? "Your universal QR codes remain saved permanently in the cloud. Renew any plan below to immediately re-enable table ordering without altering your physical standees."
-                    : "New restaurant setups require a one-time ₹1 gateway authorization fee via Razorpay to generate your permanent Master QR standee and receive 30 full days of unlimited dining orders."}
+                    : "New restaurant setups require a one-time ₹11 gateway authorization fee via Razorpay to generate your permanent Master QR standee and receive 14 full days of unlimited dining orders."} {/* 👈 Change 6 */}
               </p>
 
-              {/* Progress Bar when Subscribed */}
               {isSubscribed && subData?.validUntil && (
                 <div className="pt-2 max-w-md space-y-1">
                   <div className="flex justify-between text-[11px] font-bold text-slate-500">
@@ -314,18 +304,18 @@ export const SubscriptionPage: React.FC = () => {
                       ? "FIRST_TIME_ACTIVATION"
                       : firstAvailablePlan?.id || "MONTHLY",
                     name: isFirstTime
-                      ? "First-Time Activation (1 Month Free)"
+                      ? "First-Time Activation (14 Days Free)" 
                       : firstAvailablePlan?.name || "Plan Renewal",
-                    price: isFirstTime ? 1 : firstAvailablePlan?.price || 249,
-                    days: 30,
+                    price: isFirstTime ? 11 : firstAvailablePlan?.price || 249, 
+                    days: isFirstTime ? 14 : firstAvailablePlan?.durationDays || 30, 
                   })
                 }
                 className="px-6 py-4 bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-xs sm:text-sm rounded-2xl transition-all shadow-xl shadow-orange-500/25 active:scale-95 cursor-pointer flex items-center gap-2"
               >
                 <span>
                   {isFirstTime
-                    ? "⚡ Pay ₹1 & Activate 1 Month Free"
-                    : "🔄 Renew Subscription"}
+                    ? "⚡ Pay ₹11 & Activate 14 Days Free" 
+                    : " Renew Subscription"}
                 </span>
                 <ArrowRight className="w-4 h-4" />
               </button>
@@ -350,7 +340,7 @@ export const SubscriptionPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ── First-Time Introductory Card ── */}
+      {/* ──  Introductory Card ── */}
       {isFirstTime && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -365,13 +355,13 @@ export const SubscriptionPage: React.FC = () => {
                 <span>Special Introductory Offer</span>
               </div>
               <h3 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                First-Time Setup: Pay ₹1 & Get 1 Full Month Free!
+                First-Time Setup: Pay ₹11 & Get 14 Days Free! 
               </h3>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                Activate your restaurant account with an introductory ₹1 payment
+                Activate your restaurant account with an introductory ₹11 payment
                 via Razorpay. Instantly unlock universal Master QR standees,
                 sub-second Kitchen Display alerts, live ordering, and digital
-                menus for 30 full days with 0% commissions.
+                menus for 14 full days with 0% commissions. 
               </p>
             </div>
 
@@ -379,14 +369,14 @@ export const SubscriptionPage: React.FC = () => {
               onClick={() =>
                 setSelectedPlanModal({
                   id: "FIRST_TIME_ACTIVATION",
-                  name: "First-Time Activation (1 Month Free)",
-                  price: 1,
-                  days: 30,
+                  name: "First-Time Activation (14 Days Free)", 
+                  price: 11, 
+                  days: 14, 
                 })
               }
               className="px-8 py-4 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-slate-950 font-black text-sm rounded-2xl transition-all shadow-xl hover:shadow-orange-500/30 active:scale-95 shrink-0 flex items-center justify-center gap-2.5 cursor-pointer"
             >
-              <span>Pay ₹1 & Activate Now</span>
+              <span>Pay ₹11 & Activate Now</span> 
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -577,7 +567,7 @@ export const SubscriptionPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ── Payment Checkout Modal (Razorpay Single Flow) ── */}
+      {/* ── Razorpay Single Flow ── */}
       <AnimatePresence>
         {selectedPlanModal && (
           <PaymentModal

@@ -23,15 +23,20 @@ export const SettingsPage = () => {
       return null;
     }
   });
+  
+  
+  const [plans, setPlans] = useState<any[]>([]);
   const [copied, setCopied] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   const fetchSettings = async () => {
     try {
-      const [resMe, resSub] = await Promise.all([
+      const [resMe, resSub, resPlans] = await Promise.all([
         api.get('/auth/me'),
         api.get('/subscriptions/status').catch(() => ({ data: { isSubscribed: false, isFirstTime: true } })),
+        api.get('/plans/active').catch(() => ({ data: { plans: [] } }))
       ]);
+      
       const rest = resMe.data.user?.restaurant;
       if (rest) {
         setRestaurant(rest);
@@ -40,6 +45,9 @@ export const SettingsPage = () => {
       if (resSub.data) {
         setSubscription(resSub.data);
         try { localStorage.setItem('orderkare_dash_sub', JSON.stringify(resSub.data)); } catch {}
+      }
+      if (resPlans.data?.plans) {
+        setPlans(resPlans.data.plans);
       }
     } catch {
       /* empty */
@@ -53,6 +61,7 @@ export const SettingsPage = () => {
   const isSubscribed = subscription?.isSubscribed ?? false;
   const isFirstTime = subscription?.isFirstTime ?? true;
   const restaurantName = restaurant?.name || user?.name || 'Restaurant';
+  const firstPlan = plans[0]; 
 
   const menuUrl = (() => {
     const slug = restaurant?.slug || user?.restaurantId;
@@ -133,7 +142,7 @@ export const SettingsPage = () => {
                 </div>
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/60 backdrop-blur-xs rounded-2xl p-4 text-white space-y-1">
                   <Lock className="w-6 h-6 text-orange-400" />
-                  <span className="text-[11px] font-bold text-orange-300">₹1 Activation Required</span>
+                  <span className="text-[11px] font-bold text-orange-300">₹11 Activation Required</span>
                 </div>
               </div>
             ) : (
@@ -176,7 +185,11 @@ export const SettingsPage = () => {
                 className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold text-xs rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Sparkles className="w-4 h-4" />
-                <span>{isFirstTime ? 'Pay ₹1 & Unlock Master QR (30 Days Free)' : 'Renew & Unlock Master QR'}</span>
+                <span>
+                  {isFirstTime 
+                    ? 'Pay ₹11 & Unlock Master QR (14 Days Free)' 
+                    : `Renew & Unlock Master QR (₹${firstPlan?.priceMonthly || 249})`}
+                </span>
               </button>
             ) : (
               <div className="flex flex-wrap gap-3">
@@ -225,10 +238,10 @@ export const SettingsPage = () => {
       <AnimatePresence>
         {showPaymentModal && (
           <PaymentModal
-            planName={isFirstTime ? 'First-Time Activation (1 Month Free)' : 'Monthly Plan Renewal'}
-            planId={isFirstTime ? 'FIRST_TIME_ACTIVATION' : 'MONTHLY'}
-            amount={isFirstTime ? 1 : 249}
-            durationDays={30}
+            planName={isFirstTime ? 'First-Time Activation (14 Days Free)' : (firstPlan?.name || 'Monthly Plan Renewal')}
+            planId={isFirstTime ? 'FIRST_TIME_ACTIVATION' : (firstPlan?.id || 'MONTHLY')}
+            amount={isFirstTime ? 11 : (firstPlan?.priceMonthly || 249)}
+            durationDays={isFirstTime ? 14 : (firstPlan?.days || 30)}
             upiId={subscription?.payment?.upiId || ''}
             restaurantName={restaurantName}
             razorpayEnabled={subscription?.payment?.razorpayEnabled ?? true}

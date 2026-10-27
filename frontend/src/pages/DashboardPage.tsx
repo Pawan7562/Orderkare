@@ -664,79 +664,83 @@ export const DashboardPage = () => {
       </motion.div>
 
       {/* QR Code & Subscription Status Hero Banner */}
-      <motion.div
-        variants={stagger.item}
-        className={`rounded-3xl border-2 p-6 shadow-sm transition-all ${
+     <motion.div
+  variants={stagger.item}
+  className={`rounded-3xl border-2 p-6 shadow-sm transition-all ${
+    subscription?.isSubscribed
+      ? 'bg-gradient-to-br from-emerald-50 via-white to-teal-50/40 border-emerald-300'
+      : 'bg-gradient-to-br from-orange-50 via-white to-amber-50/50 border-orange-300'
+  }`}
+>
+  <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+    <div className="flex items-start gap-4">
+      <div
+        className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
           subscription?.isSubscribed
-            ? 'bg-gradient-to-br from-emerald-50 via-white to-teal-50/40 border-emerald-300'
-            : 'bg-gradient-to-br from-orange-50 via-white to-amber-50/50 border-orange-300'
+            ? 'bg-emerald-500 text-white shadow-emerald-200'
+            : 'bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-orange-200'
         }`}
       >
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-          <div className="flex items-start gap-4">
-            <div
-              className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
-                subscription?.isSubscribed
-                  ? 'bg-emerald-500 text-white shadow-emerald-200'
-                  : 'bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-orange-200'
-              }`}
-            >
-              {subscription?.isSubscribed ? <QrCode className="w-7 h-7" /> : <Lock className="w-7 h-7" />}
-            </div>
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h2 className="text-lg font-extrabold text-slate-900">
-                  {subscription?.isSubscribed ? 'Master Restaurant QR Standee: Live & Active' : 'Master Restaurant QR Standee'}
-                </h2>
-                <span
-                  className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
-                    subscription?.isSubscribed
-                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                      : 'bg-orange-100 text-orange-800 border border-orange-200'
-                  }`}
-                >
-                  {subscription?.isSubscribed
-                    ? subscription?.daysRemaining !== undefined
-                      ? `${subscription.daysRemaining} Days Left`
-                      : 'Active'
-                    : subscription?.isFirstTime
-                    ? '₹1 Activation Needed'
-                    : 'Subscription Expired'}
-                </span>
-              </div>
-              <p className="text-slate-600 text-sm mt-1 max-w-2xl">
-                {subscription?.isSubscribed
-                  ? `Your restaurant's single master QR standee is active. Guests scanning the QR from any table can view your live menu and place orders straight to this live dashboard.`
-                  : subscription?.isFirstTime
-                  ? 'New account special: Complete the one-time ₹1 activation to generate your permanent Master QR standee and receive 30 days completely free!'
-                  : 'Renew your subscription to reactivate your permanent master QR code standee for live customer ordering.'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 w-full lg:w-auto shrink-0">
-            {subscription?.isSubscribed ? (
-              <button
-                onClick={() => navigate('/dashboard/tables')}
-                className="w-full lg:w-auto flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3.5 rounded-2xl shadow-md shadow-emerald-200 transition-all cursor-pointer"
-              >
-                <QrCode className="w-4 h-4" />
-                <span>View & Print Master Standee</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                onClick={() => setShowPaymentModal(true)}
-                className="w-full lg:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black px-6 py-3.5 rounded-2xl shadow-lg shadow-orange-500/25 transition-all cursor-pointer active:scale-95"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>{subscription?.isFirstTime ? 'Pay ₹1 & Unlock QR (30 Days Free)' : 'Renew & Unlock Master QR'}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+        {subscription?.isSubscribed ? <QrCode className="w-7 h-7" /> : <Lock className="w-7 h-7" />}
+      </div>
+      <div>
+        <div className="flex items-center gap-2.5">
+          <h2 className="text-lg font-extrabold text-slate-900">
+            {subscription?.isSubscribed ? 'Master Restaurant QR Standee: Live & Active' : 'Master Restaurant QR Standee'}
+          </h2>
+          <span
+            className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
+              subscription?.isSubscribed
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                : 'bg-orange-100 text-orange-800 border border-orange-200'
+            }`}
+          >
+            {subscription?.isSubscribed
+              ? subscription?.daysRemaining !== undefined
+                ? `${subscription.daysRemaining} Days Left`
+                : 'Active'
+              : subscription?.isFirstTime
+              ? '₹11 Activation Needed'
+              : 'Subscription Expired'}
+          </span>
         </div>
-      </motion.div>
+        <p className="text-slate-600 text-sm mt-1 max-w-2xl">
+          {subscription?.isSubscribed
+            ? `Your restaurant's single master QR standee is active. Guests scanning the QR from any table can view your live menu and place orders straight to this live dashboard.`
+            : subscription?.isFirstTime
+            ? 'New account special: Complete the one-time ₹11 activation to generate your permanent Master QR standee and receive 14 days completely free!'
+            : 'Renew your subscription to reactivate your permanent master QR code standee for live customer ordering.'}
+        </p>
+      </div>
+    </div>
+
+    <div className="flex items-center gap-3 w-full lg:w-auto shrink-0">
+      {subscription?.isSubscribed ? (
+        <button
+          onClick={() => navigate('/dashboard/tables')}
+          className="w-full lg:w-auto flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3.5 rounded-2xl shadow-md shadow-emerald-200 transition-all cursor-pointer"
+        >
+          <QrCode className="w-4 h-4" />
+          <span>View & Print Master Standee</span>
+          <ArrowRight className="w-4 h-4" />
+        </button>
+      ) : (
+        <button
+          onClick={() => setShowPaymentModal(true)}
+          className="w-full lg:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black px-6 py-3.5 rounded-2xl shadow-lg shadow-orange-500/25 transition-all cursor-pointer active:scale-95"
+        >
+          <Sparkles className="w-4 h-4" />
+          <span>
+            {subscription?.isFirstTime 
+              ? 'Pay ₹11 & Unlock QR (14 Days Free)' 
+              : `Renew & Unlock Master QR (₹${plans[0]?.priceMonthly || 249})`}
+          </span>
+          <ArrowRight className="w-4 h-4" />
+        </button>
+      )}
+    </div>
+  </div>
+</motion.div>
 
       {/* Calendar + Dashboard of selected day / range */}
       <motion.div variants={stagger.item} className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-6 items-start">
