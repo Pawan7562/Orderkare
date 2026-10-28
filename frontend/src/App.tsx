@@ -1,3 +1,4 @@
+import { ThemeManager } from './components/ThemeManager';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AdminLayout } from './layouts/AdminLayout';
@@ -26,7 +27,8 @@ import {TermsOfService} from './pages/TermsOfService';
 import {PrivacyPolicy} from './pages/PrivacyPolicy';
 function App() {
   return (
-    <BrowserRouter>
+    
+      <BrowserRouter>
       <Routes>
         {/* Public */}
         <Route path="/" element={<LandingPage />} />
@@ -69,6 +71,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
+   
   );
 }
 

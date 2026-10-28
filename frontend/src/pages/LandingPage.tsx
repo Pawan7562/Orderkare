@@ -5,11 +5,11 @@ import {
   QrCode, Utensils, BarChart3, Shield, ArrowRight, CheckCircle2,
   ChevronDown, Smartphone, Zap, Star, Check, Menu, X, ChefHat,
   Clock, CreditCard, Layers, ArrowUpRight, Globe, Bell, PieChart,
-  Users, TrendingUp, Sparkles, ShoppingCart, CheckCircle, ShieldCheck,
-  Moon, Sun
+  Users, TrendingUp, Sparkles, ShoppingCart, CheckCircle, ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence, useInView, useMotionValue, useSpring } from 'framer-motion';
 import type { Variants } from 'framer-motion';
+import { ThemeToggle } from '../components/ThemeToggle'; // 👈 Global Toggle Import
 
 /* ─── Motion Variants ─── */
 const fadeUp: Variants = {
@@ -77,26 +77,6 @@ export const LandingPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [subscribed, setSubscribed] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-
-  // 👈 Dark Mode State
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('theme') === 'dark' || 
-        (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    }
-    return false;
-  });
-
-  // Apply dark mode class to html tag
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-    }
-  }, [isDarkMode]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -278,23 +258,32 @@ export const LandingPage: React.FC = () => {
     <div className="min-h-screen bg-[#fafbfe] dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased overflow-x-hidden selection:bg-orange-500 selection:text-white transition-colors duration-300">
 
       {/* ═══════════════════════════════ TOP ANNOUNCEMENT BAR ═══════════════════════════════ */}
+            {/* ═══════════════════════════════ TOP ANNOUNCEMENT BAR ═══════════════════════════════ */}
       <div className="bg-gradient-to-r from-orange-500 via-rose-500 to-amber-500 text-white text-xs py-2.5 px-4 font-medium tracking-wide shadow-xs overflow-hidden">
         <div className="max-w-7xl mx-auto flex items-center gap-3">
           <span className="relative z-20 shrink-0 bg-white/20 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">New</span>
           <div className="relative min-w-0 flex-1 overflow-hidden">
             <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-orange-500 via-orange-500/70 to-transparent z-10 pointer-events-none" />
             <div className="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-amber-500 via-amber-500/70 to-transparent z-10 pointer-events-none" />
-            <div className="animate-marquee whitespace-nowrap">
-              {[1, 2].map((copy) => (
-                <div key={copy} className="flex items-center shrink-0">
-                  <span className="px-6">Real-time kitchen display and instant UPI QR ordering are now live</span>
-                  <span className="text-white/60">✦</span>
-                  <span className="px-6">Serve faster with OrderKare restaurant operations</span>
-                  <span className="text-white/60">✦</span>
-                  <a href="#features" className="px-6 underline font-semibold hover:text-orange-100 transition-colors">Explore platform features →</a>
-                </div>
-              ))}
+            
+            {/* 👈 Clean Marquee Track */}
+            <div className="flex animate-marquee whitespace-nowrap">
+              <div className="flex items-center shrink-0">
+                <span className="px-6">Real-time kitchen display and instant UPI QR ordering are now live</span>
+                <span className="text-white/60">✦</span>
+                <span className="px-6">Serve faster with OrderKare restaurant operations</span>
+                <span className="text-white/60">✦</span>
+                <a href="#features" className="px-6 underline font-semibold hover:text-orange-100 transition-colors">Explore platform features →</a>
+              </div>
+              <div className="flex items-center shrink-0">
+                <span className="px-6">Real-time kitchen display and instant UPI QR ordering are now live</span>
+                <span className="text-white/60">✦</span>
+                <span className="px-6">Serve faster with OrderKare restaurant operations</span>
+                <span className="text-white/60">✦</span>
+                <a href="#features" className="px-6 underline font-semibold hover:text-orange-100 transition-colors">Explore platform features →</a>
+              </div>
             </div>
+
           </div>
         </div>
       </div>
@@ -318,14 +307,8 @@ export const LandingPage: React.FC = () => {
           </nav>
 
           <div className="hidden sm:flex items-center gap-3">
-            {/* 👈 DARK MODE TOGGLE */}
-            <button
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              title="Toggle Dark Mode"
-            >
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
+            {/* 👈 GLOBAL DARK MODE TOGGLE */}
+            <ThemeToggle />
 
             <Link to="/login" className="text-[13px] font-semibold text-slate-700 dark:text-slate-300 hover:text-orange-600 px-3.5 py-2 transition-colors">
               Sign In
@@ -338,20 +321,12 @@ export const LandingPage: React.FC = () => {
             </Link>
           </div>
 
-          <div className="flex items-center gap-2 lg:hidden">
-             <button
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-2 rounded-full text-slate-600 dark:text-slate-300"
-            >
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-          </div>
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="lg:hidden p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
         </div>
 
         {/* Mobile Navigation Dropdown */}

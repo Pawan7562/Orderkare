@@ -3,6 +3,7 @@ import { useAuthStore } from '../store/authStore';
 import { LayoutDashboard, ShoppingBag, Menu, Grid2X2, Users, BarChart3, Settings, Bell, Search, LogOut, CreditCard } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { GlobalOrderNotifier } from '../components/GlobalOrderNotifier';
+import { ThemeToggle } from '../components/ThemeToggle'; // 👈 Theme Toggle Import kiya
 
 export const AdminLayout = () => {
   const location = useLocation();
@@ -17,17 +18,17 @@ export const AdminLayout = () => {
     { label: 'Analytics', path: '/dashboard/analytics', icon: BarChart3 },
     { label: 'Settings', path: '/dashboard/settings', icon: Settings },
     { label: 'Subscription', path: '/dashboard/subscription', icon: CreditCard },
-    {label:'Feedback', path:'/dashboard/feedback', icon:Bell}
+    { label: 'Feedback', path: '/dashboard/feedback', icon: Bell }
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 flex font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex font-sans transition-colors duration-300">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-slate-200/60 flex flex-col hidden md:flex h-screen sticky top-0">
-        <div className="p-6 flex items-center space-x-3 border-b border-slate-100">
+      <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200/60 dark:border-slate-800 flex flex-col hidden md:flex h-screen sticky top-0 transition-colors duration-300">
+        <div className="p-6 flex items-center space-x-3 border-b border-slate-100 dark:border-slate-800">
           <img src="/logo.jpg" alt="OrderKare Logo" className="h-10 w-auto object-contain rounded-xl shadow-xs" />
           <div>
-            <h1 className="font-extrabold text-base text-slate-900 leading-tight">OrderKare</h1>
+            <h1 className="font-extrabold text-base text-slate-900 dark:text-white leading-tight">OrderKare</h1>
             <p className="text-[10px] text-slate-400 font-mono tracking-wider uppercase">Hotel Dashboard</p>
           </div>
         </div>
@@ -42,8 +43,8 @@ export const AdminLayout = () => {
                 to={item.path}
                 className={`flex items-center justify-between px-4 py-3 rounded-2xl transition-all relative ${
                   isActive
-                    ? 'bg-primary/5 text-primary font-bold'
-                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                    ? 'bg-primary/5 dark:bg-primary/10 text-primary font-bold'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 <div className="flex items-center space-x-3">
@@ -62,10 +63,10 @@ export const AdminLayout = () => {
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-100">
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800">
           <button 
             onClick={logout}
-            className="flex items-center space-x-3 px-4 py-3 text-slate-500 hover:bg-red-50 hover:text-red-600 rounded-2xl w-full transition-all group"
+            className="flex items-center space-x-3 px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 rounded-2xl w-full transition-all group"
           >
             <LogOut className="w-5 h-5 text-slate-400 group-hover:text-red-500" />
             <span className="text-sm font-semibold">Logout</span>
@@ -76,18 +77,21 @@ export const AdminLayout = () => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Header */}
-        <header className="h-16 bg-white border-b border-slate-200/60 flex items-center justify-between px-8 sticky top-0 z-20">
+        <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800 flex items-center justify-between px-8 sticky top-0 z-20 transition-colors duration-300">
           <div className="flex-1 flex items-center">
             <div className="relative w-80">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input 
                 type="text" 
                 placeholder="Search orders, tables..."
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200/60 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 outline-none transition-all placeholder:text-slate-400"
               />
             </div>
           </div>
           <div className="flex items-center space-x-3">
+            {/* 👈 Dark Mode Toggle Yahan Add Kiya Hai */}
+            <ThemeToggle />
+
             <Link
               to="/dashboard/tables"
               className="flex items-center space-x-1.5 bg-primary/10 hover:bg-primary/20 text-primary px-3.5 py-2 rounded-xl text-xs font-bold transition-all border border-primary/20"
@@ -95,7 +99,7 @@ export const AdminLayout = () => {
               <CreditCard className="w-3.5 h-3.5" />
               <span>Generate QR</span>
             </Link>
-            <button className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-colors">
+            <button className="p-2 text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-colors">
               <Bell className="w-5 h-5" />
             </button>
             <div className="w-9 h-9 bg-primary/10 text-primary rounded-xl flex items-center justify-center font-extrabold text-sm border border-primary/20">

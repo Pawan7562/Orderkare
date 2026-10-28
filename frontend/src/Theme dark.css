@@ -1,0 +1,77 @@
+/* ═══════════════════════════════════════════════════════════
+   PREMIUM & EYE-FRIENDLY DARK MODE
+   (No Invert Hacks, Pure Color Overrides)
+   ═══════════════════════════════════════════════════════════ */
+
+/* 1. Global Body & Text */
+html[data-app-dark='true'] body {
+  background-color: #0f172a !important; /* Slate 900 (Soft Black) */
+  color: #f8fafc !important; /* Slate 50 (Off-White) */
+}
+
+/* 2. Page Backgrounds */
+html[data-app-dark='true'] .bg-slate-50,
+html[data-app-dark='true'] .bg-slate-100 {
+  background-color: #0f172a !important;
+}
+
+/* 3. Cards, Sidebars, Headers, Modals */
+html[data-app-dark='true'] .bg-white,
+html[data-app-dark='true'] aside,
+html[data-app-dark='true'] header,
+html[data-app-dark='true'] .rounded-2xl.border {
+  background-color: #1e293b !important; /* Slate 800 */
+  border-color: #334155 !important; /* Slate 700 */
+}
+
+/* 4. Text Colors */
+html[data-app-dark='true'] .text-slate-900,
+html[data-app-dark='true'] .text-slate-800,
+html[data-app-dark='true'] .text-black {
+  color: #f1f5f9 !important;
+}
+
+html[data-app-dark='true'] .text-slate-500,
+html[data-app-dark='true'] .text-slate-600,
+html[data-app-dark='true'] .text-slate-400 {
+  color: #94a3b8 !important; /* Muted Slate */
+}
+
+/* 5. Borders */
+html[data-app-dark='true'] .border-slate-200,
+html[data-app-dark='true'] .border-slate-100,
+html[data-app-dark='true'] .border-slate-200\/60,
+html[data-app-dark='true'] .border-slate-200\/80 {
+  border-color: #334155 !important;
+}
+
+/* 6. Inputs, Search Bars, Selects */
+html[data-app-dark='true'] input,
+html[data-app-dark='true'] select,
+html[data-app-dark='true'] textarea {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+}
+
+/* 7. Hover States for Lists, Tables & Buttons */
+html[data-app-dark='true'] .hover\:bg-slate-50:hover,
+html[data-app-dark='true'] .hover\:bg-slate-100:hover,
+html[data-app-dark='true'] .hover\:bg-slate-200:hover {
+  background-color: #334155 !important;
+}
+
+/* 8. Active Sidebar Items (Soft Orange Background) */
+html[data-app-dark='true'] .bg-primary\/10,
+html[data-app-dark='true'] .bg-primary\/5 {
+  background-color: rgba(249, 115, 22, 0.15) !important;
+}
+
+/* 9. Protect Images, Logos & Brand Colors from Inversion */
+html[data-app-dark='true'] img,
+html[data-app-dark='true'] .no-invert {
+  filter: none !important;
+}
+
+
+

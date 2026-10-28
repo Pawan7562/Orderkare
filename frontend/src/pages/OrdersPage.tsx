@@ -8,7 +8,8 @@ import {
   ChevronDown,
   Clock,
   Package,
-  Truck,
+  Utensils, 
+  Flame,
   CheckCircle,
   XCircle,
   Printer,
@@ -101,14 +102,13 @@ const statusConfig: Record<
     actionLabel: "Mark Ready",
     btnColor: "bg-indigo-600 hover:bg-indigo-700",
   },
-  READY: {
-    label: "Ready",
-    bg: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    badge: "bg-emerald-500 text-white",
-    icon: Truck,
-    next: "SERVED",
-    actionLabel: "Mark Served",
-    btnColor: "bg-emerald-600 hover:bg-emerald-700",
+  READY:{ 
+    label: 'Ready', 
+    bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', 
+    badge: 'bg-emerald-500 text-white',
+    icon: Utensils, next: 'SERVED',
+    actionLabel: 'Mark Served',
+    btnColor: 'bg-emerald-600 hover:bg-emerald-700' 
   },
   SERVED: {
     label: "Served",
@@ -612,7 +612,7 @@ export const OrdersPage = () => {
       key: "READY",
       label: "Ready",
       count: readyCount,
-      icon: Truck,
+      icon: Flame,
       active:
         "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/20",
       idle: "hover:border-emerald-300",
@@ -977,9 +977,9 @@ export const OrdersPage = () => {
                             <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between">
                               <div className="flex items-center gap-2">
                                 <Clock className="w-4 h-4 text-orange-500" />
-                                <span className="text-xs font-bold text-slate-700">
-                                  Set Estimated Ready Time:
-                                </span>
+                                <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                                Set Estimated Ready Time:
+                             </span>
                               </div>
                               <select
                                 onChange={async (e) => {
@@ -1037,26 +1037,14 @@ export const OrdersPage = () => {
                             <tbody className="divide-y divide-slate-100">
                               {(order.items || []).map((item, i) => {
                                 const itemPrice = getItemPrice(item);
+                                const dishName = item.foodItem?.name || item.name || 'Menu Dish'; 
                                 return (
-                                  <tr key={i} className="text-slate-700">
-                                    <td className="p-3 font-semibold">
-                                      {getItemName(item)}
-                                      {(item.batch || 1) > 1 && (
-                                        <span className="ml-2 text-[10px] font-black bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
-                                          ADD-ON #{(item.batch || 1) - 1}
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td className="p-3 text-center font-bold font-mono">
-                                      {item.quantity}×
-                                    </td>
-                                    <td className="p-3 text-right font-mono text-slate-500">
-                                      ₹{itemPrice}
-                                    </td>
-                                    <td className="p-3 text-right font-bold font-mono text-slate-900">
-                                      ₹{itemPrice * item.quantity}
-                                    </td>
-                                  </tr>
+                                 <tr key={i} className="text-slate-700 dark:text-slate-200 border-b border-slate-100 dark:border-slate-700">
+                               <td className="p-3 font-semibold">{dishName}</td>
+                                <td className="p-3 text-center font-bold font-mono">{item.quantity}×</td>
+                                <td className="p-3 text-right font-mono text-slate-500 dark:text-slate-400">₹{itemPrice}</td>
+                                <td className="p-3 text-right font-bold font-mono text-slate-900 dark:text-white">₹{itemPrice * item.quantity}</td>
+                                </tr>
                                 );
                               })}
                             </tbody>
@@ -1065,12 +1053,8 @@ export const OrdersPage = () => {
 
                         {/* Footer Info & Action Progression */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-                          <div className="text-xs text-slate-500">
-                            {order.phoneNumber ? (
-                              <span>📞 Contact: {order.phoneNumber}</span>
-                            ) : (
-                              <span>Dine-In Customer</span>
-                            )}
+                          <div className="text-xs text-slate-500 dark:text-slate-300 font-medium">
+                          {order.phoneNumber ? <span>📞 Contact: {order.phoneNumber}</span> : <span>Dine-In Customer</span>}
                           </div>
 
                           <div className="flex flex-wrap items-center gap-2">
@@ -1182,6 +1166,10 @@ export const OrdersPage = () => {
                       <span className="font-bold">
                         #{printOrder.tableNumber}
                       </span>
+                    </div>
+                    <div className="flex justify-between gap-3 text-slate-800">
+                    <span>Customer</span>
+                    <span className="font-bold text-right break-words max-w-[65%]">{printOrder.customerName || 'Guest'}</span>
                     </div>
                     <div className="flex justify-between text-slate-800">
                       <span>Type</span>
