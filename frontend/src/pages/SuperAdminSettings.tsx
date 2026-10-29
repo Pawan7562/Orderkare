@@ -155,7 +155,7 @@ export const SuperAdminSettings = () => {
     try {
       const res = await api.get('/settings/health');
       if (res.data) {
-        setHealthData(res.data);
+        setHealthData(res.data.health || res.data);
       }
     } catch (err) {
       console.error('Failed to retrieve system health diagnostics:', err);
