@@ -48,7 +48,7 @@ export default function App() {
   if (!isReady) {
     return (
       <View style={styles.splash}>
-        <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
+        <StatusBar barStyle="light-content" />
         <Image
           source={require('./assets/logo.jpg')}
           style={styles.splashLogo}
@@ -63,7 +63,7 @@ export default function App() {
   if (!token) {
     return (
       <SafeAreaProvider>
-        <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
+        <StatusBar barStyle="light-content" />
         <LoginScreen />
       </SafeAreaProvider>
     );
@@ -91,7 +91,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor={Colors.surface} />
+        <StatusBar barStyle="light-content" />
         
         {/* Global Real-Time Order Popup & Kitchen Chime Bell */}
         <GlobalOrderNotifier onNavigateToTab={(t) => setActiveTab(t)} />

@@ -44,7 +44,7 @@ export default function TabsLayout() {
               borderRadius: 10,
               padding: 4,
             } : { padding: 4 }}>
-              <MaterialIcons name="dashboard" size={size - 2} color={color} />
+              <MaterialIcons name="dashboard" size={size - 2} color={color as any} />
             </View>
           ),
         }}
@@ -59,7 +59,7 @@ export default function TabsLayout() {
               borderRadius: 10,
               padding: 4,
             } : { padding: 4 }}>
-              <MaterialIcons name="receipt-long" size={size - 2} color={color} />
+              <MaterialIcons name="receipt-long" size={size - 2} color={color as any} />
             </View>
           ),
         }}
@@ -74,7 +74,7 @@ export default function TabsLayout() {
               borderRadius: 10,
               padding: 4,
             } : { padding: 4 }}>
-              <MaterialIcons name="restaurant-menu" size={size - 2} color={color} />
+              <MaterialIcons name="restaurant-menu" size={size - 2} color={color as any} />
             </View>
           ),
         }}
@@ -89,7 +89,7 @@ export default function TabsLayout() {
               borderRadius: 10,
               padding: 4,
             } : { padding: 4 }}>
-              <MaterialIcons name="table-restaurant" size={size - 2} color={color} />
+              <MaterialIcons name="table-restaurant" size={size - 2} color={color as any} />
             </View>
           ),
         }}
@@ -104,7 +104,7 @@ export default function TabsLayout() {
               borderRadius: 10,
               padding: 4,
             } : { padding: 4 }}>
-              <MaterialIcons name="bar-chart" size={size - 2} color={color} />
+              <MaterialIcons name="bar-chart" size={size - 2} color={color as any} />
             </View>
           ),
         }}
@@ -119,7 +119,7 @@ export default function TabsLayout() {
               borderRadius: 10,
               padding: 4,
             } : { padding: 4 }}>
-              <MaterialIcons name="settings" size={size - 2} color={color} />
+              <MaterialIcons name="settings" size={size - 2} color={color as any} />
             </View>
           ),
         }}
