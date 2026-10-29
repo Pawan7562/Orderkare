@@ -93,13 +93,14 @@ app.use(cors({
 
     // In development allow local networks, in production reject untrusted origins
     if (process.env.NODE_ENV === 'production') {
-      return callback(new Error('Blocked by CORS policy: Origin not allowed'));
+      return callback(null, false);
     }
     callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'cache-control', 'pragma'],
+  optionsSuccessStatus: 200
 }));
 
 app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json', limit: '2mb' }), handleRazorpayWebhook);
