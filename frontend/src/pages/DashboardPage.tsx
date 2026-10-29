@@ -90,10 +90,10 @@ const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
 const HEAT_BG = [
   'bg-slate-50 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300',
-  'bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300',
-  'bg-orange-100 dark:bg-orange-900/40 text-orange-900 dark:text-orange-200',
-  'bg-orange-200 dark:bg-orange-800/50 text-orange-950 dark:text-orange-100 font-bold',
-  'bg-orange-300 dark:bg-orange-700/60 text-orange-950 dark:text-white font-extrabold',
+  'bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300 font-semibold',
+  'bg-orange-100 dark:bg-orange-900/40 text-orange-900 dark:text-orange-200 font-bold',
+  'bg-orange-200 dark:bg-orange-800/50 text-orange-950 dark:text-orange-100 font-extrabold',
+  'bg-orange-300 dark:bg-orange-700/60 text-orange-950 dark:text-white font-black',
 ];
 const BAND = '#ffedd5';
 
@@ -297,7 +297,7 @@ export const DashboardPage = () => {
 
   useEffect(() => {
     fetchMonth();
-  }, [fetchMonth]);
+  }, [viewYear, viewMonth]);
 
   // Real-Time Socket Updates
   const refreshRef = useRef<() => void>(() => {});
@@ -379,7 +379,7 @@ export const DashboardPage = () => {
     {
       label: 'Gross Sales',
       value: s ? inr(s.revenue) : '–',
-      subtitle: spanDays === 1 ? "Today's total turnover" : `${spanDays}-day turnover`,
+      subtitle: spanDays === 1 ? "Today's gross turnover" : `${spanDays}-day turnover`,
       icon: IndianRupee,
     },
     {
@@ -402,7 +402,7 @@ export const DashboardPage = () => {
     },
   ];
 
-  // Calendar Grid Calculation
+  // Calendar Calculation
   const first = toUTC(monthStart(viewYear, viewMonth));
   const firstDow = first.getUTCDay();
   const dim = new Date(Date.UTC(viewYear, viewMonth + 1, 0)).getUTCDate();
@@ -428,7 +428,7 @@ export const DashboardPage = () => {
       : `${fmtDate(from, { day: '2-digit', month: 'short' })} – ${fmtDate(to, { day: '2-digit', month: 'short', year: 'numeric' })}`;
 
   return (
-    <div className="space-y-6 text-left">
+    <div className="space-y-7 sm:space-y-8 text-left">
       {/* Real-Time Order Toast */}
       <AnimatePresence>
         {notification && (
@@ -436,16 +436,16 @@ export const DashboardPage = () => {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-5 right-5 z-50 max-w-sm w-full rounded-2xl border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 p-4 shadow-xl shadow-emerald-500/10 flex items-start gap-3"
+            className="fixed top-5 right-5 z-50 max-w-sm w-full rounded-2xl border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 p-4 shadow-xl shadow-emerald-500/10 flex items-start gap-3.5"
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-xs">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-xs">
               <CheckCircle2 className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
                 {notification.title}
               </p>
-              <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 mt-0.5 truncate">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 mt-0.5 truncate">
                 {notification.message}
               </p>
             </div>
@@ -454,33 +454,33 @@ export const DashboardPage = () => {
       </AnimatePresence>
 
       {/* ─── Top Header & Date Range Filter Bar ─── */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs transition-colors">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6 sm:p-7 shadow-xs transition-colors">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
           <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
                 Operations Dashboard
               </h1>
-              <span className="inline-flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-xs px-2.5 py-0.5 rounded-full font-semibold">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="inline-flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-xs px-3 py-1 rounded-full font-bold">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                 Live Feed
               </span>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 text-xs mt-1">
-              Welcome back, <span className="font-semibold text-slate-700 dark:text-slate-300">{user?.name || 'Restaurant'}</span> • Viewing {rangeTitle}
+            <p className="text-slate-500 dark:text-slate-400 text-sm sm:text-base font-medium mt-1">
+              Welcome back, <span className="font-bold text-slate-800 dark:text-slate-200">{user?.name || 'Restaurant'}</span> • Viewing {rangeTitle}
             </p>
           </div>
 
           {/* Date Range Navigation Toolbar */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
               {PRESETS.map(p => (
                 <button
                   key={p.key}
                   onClick={() => handlePreset(p.key)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                     activePreset === p.key
-                      ? 'bg-white dark:bg-slate-900 text-orange-600 dark:text-orange-400 shadow-xs font-bold'
+                      ? 'bg-white dark:bg-slate-900 text-orange-600 dark:text-orange-400 shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
@@ -491,15 +491,15 @@ export const DashboardPage = () => {
 
             <button
               onClick={() => setCalendarOpen(!calendarOpen)}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer shadow-xs ${
+              className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold border transition-all cursor-pointer shadow-xs ${
                 calendarOpen
                   ? 'bg-orange-50 dark:bg-orange-950/50 border-orange-300 dark:border-orange-800 text-orange-600 dark:text-orange-400'
                   : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
               }`}
             >
-              <CalendarDays className="w-3.5 h-3.5 text-orange-500" />
-              <span>Custom Date</span>
-              {calendarOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              <CalendarDays className="w-4 h-4 text-orange-500" />
+              <span>Custom Range</span>
+              {calendarOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
 
             <button
@@ -508,10 +508,10 @@ export const DashboardPage = () => {
                 fetchMonth();
               }}
               title="Refresh live data"
-              className="inline-flex items-center gap-1.5 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 p-2 sm:px-3 rounded-xl text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer shadow-xs"
+              className="inline-flex items-center gap-2 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer shadow-xs"
             >
-              <RefreshCcw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-orange-600' : ''}`} />
-              <span className="hidden sm:inline">{isRefreshing ? 'Syncing...' : 'Sync'}</span>
+              <RefreshCcw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-orange-600' : ''}`} />
+              <span>{isRefreshing ? 'Syncing...' : 'Sync'}</span>
             </button>
           </div>
         </div>
@@ -524,15 +524,15 @@ export const DashboardPage = () => {
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.25 }}
-              className="mt-5 pt-5 border-t border-slate-100 dark:border-slate-800"
+              className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800"
             >
-              <div className="max-w-xl mx-auto bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5">
+              <div className="max-w-xl mx-auto bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 sm:p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2.5">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Date Range Selector
                     </span>
-                    <span className="text-xs font-semibold text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-950/60 px-2 py-0.5 rounded-full">
+                    <span className="text-xs font-bold text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-950/60 px-2.5 py-0.5 rounded-full">
                       {mode === 'day' ? 'Single Day' : 'Custom Range'}
                     </span>
                   </div>
@@ -540,7 +540,7 @@ export const DashboardPage = () => {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setMode('day')}
-                      className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                      className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all ${
                         mode === 'day'
                           ? 'bg-orange-600 text-white shadow-xs'
                           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800'
@@ -550,7 +550,7 @@ export const DashboardPage = () => {
                     </button>
                     <button
                       onClick={() => setMode('range')}
-                      className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                      className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all ${
                         mode === 'range'
                           ? 'bg-orange-600 text-white shadow-xs'
                           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800'
@@ -560,25 +560,25 @@ export const DashboardPage = () => {
                     </button>
                     <button
                       onClick={() => setCalendarOpen(false)}
-                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
+                      className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
                     >
                       <X className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
 
-                {/* Month Nav */}
-                <div className="flex items-center justify-between mb-3 px-1">
+                {/* Month Navigation */}
+                <div className="flex items-center justify-between mb-4 px-1">
                   <button
                     onClick={() => {
                       const d = new Date(Date.UTC(viewYear, viewMonth - 1, 1));
                       setView(d.getUTCFullYear(), d.getUTCMonth());
                     }}
-                    className="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-center text-slate-600 dark:text-slate-300"
+                    className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-center text-slate-600 dark:text-slate-300"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
-                  <p className="text-xs font-bold text-slate-900 dark:text-white">
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">
                     {fmtDate(monthStart(viewYear, viewMonth), { month: 'long', year: 'numeric' })}
                   </p>
                   <button
@@ -587,24 +587,24 @@ export const DashboardPage = () => {
                       setView(d.getUTCFullYear(), d.getUTCMonth());
                     }}
                     disabled={isCurrentMonth}
-                    className="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-center text-slate-600 dark:text-slate-300 disabled:opacity-30"
+                    className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-center text-slate-600 dark:text-slate-300 disabled:opacity-30"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
 
-                {/* Grid */}
-                <div className="grid grid-cols-7 mb-1">
+                {/* Calendar Grid */}
+                <div className="grid grid-cols-7 mb-1.5">
                   {WEEKDAYS.map((w, i) => (
-                    <div key={i} className="text-center text-[10px] font-bold text-slate-400 py-0.5">
+                    <div key={i} className="text-center text-xs font-bold text-slate-400 py-1">
                       {w}
                     </div>
                   ))}
                 </div>
 
-                <div className="grid grid-cols-7 gap-y-1" onMouseLeave={() => setHoverDate(null)}>
+                <div className="grid grid-cols-7 gap-y-1.5" onMouseLeave={() => setHoverDate(null)}>
                   {cells.map((d, idx) => {
-                    if (!d) return <div key={`e-${idx}`} className="h-8" />;
+                    if (!d) return <div key={`e-${idx}`} className="h-9" />;
 
                     const future = d > today;
                     const isEdge = d === calA || d === calB;
@@ -629,12 +629,12 @@ export const DashboardPage = () => {
                       : `${HEAT_BG[level]} hover:ring-2 hover:ring-orange-400/50`;
 
                     return (
-                      <div key={d} className="relative h-8 flex items-center justify-center" style={bandStyle}>
+                      <div key={d} className="relative h-9 flex items-center justify-center" style={bandStyle}>
                         <button
                           disabled={future}
                           onClick={() => handlePick(d)}
                           onMouseEnter={() => !future && setHoverDate(d)}
-                          className={`relative w-7 h-7 rounded-lg text-xs transition-all ${btnClass} ${
+                          className={`relative w-8 h-8 rounded-lg text-xs font-semibold transition-all ${btnClass} ${
                             isToday && !isEdge ? 'ring-2 ring-orange-500 font-bold' : ''
                           }`}
                         >
@@ -651,19 +651,19 @@ export const DashboardPage = () => {
       </div>
 
       {/* ─── Master QR Standee Status Card ─── */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 shadow-xs transition-colors">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-rose-500 text-white flex items-center justify-center shadow-xs shrink-0">
-              <QrCode className="w-5 h-5" />
+      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 shadow-xs transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-rose-500 text-white flex items-center justify-center shadow-xs shrink-0">
+              <QrCode className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
                   Master Dining QR Standee
                 </h3>
                 <span
-                  className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                  className={`text-xs font-bold uppercase tracking-wider px-3 py-0.5 rounded-full ${
                     subscription?.isSubscribed
                       ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                       : 'bg-orange-50 dark:bg-orange-950/60 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800'
@@ -678,33 +678,33 @@ export const DashboardPage = () => {
                     : 'Expired'}
                 </span>
               </div>
-              <p className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">
+              <p className="text-slate-600 dark:text-slate-300 text-xs sm:text-sm font-medium mt-1">
                 Guests scan your master QR standee to view the live digital menu and place instant table orders.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-3 shrink-0">
             {subscription?.isSubscribed ? (
               <button
                 onClick={() => navigate('/dashboard/tables')}
-                className="inline-flex items-center gap-1.5 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white font-bold text-xs sm:text-sm px-5 py-2.5 rounded-xl transition-all shadow-xs cursor-pointer"
               >
                 <span>View & Print Standee</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <ArrowRight className="w-4 h-4" />
               </button>
             ) : (
               <button
                 onClick={() => setShowPaymentModal(true)}
-                className="inline-flex items-center gap-1.5 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white font-bold text-xs sm:text-sm px-5 py-2.5 rounded-xl transition-all shadow-xs cursor-pointer"
               >
-                <Sparkles className="w-3.5 h-3.5" />
+                <Sparkles className="w-4 h-4" />
                 <span>
                   {subscription?.isFirstTime
                     ? 'Activate QR (15 Days Free)'
                     : `Renew Subscription (₹${plans[0]?.priceMonthly || 249})`}
                 </span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <ArrowRight className="w-4 h-4" />
               </button>
             )}
           </div>
@@ -712,26 +712,26 @@ export const DashboardPage = () => {
       </div>
 
       {/* ─── 4 Key Performance Metrics (KPI Cards) ─── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         {statCards.map(stat => {
           const Icon = stat.icon;
           return (
             <div
               key={stat.label}
-              className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all"
+              className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 shadow-xs hover:shadow-sm transition-all"
             >
-              <div className="flex items-center justify-between mb-2.5">
-                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-bold text-slate-600 dark:text-slate-300">
                   {stat.label}
                 </span>
-                <div className="w-8 h-8 rounded-xl bg-orange-500/10 dark:bg-orange-500/15 text-orange-600 dark:text-orange-400 flex items-center justify-center">
-                  <Icon className="w-4 h-4" />
+                <div className="w-10 h-10 rounded-2xl bg-orange-500/10 dark:bg-orange-500/15 text-orange-600 dark:text-orange-400 flex items-center justify-center">
+                  <Icon className="w-5 h-5" />
                 </div>
               </div>
-              <p className={`text-xl sm:text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight ${loading ? 'opacity-40' : ''}`}>
+              <p className={`text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white font-mono tracking-tight ${loading ? 'opacity-40' : ''}`}>
                 {stat.value}
               </p>
-              <p className="text-[11px] text-slate-400 mt-1 truncate">
+              <p className="text-xs sm:text-sm font-medium text-slate-400 mt-1.5 truncate">
                 {stat.subtitle}
               </p>
             </div>
@@ -740,24 +740,24 @@ export const DashboardPage = () => {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 text-xs font-semibold px-4 py-3 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+        <div className="rounded-2xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 text-sm font-semibold p-4 flex items-center gap-2.5">
+          <AlertCircle className="w-5 h-5 shrink-0 text-rose-600" />
           <span>{error}</span>
         </div>
       )}
 
       {/* ─── Main Two-Column Analytics Layout ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-7 items-start">
         {/* Left Column: Visual Dining Chart & Recent Orders */}
-        <div className="space-y-6 min-w-0">
+        <div className="space-y-6 sm:space-y-7 min-w-0">
           {/* Activity / Dining Volume Chart */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs transition-colors">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6 sm:p-7 shadow-xs transition-colors">
+            <div className="flex items-center justify-between mb-5">
               <div>
-                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                <h3 className="font-extrabold text-base sm:text-lg text-slate-900 dark:text-white">
                   {spanDays === 1 ? 'Hourly Dining Activity' : 'Daily Sales Trend'}
                 </h3>
-                <p className="text-xs text-slate-400 font-medium mt-0.5">
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium mt-0.5">
                   {spanDays === 1
                     ? peakHour.hour >= 0
                       ? `Peak dining time: ${hourLabel(peakHour.hour)} (${peakHour.orders} orders)`
@@ -766,13 +766,13 @@ export const DashboardPage = () => {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-400">
-                <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-gradient-to-r from-orange-500 to-rose-500" />
+              <div className="flex items-center gap-2.5 text-xs font-bold text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-gradient-to-r from-orange-500 to-rose-500" />
                   Peak
                 </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-orange-300 dark:bg-orange-700/60" />
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-orange-300 dark:bg-orange-700/60" />
                   Regular
                 </span>
               </div>
@@ -780,21 +780,21 @@ export const DashboardPage = () => {
 
             {/* Zero Orders Empty State */}
             {!loading && s && s.orders === 0 ? (
-              <div className="py-12 text-center">
-                <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 mx-auto flex items-center justify-center mb-2">
-                  <UtensilsCrossed className="w-5 h-5" />
+              <div className="py-14 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 mx-auto flex items-center justify-center mb-2.5">
+                  <UtensilsCrossed className="w-6 h-6" />
                 </div>
-                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
                   No orders recorded for this time range
                 </h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">
+                <p className="text-xs text-slate-400 mt-1">
                   Select another date above to view past transaction history.
                 </p>
               </div>
             ) : spanDays === 1 ? (
               /* Single Day Hourly Bars */
               <div>
-                <div className="flex items-end gap-1 h-36 pt-4">
+                <div className="flex items-end gap-1.5 h-48 sm:h-52 pt-4">
                   {hourlyFilled.map(h => (
                     <div
                       key={h.hour}
@@ -805,7 +805,7 @@ export const DashboardPage = () => {
                         initial={{ height: 0 }}
                         animate={{ height: `${(h.orders / maxHourly) * 100}%` }}
                         transition={{ duration: 0.35 }}
-                        className={`w-full rounded-t-sm min-h-[3px] transition-all ${
+                        className={`w-full rounded-t-sm min-h-[4px] transition-all ${
                           h.hour === peakHour.hour && h.orders > 0
                             ? 'bg-gradient-to-t from-orange-500 to-rose-500 shadow-xs'
                             : h.orders > 0
@@ -816,7 +816,7 @@ export const DashboardPage = () => {
                     </div>
                   ))}
                 </div>
-                <div className="flex justify-between text-[10px] font-bold text-slate-400 mt-2 px-1 border-t border-slate-100 dark:border-slate-800 pt-1.5">
+                <div className="flex justify-between text-xs font-bold text-slate-400 mt-3 px-1 border-t border-slate-100 dark:border-slate-800 pt-2">
                   {[0, 6, 12, 18, 23].map(h => (
                     <span key={h}>{hourLabel(h)}</span>
                   ))}
@@ -826,8 +826,8 @@ export const DashboardPage = () => {
               /* Range Multi-Day Bars */
               <div className="overflow-x-auto">
                 <div
-                  className="flex items-end gap-1.5 h-36 pt-4"
-                  style={{ minWidth: Math.min(dailyFilled.length * 22, 1000) }}
+                  className="flex items-end gap-2 h-48 sm:h-52 pt-4"
+                  style={{ minWidth: Math.min(dailyFilled.length * 26, 1100) }}
                 >
                   {dailyFilled.map(d => (
                     <div
@@ -839,7 +839,7 @@ export const DashboardPage = () => {
                         initial={{ height: 0 }}
                         animate={{ height: `${(d.revenue / maxDaily) * 100}%` }}
                         transition={{ duration: 0.35 }}
-                        className={`w-full rounded-t-sm min-h-[3px] transition-all ${
+                        className={`w-full rounded-t-sm min-h-[4px] transition-all ${
                           d.revenue === maxDaily && d.revenue > 0
                             ? 'bg-gradient-to-t from-orange-500 to-rose-500 shadow-xs'
                             : d.revenue > 0
@@ -848,7 +848,7 @@ export const DashboardPage = () => {
                         }`}
                       />
                       {dailyFilled.length <= 16 && (
-                        <span className="text-[10px] font-semibold text-slate-400 mt-1">
+                        <span className="text-xs font-bold text-slate-400 mt-2">
                           {Number(d.day.slice(8))}
                         </span>
                       )}
@@ -856,7 +856,7 @@ export const DashboardPage = () => {
                   ))}
                 </div>
                 {dailyFilled.length > 16 && (
-                  <div className="flex justify-between text-[10px] font-bold text-slate-400 mt-2 border-t border-slate-100 dark:border-slate-800 pt-1.5">
+                  <div className="flex justify-between text-xs font-bold text-slate-400 mt-3 border-t border-slate-100 dark:border-slate-800 pt-2">
                     <span>{fmtDate(dailyFilled[0].day, { day: '2-digit', month: 'short' })}</span>
                     <span>{fmtDate(dailyFilled[dailyFilled.length - 1].day, { day: '2-digit', month: 'short' })}</span>
                   </div>
@@ -866,48 +866,48 @@ export const DashboardPage = () => {
           </div>
 
           {/* Recent Orders List */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs transition-colors">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                  Recent Orders
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6 sm:p-7 shadow-xs transition-colors">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2.5">
+                <Activity className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                <h3 className="font-extrabold text-base sm:text-lg text-slate-900 dark:text-white">
+                  Recent Orders Stream
                 </h3>
               </div>
               <button
                 onClick={() => navigate('/dashboard/orders')}
-                className="text-xs font-bold text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1 cursor-pointer"
+                className="text-xs sm:text-sm font-bold text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1.5 cursor-pointer"
               >
                 <span>View All Orders</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
 
             {(data?.recent || []).length === 0 ? (
-              <p className="text-slate-400 text-xs text-center py-6">
+              <p className="text-slate-400 text-sm text-center py-8">
                 No recent transactions in this selection.
               </p>
             ) : (
               <div className="divide-y divide-slate-100 dark:divide-slate-800">
                 {data!.recent.slice(0, 6).map(o => (
-                  <div key={o.id} className="py-2.5 flex items-center justify-between gap-3">
+                  <div key={o.id} className="py-3.5 flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                      <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
                         {o.billNo ? `#${String(o.billNo).padStart(4, '0')} • ` : ''}
                         Table {o.tableNumber} • {o.customerName || 'Guest'}
                       </p>
-                      <p className="text-[11px] text-slate-400 font-medium">
+                      <p className="text-xs text-slate-400 font-medium mt-0.5">
                         {spanDays > 1
                           ? `${fmtDate(new Date(o.createdAt).toLocaleDateString('en-CA', { timeZone: IST }), { day: '2-digit', month: 'short' })}, `
                           : ''}
                         {fmtTime(o.createdAt)}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg border ${STATUS_STYLE[o.status] || STATUS_STYLE.COMPLETED}`}>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-lg border ${STATUS_STYLE[o.status] || STATUS_STYLE.COMPLETED}`}>
                         {o.status.toLowerCase()}
                       </span>
-                      <span className="text-sm font-bold text-slate-900 dark:text-white font-mono w-16 text-right">
+                      <span className="text-base font-extrabold text-slate-900 dark:text-white font-mono w-20 text-right">
                         {inr(o.totalAmount)}
                       </span>
                     </div>
@@ -919,42 +919,42 @@ export const DashboardPage = () => {
         </div>
 
         {/* Right Column: Top Dishes & Status Pipeline */}
-        <div className="space-y-6 min-w-0">
+        <div className="space-y-6 sm:space-y-7 min-w-0">
           {/* Top Dishes */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs transition-colors">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Flame className="w-4 h-4 text-orange-500" />
-                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6 sm:p-7 shadow-xs transition-colors">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2.5">
+                <Flame className="w-5 h-5 text-orange-500" />
+                <h3 className="font-extrabold text-base sm:text-lg text-slate-900 dark:text-white">
                   Top Selling Dishes
                 </h3>
               </div>
               <button
                 onClick={() => navigate('/dashboard/menu')}
-                className="text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-orange-600 transition-colors"
+                className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 transition-colors"
               >
                 Menu Details →
               </button>
             </div>
 
             {(data?.topDishes || []).length === 0 ? (
-              <div className="py-8 text-center text-slate-400 text-xs">
+              <div className="py-10 text-center text-slate-400 text-sm">
                 No dish sales recorded in this period.
               </div>
             ) : (
-              <div className="space-y-3.5">
+              <div className="space-y-4">
                 {data!.topDishes.slice(0, 6).map((dish, i) => (
                   <div key={dish.name}>
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="font-semibold text-slate-800 dark:text-slate-200 truncate pr-2">
-                        <span className="text-slate-400 font-mono mr-1.5">{i + 1}.</span>
+                    <div className="flex items-center justify-between text-sm mb-1.5">
+                      <span className="font-bold text-slate-900 dark:text-slate-100 truncate pr-3">
+                        <span className="text-slate-400 font-mono mr-2">{i + 1}.</span>
                         {dish.name}
                       </span>
-                      <span className="font-mono font-bold text-slate-700 dark:text-slate-300 shrink-0">
+                      <span className="font-mono font-extrabold text-slate-700 dark:text-slate-300 shrink-0">
                         {dish.qty} orders • {inr(dish.revenue)}
                       </span>
                     </div>
-                    <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${(dish.qty / maxDish) * 100}%` }}
@@ -969,53 +969,53 @@ export const DashboardPage = () => {
           </div>
 
           {/* Order Status Breakdown */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs transition-colors">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <ClipboardList className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6 sm:p-7 shadow-xs transition-colors">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <ClipboardList className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                <h3 className="font-extrabold text-base sm:text-lg text-slate-900 dark:text-white">
                   Order Status Pipeline
                 </h3>
               </div>
-              <span className="text-[11px] font-semibold text-slate-400">Current Volume</span>
+              <span className="text-xs font-bold text-slate-400">Current Volume</span>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2.5">
               {Object.entries(data?.statusBreakdown || {}).map(([status, count]) => (
                 <span
                   key={status}
-                  className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg border ${STATUS_STYLE[status] || STATUS_STYLE.COMPLETED}`}
+                  className={`text-xs font-extrabold uppercase tracking-wider px-3.5 py-1.5 rounded-xl border ${STATUS_STYLE[status] || STATUS_STYLE.COMPLETED}`}
                 >
                   {status.toLowerCase()} • {count}
                 </span>
               ))}
               {Object.keys(data?.statusBreakdown || {}).length === 0 && (
-                <p className="text-slate-400 text-xs py-2">No active order status data.</p>
+                <p className="text-slate-400 text-sm py-2">No active order status data.</p>
               )}
             </div>
 
             {s && s.rejected > 0 && (
-              <p className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold mt-3 flex items-center gap-1.5">
-                <XCircle className="w-3.5 h-3.5 shrink-0" />
+              <p className="text-xs text-rose-600 dark:text-rose-400 font-bold mt-4 flex items-center gap-2">
+                <XCircle className="w-4 h-4 shrink-0" />
                 <span>{s.rejected} orders rejected (excluded from gross turnover)</span>
               </p>
             )}
           </div>
 
           {/* Customer Satisfaction Card */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs flex items-center gap-4 transition-colors">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <Star className="w-5 h-5 fill-white" />
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex items-center gap-5 transition-colors">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Star className="w-7 h-7 fill-white" />
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
                 Customer Satisfaction
               </p>
-              <p className="text-xl font-black text-slate-900 dark:text-white font-mono leading-tight">
+              <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono leading-tight mt-0.5">
                 {data && data.feedback.count > 0 ? data.feedback.average.toFixed(1) : '–'}
-                <span className="text-xs text-slate-400 font-bold"> / 5.0</span>
+                <span className="text-sm text-slate-400 font-bold"> / 5.0</span>
               </p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">
                 Based on {data?.feedback.count || 0} guest reviews
               </p>
             </div>
