@@ -41,7 +41,7 @@ export const GlobalOrderNotifier: React.FC = () => {
     // 2. Trigger native browser push notification
     if ('Notification' in window && Notification.permission === 'granted') {
       try {
-        new Notification('🚨 NEW ORDER RECEIVED!', {
+        new Notification('New Order Received', {
           body: `Table #${order.tableNumber} • ₹${order.totalAmount} (${order.customerName || 'Guest'})`,
           tag: `order-${orderId || Date.now()}`,
         });
