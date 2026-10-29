@@ -9,16 +9,19 @@ import {
   Search,
   ExternalLink,
   Download,
-  ShieldCheck,
   Building2,
-  QrCode,
   Sparkles,
   Calendar,
   X,
   Eye,
   Filter,
   ArrowUpDown,
-  Zap,
+  FileSpreadsheet,
+  Copy,
+  Receipt,
+  XCircle,
+  ShieldCheck,
+  Check,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -58,6 +61,7 @@ export const SuperAdminSubscriptions = () => {
   const [sortBy, setSortBy] = useState<'newest' | 'amount' | 'expiry' | 'name'>('newest');
   const [error, setError] = useState<string | null>(null);
   const [inspectSub, setInspectSub] = useState<SubscriptionRecord | null>(null);
+  const [copiedRef, setCopiedRef] = useState<string | null>(null);
 
   const fetchSubscriptions = async () => {
     setIsRefreshing(true);
@@ -82,6 +86,12 @@ export const SuperAdminSubscriptions = () => {
   useEffect(() => {
     fetchSubscriptions();
   }, []);
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedRef(id);
+    setTimeout(() => setCopiedRef(null), 2000);
+  };
 
   const exportCSV = () => {
     if (!subscriptions.length) return;
@@ -152,73 +162,118 @@ export const SuperAdminSubscriptions = () => {
       });
   }, [subscriptions, search, filter, sortBy]);
 
+  const summaryCards = [
+    {
+      title: 'Total Revenue Invoiced',
+      value: `₹${(summary.totalMrr || 0).toLocaleString('en-IN')}`,
+      desc: 'Verified platform collections',
+      icon: Receipt,
+      color: 'text-violet-600 dark:text-violet-400',
+      badgeBg: 'bg-violet-50 dark:bg-violet-950/40 border-violet-200/80 dark:border-violet-900/40',
+      barColor: 'from-violet-500 to-purple-500',
+    },
+    {
+      title: 'Active Commercial Plans',
+      value: String(summary.activeCount || 0),
+      desc: 'Active paid subscription accounts',
+      icon: CheckCircle2,
+      color: 'text-emerald-600 dark:text-emerald-400',
+      badgeBg: 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200/80 dark:border-emerald-900/40',
+      barColor: 'from-emerald-500 to-teal-500',
+    },
+    {
+      title: 'Introductory Trials',
+      value: String(summary.trialCount || 0),
+      desc: 'Venues on trial license',
+      icon: Clock,
+      color: 'text-amber-600 dark:text-amber-400',
+      badgeBg: 'bg-amber-50 dark:bg-amber-950/40 border-amber-200/80 dark:border-amber-900/40',
+      barColor: 'from-amber-500 to-orange-500',
+    },
+    {
+      title: 'Expired Subscriptions',
+      value: String(summary.expiredCount || 0),
+      desc: 'Venues pending license renewal',
+      icon: XCircle,
+      color: 'text-rose-600 dark:text-rose-400',
+      badgeBg: 'bg-rose-50 dark:bg-rose-950/40 border-rose-200/80 dark:border-rose-900/40',
+      barColor: 'from-rose-500 to-pink-500',
+    },
+  ];
+
   if (loading) {
     return (
       <div className="animate-pulse space-y-6 max-w-7xl mx-auto pb-12 font-sans antialiased">
-        <div className="h-24 bg-white rounded-3xl border border-slate-200/80 p-6" />
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div className="h-28 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-32 bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs" />
+            <div key={i} className="h-32 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs" />
           ))}
         </div>
-        <div className="h-96 bg-white rounded-3xl border border-slate-200/80" />
+        <div className="h-96 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-14 font-sans antialiased text-slate-800">
-      {/* ── Executive Top Header ── */}
-      <div className="relative bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-xl overflow-hidden">
-        <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-64 h-64 bg-orange-500/15 rounded-full blur-3xl pointer-events-none" />
+    <div className="space-y-6 max-w-7xl mx-auto pb-14 font-sans antialiased text-slate-800 dark:text-slate-200 transition-colors duration-300">
+      
+      {/* ── Executive Top Header Banner (Matches Landing Page Theme) ── */}
+      <div className="relative bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden">
+        {/* Subtle Ambient Radial Glows */}
+        <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-orange-500/10 dark:bg-orange-500/15 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -right-24 w-72 h-72 rounded-full bg-rose-500/10 dark:bg-rose-500/15 blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold tracking-wide uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Live Payment Gateway Stream
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-orange-50 dark:bg-orange-950/40 border border-orange-200/80 dark:border-orange-900/40 text-orange-600 dark:text-orange-400">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>SaaS Billing & License Audit</span>
               </span>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono text-slate-400 bg-white/5 border border-white/10">
-                Razorpay Automated Audits
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Verified Transactions</span>
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-3">
-              <span>SaaS Subscription & License Audit</span>
+
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight">
+              Subscription & License Directory
             </h1>
-            <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-              Track recurring SaaS subscription income, monitor introductory ₹1 promotions, verify payment reference numbers, and review restaurant license expiration cycles.
+
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
+              Track recurring SaaS subscriptions, verify payment reference numbers, inspect plan tiers, and manage hotel license expiration cycles.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={exportCSV}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/15 text-white rounded-2xl text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer backdrop-blur-xs"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 rounded-2xl text-xs font-semibold transition-all shadow-xs active:scale-95 cursor-pointer"
             >
-              <Download className="w-3.5 h-3.5" />
+              <FileSpreadsheet className="w-4 h-4 text-slate-500 dark:text-slate-400" />
               <span>Export CSV</span>
             </button>
 
             <button
               onClick={fetchSubscriptions}
               disabled={isRefreshing}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-2xl text-xs font-extrabold transition-all shadow-lg shadow-orange-500/25 active:scale-95 cursor-pointer disabled:opacity-60"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-orange-500/25 active:scale-95 cursor-pointer disabled:opacity-60"
             >
               <RefreshCcw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span>{isRefreshing ? 'Syncing...' : 'Sync Subscriptions'}</span>
+              <span>{isRefreshing ? 'Refreshing...' : 'Refresh Records'}</span>
             </button>
           </div>
         </div>
       </div>
 
       {error && (
-        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs font-semibold text-rose-700 flex items-center justify-between shadow-xs">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-2xl text-xs font-medium text-rose-700 dark:text-rose-400 flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
             <span>{error}</span>
           </div>
-          <button onClick={fetchSubscriptions} className="underline font-bold hover:text-rose-900 cursor-pointer">
+          <button onClick={fetchSubscriptions} className="underline font-bold hover:text-rose-900 dark:hover:text-rose-300 cursor-pointer">
             Retry
           </button>
         </div>
@@ -226,107 +281,88 @@ export const SuperAdminSubscriptions = () => {
 
       {/* ── Summary KPI Overview Cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Total Revenue Invoiced</span>
-            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-              Verified
-            </span>
-          </div>
-          <p className="text-3xl font-black text-slate-900 font-mono tracking-tight">
-            ₹{summary.totalMrr.toLocaleString('en-IN')}
-          </p>
-          <p className="text-xs text-slate-400 mt-1 font-medium">100% verified Razorpay collections</p>
-        </div>
-
-        <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Commercial Plans</span>
-            <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
-              Active Paid
-            </span>
-          </div>
-          <p className="text-3xl font-black text-slate-900 font-mono tracking-tight">
-            {summary.activeCount}
-          </p>
-          <p className="text-xs text-slate-400 mt-1 font-medium">Monthly, 6-Month & Annual tiers</p>
-        </div>
-
-        <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">₹1 First-Time Trial</span>
-            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-              30-Day Free
-            </span>
-          </div>
-          <p className="text-3xl font-black text-slate-900 font-mono tracking-tight">
-            {summary.trialCount}
-          </p>
-          <p className="text-xs text-slate-400 mt-1 font-medium">Venues in introductory trial</p>
-        </div>
-
-        <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Expired / Lapsed</span>
-            <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
-              Renewal Needed
-            </span>
-          </div>
-          <p className="text-3xl font-black text-rose-600 font-mono tracking-tight">
-            {summary.expiredCount}
-          </p>
-          <p className="text-xs text-slate-400 mt-1 font-medium">Venues needing subscription renewal</p>
-        </div>
+        {summaryCards.map((card, idx) => {
+          const Icon = card.icon;
+          return (
+            <motion.div
+              key={card.title}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center border ${card.badgeBg} ${card.color}`}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <div className={`h-1.5 w-7 rounded-full bg-gradient-to-r ${card.barColor}`} />
+                </div>
+                <p className="text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight">
+                  {card.value}
+                </p>
+                <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mt-1 leading-tight">
+                  {card.title}
+                </p>
+              </div>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 font-medium leading-tight">
+                {card.desc}
+              </p>
+            </motion.div>
+          );
+        })}
       </div>
 
       {/* ── Filter & Search Toolbar ── */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs space-y-4">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          {/* Search Box */}
           <div className="relative flex-1 min-w-[280px]">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by restaurant name, slug, payment reference ID or plan tier..."
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs font-medium outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/50 transition-all placeholder:text-slate-400"
+              placeholder="Search by restaurant name, slug, payment reference ID or plan..."
+              className="w-full pl-10 pr-9 py-2.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 rounded-2xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
             />
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                title="Clear search"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-2xl">
+          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 px-3 py-1.5 rounded-2xl">
             <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-[11px] font-bold text-slate-500">Sort:</span>
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Sort:</span>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
-              className="bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer"
+              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer"
             >
-              <option value="newest">Newest Purchased</option>
-              <option value="amount">Amount (High to Low)</option>
-              <option value="expiry">Expiring Soonest</option>
-              <option value="name">Restaurant Name (A-Z)</option>
+              <option value="newest" className="dark:bg-slate-900">Newest Purchased</option>
+              <option value="amount" className="dark:bg-slate-900">Amount (High to Low)</option>
+              <option value="expiry" className="dark:bg-slate-900">Expiring Soonest</option>
+              <option value="name" className="dark:bg-slate-900">Restaurant Name (A-Z)</option>
             </select>
           </div>
         </div>
 
-        {/* Filter Pills */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+        {/* Filter Badges */}
+        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
           <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1 mr-1">
             <Filter className="w-3 h-3" /> Filter:
           </span>
           {[
             { id: 'ALL', label: 'All Subscriptions', count: subscriptions.length },
-            { id: 'ACTIVE', label: 'Active Commercial', count: summary.activeCount, color: 'text-emerald-700 bg-emerald-50' },
-            { id: 'TRIAL', label: '₹1 Trial', count: summary.trialCount, color: 'text-amber-700 bg-amber-50' },
-            { id: 'EXPIRED', label: 'Expired', count: summary.expiredCount, color: 'text-rose-700 bg-rose-50' },
+            { id: 'ACTIVE', label: 'Active Commercial', count: summary.activeCount, color: 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40' },
+            { id: 'TRIAL', label: 'Introductory Trials', count: summary.trialCount, color: 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40' },
+            { id: 'EXPIRED', label: 'Expired', count: summary.expiredCount, color: 'text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40' },
           ].map((tab) => {
             const isSelected = filter === tab.id;
             return (
@@ -335,14 +371,14 @@ export const SuperAdminSubscriptions = () => {
                 onClick={() => setFilter(tab.id)}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
                   isSelected
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60'
+                    ? 'bg-gradient-to-r from-orange-500 to-rose-500 text-white shadow-sm shadow-orange-500/20'
+                    : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60'
                 }`}
               >
                 <span>{tab.label}</span>
                 <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono ${
-                    isSelected ? 'bg-white/20 text-white' : tab.color || 'bg-slate-200 text-slate-700'
+                  className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${
+                    isSelected ? 'bg-white/20 text-white' : tab.color || 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
                   }`}
                 >
                   {tab.count}
@@ -350,31 +386,44 @@ export const SuperAdminSubscriptions = () => {
               </button>
             );
           })}
+
+          <div className="ml-auto text-[11px] text-slate-400 font-medium">
+            Showing <strong className="text-slate-700 dark:text-slate-200">{filtered.length}</strong> of {subscriptions.length} records
+          </div>
         </div>
       </div>
 
-      {/* ── Subscriptions Audit Table ── */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+      {/* ── Subscriptions High-Density Audit Table ── */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/80 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider border-b border-slate-200/80">
+              <tr className="bg-slate-50/80 dark:bg-slate-800/60 text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800">
                 <th className="py-3.5 px-5">Restaurant Venue</th>
                 <th className="py-3.5 px-5">Plan Tier</th>
                 <th className="py-3.5 px-5">Amount Paid</th>
                 <th className="py-3.5 px-5">Payment Reference (UTR)</th>
-                <th className="py-3.5 px-5 text-center">Status</th>
+                <th className="py-3.5 px-5 text-center">License Status</th>
                 <th className="py-3.5 px-5 text-center">Valid Until</th>
                 <th className="py-3.5 px-5 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-xs">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center text-slate-400 font-medium">
-                    <CreditCard className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-                    <p className="font-bold text-slate-600">No subscriptions match your query</p>
-                    <p className="text-xs text-slate-400 mt-0.5">Try resetting search keywords or filter tab.</p>
+                  <td colSpan={7} className="py-16 text-center text-slate-400 dark:text-slate-500 font-medium">
+                    <CreditCard className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
+                    <p className="font-bold text-slate-600 dark:text-slate-300">No subscriptions match your query</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Try clearing search terms or selecting another filter tab.</p>
+                    <button
+                      onClick={() => {
+                        setSearch('');
+                        setFilter('ALL');
+                      }}
+                      className="mt-3 px-4 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs transition-all cursor-pointer"
+                    >
+                      Reset All Filters
+                    </button>
                   </td>
                 </tr>
               ) : (
@@ -387,19 +436,19 @@ export const SuperAdminSubscriptions = () => {
                     <tr
                       key={sub.id}
                       onClick={() => setInspectSub(sub)}
-                      className="hover:bg-slate-50/70 transition-colors group cursor-pointer"
+                      className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors group cursor-pointer"
                     >
-                      {/* 1. Restaurant Details */}
+                      {/* 1. Restaurant Venue Details */}
                       <td className="py-4 px-5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-2xl bg-orange-500/10 text-orange-600 font-black text-sm flex items-center justify-center border border-orange-500/20 shrink-0">
+                        <div className="flex items-center gap-3.5">
+                          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-orange-500/10 to-rose-500/15 text-orange-600 dark:text-orange-400 font-black text-sm flex items-center justify-center border border-orange-500/20 shrink-0 shadow-2xs">
                             {initial}
                           </div>
-                          <div>
-                            <p className="font-extrabold text-slate-900 text-xs group-hover:text-orange-600 transition-colors">
+                          <div className="min-w-0">
+                            <p className="font-extrabold text-slate-900 dark:text-white text-xs group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors truncate max-w-[200px]">
                               {sub.restaurantName}
                             </p>
-                            <p className="text-[10px] text-slate-400 font-mono">/{sub.restaurantSlug}</p>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">/{sub.restaurantSlug}</p>
                           </div>
                         </div>
                       </td>
@@ -409,14 +458,14 @@ export const SuperAdminSubscriptions = () => {
                         <span
                           className={`inline-block px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide border ${
                             isTrial
-                              ? 'bg-amber-50 text-amber-800 border-amber-200'
+                              ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-900/40'
                               : sub.plan === 'ANNUAL'
-                              ? 'bg-purple-50 text-purple-800 border-purple-200'
+                              ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-900/40'
                               : sub.plan === 'SIX_MONTHS'
-                              ? 'bg-orange-50 text-orange-800 border-orange-200'
+                              ? 'bg-orange-50 dark:bg-orange-950/40 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-900/40'
                               : sub.plan === 'MONTHLY'
-                              ? 'bg-blue-50 text-blue-800 border-blue-200'
-                              : 'bg-slate-100 text-slate-700 border-slate-200'
+                              ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-900/40'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                           }`}
                         >
                           {sub.plan}
@@ -424,30 +473,42 @@ export const SuperAdminSubscriptions = () => {
                       </td>
 
                       {/* 3. Amount Paid */}
-                      <td className="py-4 px-5 font-mono font-black text-slate-900 text-xs">
+                      <td className="py-4 px-5 font-mono font-black text-slate-900 dark:text-white text-xs">
                         ₹{sub.amount.toLocaleString('en-IN')}
                       </td>
 
                       {/* 4. Payment Reference */}
-                      <td className="py-4 px-5 font-mono text-[11px]">
+                      <td className="py-4 px-5 font-mono text-[11px]" onClick={(e) => e.stopPropagation()}>
                         {sub.paymentReference ? (
-                          <span className="bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 font-bold text-slate-700 inline-block truncate max-w-[180px]">
-                            {sub.paymentReference}
-                          </span>
+                          <div className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-xl border border-slate-200/70 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300">
+                            <span className="truncate max-w-[160px]">{sub.paymentReference}</span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(sub.paymentReference, sub.id)}
+                              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                              title="Copy Reference"
+                            >
+                              {copiedRef === sub.id ? (
+                                <Check className="w-3 h-3 text-emerald-500" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
                         ) : (
-                          <span className="text-slate-400 italic">None</span>
+                          <span className="text-slate-400 dark:text-slate-500 italic">None</span>
                         )}
                       </td>
 
                       {/* 5. Status Pill */}
                       <td className="py-4 px-5 text-center">
                         <span
-                          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${
                             sub.status === 'ACTIVE'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/40'
                               : sub.status === 'TRIAL'
-                              ? 'bg-amber-50 text-amber-700 border-amber-200'
-                              : 'bg-rose-50 text-rose-700 border-rose-200'
+                              ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-900/40'
+                              : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900/40'
                           }`}
                         >
                           <span
@@ -460,7 +521,7 @@ export const SuperAdminSubscriptions = () => {
                       </td>
 
                       {/* 6. Valid Until */}
-                      <td className="py-4 px-5 text-center font-mono text-[11px] text-slate-600">
+                      <td className="py-4 px-5 text-center font-mono text-[11px] text-slate-600 dark:text-slate-300">
                         {sub.validUntil ? (
                           new Date(sub.validUntil).toLocaleDateString('en-IN', {
                             day: 'numeric',
@@ -468,7 +529,7 @@ export const SuperAdminSubscriptions = () => {
                             year: 'numeric',
                           })
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-slate-400 dark:text-slate-500">—</span>
                         )}
                       </td>
 
@@ -476,9 +537,10 @@ export const SuperAdminSubscriptions = () => {
                       <td className="py-4 px-5 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5">
                           <button
+                            type="button"
                             onClick={() => setInspectSub(sub)}
-                            className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 rounded-xl transition-all"
-                            title="Inspect Audit"
+                            className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl transition-all cursor-pointer"
+                            title="Inspect Subscription Audit"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
@@ -487,7 +549,7 @@ export const SuperAdminSubscriptions = () => {
                             href={`/menu/${sub.restaurantSlug}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 rounded-xl transition-all"
+                            className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl transition-all cursor-pointer"
                             title="Preview Public QR Menu"
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
@@ -518,51 +580,51 @@ export const SuperAdminSubscriptions = () => {
               initial={{ opacity: 0, scale: 0.95, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 16 }}
-              className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden z-10 border border-slate-100 p-6 space-y-5"
+              className="relative bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden z-10 border border-slate-200/80 dark:border-slate-800 p-6 space-y-5 transition-colors"
             >
               <button
                 onClick={() => setInspectSub(null)}
-                className="absolute right-5 top-5 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
+                className="absolute right-5 top-5 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
 
-              <div className="flex items-center gap-3 pt-1">
-                <div className="w-12 h-12 rounded-2xl bg-orange-500/10 text-orange-600 font-black text-lg flex items-center justify-center border border-orange-500/20">
+              <div className="flex items-center gap-3.5 pt-1">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-rose-500 text-white font-black text-lg flex items-center justify-center shadow-md shadow-orange-500/20">
                   {inspectSub.restaurantName.charAt(0)}
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-slate-900">{inspectSub.restaurantName}</h3>
-                  <p className="text-xs text-slate-400 font-mono">/{inspectSub.restaurantSlug}</p>
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white">{inspectSub.restaurantName}</h3>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 font-mono">/{inspectSub.restaurantSlug}</p>
                 </div>
               </div>
 
-              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-2.5 text-xs">
+              <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/60 rounded-2xl p-4 space-y-2.5 text-xs">
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Plan Tier:</span>
-                  <span className="font-extrabold text-slate-900 uppercase">{inspectSub.plan}</span>
+                  <span className="text-slate-500 dark:text-slate-400">Plan Tier:</span>
+                  <span className="font-extrabold text-slate-900 dark:text-white uppercase">{inspectSub.plan}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Amount Paid:</span>
-                  <span className="font-mono font-black text-emerald-600 text-sm">₹{inspectSub.amount}</span>
+                  <span className="text-slate-500 dark:text-slate-400">Amount Paid:</span>
+                  <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">₹{inspectSub.amount}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Payment Reference:</span>
-                  <span className="font-mono font-bold text-slate-900">{inspectSub.paymentReference || 'None'}</span>
+                  <span className="text-slate-500 dark:text-slate-400">Payment Reference (UTR):</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-white">{inspectSub.paymentReference || 'None'}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Status:</span>
-                  <span className="font-extrabold uppercase text-slate-900">{inspectSub.status}</span>
+                  <span className="text-slate-500 dark:text-slate-400">License Status:</span>
+                  <span className="font-extrabold uppercase text-slate-900 dark:text-white">{inspectSub.status}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Valid Until:</span>
-                  <span className="font-mono font-bold text-slate-900">
+                  <span className="text-slate-500 dark:text-slate-400">Valid Until:</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-white">
                     {inspectSub.validUntil ? new Date(inspectSub.validUntil).toLocaleString('en-IN') : 'None'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Purchased Date:</span>
-                  <span className="font-mono font-bold text-slate-900">
+                  <span className="text-slate-500 dark:text-slate-400">Purchased Date:</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-white">
                     {new Date(inspectSub.createdAt).toLocaleString('en-IN')}
                   </span>
                 </div>
@@ -573,7 +635,7 @@ export const SuperAdminSubscriptions = () => {
                   href={`/menu/${inspectSub.restaurantSlug}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs rounded-xl transition-all inline-flex items-center gap-2"
+                  className="px-4 py-2.5 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white font-extrabold text-xs rounded-xl transition-all inline-flex items-center gap-2 shadow-md shadow-orange-500/20 cursor-pointer"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   <span>Open Public Menu</span>
