@@ -1058,6 +1058,18 @@ export const LandingPage: React.FC = () => {
               <span className="text-slate-300 dark:text-slate-600">·</span>
               <Link to="/refund-policy" className="hover:text-slate-900 dark:hover:text-white transition-colors font-medium">Refund</Link>
               <span className="text-slate-300 dark:text-slate-600">·</span>
+              
+              <span className="text-slate-400 dark:text-slate-500">
+                Powered By{" "}
+                <a
+                   href="https://www.nexifyforge.in/"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   className="text-blue-500 hover:text-blue-600 transition-colors"
+                  >
+                  NexifyForge
+                 </a>
+               </span>
               <span className="text-slate-400 dark:text-slate-500">Made with ❤️ for modern restaurants</span>
             </div>
           </div>
