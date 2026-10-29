@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import {
   ShoppingBag, IndianRupee, RefreshCcw, QrCode, Sparkles, Lock, ArrowRight,
-  ChevronLeft, ChevronRight, CalendarDays, Star, TrendingUp, Grid2X2, XCircle, Flame
+  ChevronLeft, ChevronRight, CalendarDays, Star, TrendingUp, Grid2X2, XCircle,
+  Flame, Clock, ArrowUpRight, CheckCircle2, UtensilsCrossed, ClipboardList,
+  Calendar, Activity, AlertCircle
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { io } from 'socket.io-client';
@@ -11,15 +13,25 @@ import { getSocketUrl } from '../lib/socket';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PaymentModal } from '../components/PaymentModal';
 
-// ─────────────────────────── types ───────────────────────────
+// ─────────────────────────── Types ───────────────────────────
 type Mode = 'day' | 'range';
 
-interface DailyPoint { day: string; orders: number; revenue: number }
+interface DailyPoint {
+  day: string;
+  orders: number;
+  revenue: number;
+}
 
 interface RangeStats {
   from: string;
   to: string;
-  summary: { orders: number; revenue: number; rejected: number; tablesServed: number; avgOrderValue: number };
+  summary: {
+    orders: number;
+    revenue: number;
+    rejected: number;
+    tablesServed: number;
+    avgOrderValue: number;
+  };
   daily: DailyPoint[];
   hourly: { hour: number; orders: number }[];
   topDishes: { name: string; qty: number; revenue: number }[];
@@ -36,46 +48,67 @@ interface RangeStats {
   }[];
 }
 
-// ─────────────────────────── date helpers (sab kuch IST, "YYYY-MM-DD" strings) ───────────────────────────
+// ─────────────────────────── Date Helpers (IST Timezone) ───────────────────────────
 const IST = 'Asia/Kolkata';
 const todayStr = () => new Date().toLocaleDateString('en-CA', { timeZone: IST });
+
 const toUTC = (s: string) => {
   const [y, m, d] = s.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d));
 };
+
 const fromUTC = (d: Date) => d.toISOString().slice(0, 10);
+
 const addDays = (s: string, n: number) => {
   const d = toUTC(s);
   d.setUTCDate(d.getUTCDate() + n);
   return fromUTC(d);
 };
-const daysBetween = (a: string, b: string) => Math.round((toUTC(b).getTime() - toUTC(a).getTime()) / 86400000);
+
+const daysBetween = (a: string, b: string) =>
+  Math.round((toUTC(b).getTime() - toUTC(a).getTime()) / 86400000);
+
 const pad = (n: number) => String(n).padStart(2, '0');
 const monthStart = (y: number, m: number) => `${y}-${pad(m + 1)}-01`;
 const monthEnd = (y: number, m: number) => fromUTC(new Date(Date.UTC(y, m + 1, 0)));
+
 const fmtDate = (s: string, opts: Intl.DateTimeFormatOptions) =>
   toUTC(s).toLocaleDateString('en-IN', { timeZone: 'UTC', ...opts });
-const inr = (n: number | string) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
+
+const inr = (n: number | string) =>
+  `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
+
 const fmtTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString('en-IN', { timeZone: IST, hour: '2-digit', minute: '2-digit', hour12: true });
+  new Date(iso).toLocaleTimeString('en-IN', {
+    timeZone: IST,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
 
-const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
-// revenue ke hisaab se "heat" (0 se 4)
-const HEAT_BG = ['bg-white', 'bg-orange-50', 'bg-orange-100', 'bg-orange-200', 'bg-orange-300'];
-const BAND = '#ffedd5'; // orange-100
+// Revenue heatmap background levels matching OrderKare orange
+const HEAT_BG = [
+  'bg-slate-50 dark:bg-slate-800/50',
+  'bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300',
+  'bg-orange-100 dark:bg-orange-900/40 text-orange-900 dark:text-orange-200',
+  'bg-orange-200 dark:bg-orange-800/50 text-orange-950 dark:text-orange-100 font-bold',
+  'bg-orange-300 dark:bg-orange-700/60 text-orange-950 dark:text-white font-extrabold',
+];
+const BAND = '#ffedd5';
 
 const STATUS_STYLE: Record<string, string> = {
-  PENDING: 'bg-amber-50 text-amber-700 border-amber-200',
-  ACCEPTED: 'bg-blue-50 text-blue-700 border-blue-200',
-  PREPARING: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-  READY: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  SERVED: 'bg-teal-50 text-teal-700 border-teal-200',
-  COMPLETED: 'bg-slate-100 text-slate-700 border-slate-200',
-  REJECTED: 'bg-rose-50 text-rose-700 border-rose-200',
+  PENDING: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800/60',
+  ACCEPTED: 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800/60',
+  PREPARING: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800/60',
+  READY: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/60',
+  SERVED: 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800/60',
+  COMPLETED: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+  REJECTED: 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800/60',
 };
 
-// ─────────────────────────── Creative calendar ───────────────────────────
+// ─────────────────────────── Clean Calendar Component ───────────────────────────
 interface CalendarProps {
   mode: Mode;
   setMode: (m: Mode) => void;
@@ -94,9 +127,9 @@ interface CalendarProps {
 const PRESETS = [
   { key: 'today', label: 'Today' },
   { key: 'yesterday', label: 'Yesterday' },
-  { key: 'last7', label: 'Last 7 days' },
-  { key: 'last30', label: 'Last 30 days' },
-  { key: 'month', label: 'This month' },
+  { key: 'last7', label: 'Last 7 Days' },
+  { key: 'last30', label: 'Last 30 Days' },
+  { key: 'month', label: 'This Month' },
 ];
 
 const RangeCalendar = ({
@@ -118,7 +151,10 @@ const RangeCalendar = ({
     let best: string | null = null;
     let bestRev = 0;
     Object.entries(monthDaily).forEach(([d, v]) => {
-      if (v.revenue > bestRev) { bestRev = v.revenue; best = d; }
+      if (v.revenue > bestRev) {
+        bestRev = v.revenue;
+        best = d;
+      }
     });
     return best;
   }, [monthDaily]);
@@ -126,12 +162,13 @@ const RangeCalendar = ({
   const monthRevenue = values.reduce((s, v) => s + v.revenue, 0);
   const monthOrders = values.reduce((s, v) => s + v.orders, 0);
 
-  // range ka a..b (hover preview ke saath)
   let a: string = start;
   let b: string = mode === 'range' ? (end ?? (hover && hover <= today ? hover : start)) : start;
   if (a > b) [a, b] = [b, a];
 
-  const isCurrentMonth = viewYear === Number(today.slice(0, 4)) && viewMonth === Number(today.slice(5, 7)) - 1;
+  const isCurrentMonth =
+    viewYear === Number(today.slice(0, 4)) &&
+    viewMonth === Number(today.slice(5, 7)) - 1;
 
   const goMonth = (delta: number) => {
     const d = new Date(Date.UTC(viewYear, viewMonth + delta, 1));
@@ -140,30 +177,30 @@ const RangeCalendar = ({
 
   const selectionLabel =
     a === b
-      ? fmtDate(a, { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })
-      : `${fmtDate(a, { day: '2-digit', month: 'short' })} → ${fmtDate(b, { day: '2-digit', month: 'short', year: 'numeric' })}`;
+      ? fmtDate(a, { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
+      : `${fmtDate(a, { day: '2-digit', month: 'short' })} – ${fmtDate(b, { day: '2-digit', month: 'short', year: 'numeric' })}`;
+
   const spanDays = daysBetween(a, b) + 1;
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/70 shadow-sm overflow-hidden">
-      {/* Header strip */}
-      <div className="px-5 pt-5 pb-4 bg-gradient-to-br from-orange-500 via-orange-500 to-rose-500 text-white relative overflow-hidden">
-        <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-white/10" />
-        <div className="absolute right-10 -bottom-10 w-24 h-24 rounded-full bg-white/10" />
-        <div className="relative flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-orange-100">
-          <CalendarDays className="w-3.5 h-3.5" />
-          Business Calendar
+    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden transition-colors">
+      {/* Calendar Header Card */}
+      <div className="px-5 py-4 bg-gradient-to-r from-orange-500 to-rose-500 text-white relative">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-orange-100">
+            <CalendarDays className="w-4 h-4" />
+            <span>Select Date Range</span>
+          </div>
+          <span className="text-[11px] font-semibold bg-white/20 px-2.5 py-0.5 rounded-full">
+            {spanDays === 1 ? '1 Day' : `${spanDays} Days`}
+          </span>
         </div>
-        <p className="relative mt-1.5 text-lg font-black leading-tight">{selectionLabel}</p>
-        <p className="relative text-xs font-semibold text-orange-100 mt-0.5">
-          {spanDays === 1 ? 'Single day view' : `${spanDays} days selected`}
-          {mode === 'range' && !end && ' • Select an end date'}
-        </p>
+        <p className="mt-1 text-base font-black tracking-tight">{selectionLabel}</p>
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Mode switch */}
-        <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-2xl">
+        {/* Mode Toggle */}
+        <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
           {([
             { key: 'day', label: 'Single Day' },
             { key: 'range', label: 'Custom Range' },
@@ -171,8 +208,10 @@ const RangeCalendar = ({
             <button
               key={m.key}
               onClick={() => setMode(m.key)}
-              className={`py-2 text-xs font-bold rounded-xl transition-all ${
-                mode === m.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              className={`py-1.5 text-xs font-bold rounded-lg transition-all ${
+                mode === m.key
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               {m.label}
@@ -180,16 +219,16 @@ const RangeCalendar = ({
           ))}
         </div>
 
-        {/* Presets */}
+        {/* Quick Presets */}
         <div className="flex flex-wrap gap-1.5">
           {PRESETS.map(p => (
             <button
               key={p.key}
               onClick={() => onPreset(p.key)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
                 activePreset === p.key
-                  ? 'bg-slate-900 text-white border-slate-900'
-                  : 'bg-white text-slate-600 border-slate-200 hover:border-orange-300 hover:text-orange-600'
+                  ? 'bg-orange-600 text-white border-orange-600 shadow-xs'
+                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-orange-500/50 hover:text-orange-600 dark:hover:text-orange-400'
               }`}
             >
               {p.label}
@@ -197,43 +236,43 @@ const RangeCalendar = ({
           ))}
         </div>
 
-        {/* Month nav */}
-        <div className="flex items-center justify-between">
+        {/* Month Navigation */}
+        <div className="flex items-center justify-between pt-1">
           <button
             onClick={() => goMonth(-1)}
-            className="w-8 h-8 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-800 flex items-center justify-center transition-colors"
+            className="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-center transition-colors"
             aria-label="Previous month"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <div className="text-center">
-            <p className="text-sm font-black text-slate-900">
+            <p className="text-xs font-bold text-slate-900 dark:text-white">
               {fmtDate(monthStart(viewYear, viewMonth), { month: 'long', year: 'numeric' })}
             </p>
             {!isCurrentMonth && (
               <button
                 onClick={() => setView(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1)}
-                className="text-[10px] font-bold text-orange-600 hover:underline"
+                className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 hover:underline"
               >
-                 Today
+                Go to Today
               </button>
             )}
           </div>
           <button
             onClick={() => goMonth(1)}
             disabled={isCurrentMonth}
-            className="w-8 h-8 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-800 flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             aria-label="Next month"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Grid */}
+        {/* Calendar Grid */}
         <div>
           <div className="grid grid-cols-7 mb-1">
             {WEEKDAYS.map((w, i) => (
-              <div key={i} className="text-center text-[10px] font-black uppercase tracking-wider text-slate-400 py-1">
+              <div key={i} className="text-center text-[10px] font-bold uppercase tracking-wider text-slate-400 py-0.5">
                 {w}
               </div>
             ))}
@@ -241,7 +280,7 @@ const RangeCalendar = ({
 
           <div className="grid grid-cols-7 gap-y-1" onMouseLeave={() => setHover(null)}>
             {cells.map((d, idx) => {
-              if (!d) return <div key={`e-${idx}`} className="h-11" />;
+              if (!d) return <div key={`e-${idx}`} className="h-9" />;
 
               const future = d > today;
               const isEdge = d === a || d === b;
@@ -250,7 +289,6 @@ const RangeCalendar = ({
               const level = info && info.revenue > 0 ? Math.max(1, Math.ceil((info.revenue / maxRev) * 4)) : 0;
               const isToday = d === today;
 
-              // range ka "band" peeche
               let bandStyle: CSSProperties | undefined;
               if (a !== b) {
                 if (d === a) bandStyle = { background: `linear-gradient(to right, transparent 50%, ${BAND} 50%)` };
@@ -259,15 +297,15 @@ const RangeCalendar = ({
               }
 
               const btnClass = future
-                ? 'text-slate-300 cursor-not-allowed'
+                ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
                 : isEdge
-                ? 'bg-gradient-to-br from-orange-500 to-rose-500 text-white shadow-md shadow-orange-500/30 scale-105'
+                ? 'bg-gradient-to-r from-orange-500 to-rose-500 text-white shadow-xs font-bold scale-105'
                 : inBetween
-                ? 'text-orange-900 font-extrabold hover:bg-orange-200'
-                : `${HEAT_BG[level]} text-slate-700 hover:ring-2 hover:ring-orange-300`;
+                ? 'text-orange-950 font-bold hover:bg-orange-200 dark:hover:bg-orange-900/60'
+                : `${HEAT_BG[level]} text-slate-700 dark:text-slate-200 hover:ring-2 hover:ring-orange-400/50`;
 
               return (
-                <div key={d} className="relative h-11 flex items-center justify-center" style={bandStyle}>
+                <div key={d} className="relative h-9 flex items-center justify-center" style={bandStyle}>
                   <button
                     disabled={future}
                     onClick={() => onPick(d)}
@@ -276,18 +314,16 @@ const RangeCalendar = ({
                       future
                         ? undefined
                         : info && info.orders > 0
-                        ? `${fmtDate(d, { day: '2-digit', month: 'short' })} • ${inr(info.revenue)} • ${info.orders} orders`
-                        : `${fmtDate(d, { day: '2-digit', month: 'short' })} • koi order nahi`
+                        ? `${fmtDate(d, { day: '2-digit', month: 'short' })}: ${inr(info.revenue)} (${info.orders} orders)`
+                        : `${fmtDate(d, { day: '2-digit', month: 'short' })}: No orders`
                     }
-                    className={`relative w-9 h-9 rounded-xl text-xs font-bold transition-all ${btnClass} ${
-                      isToday && !isEdge ? 'ring-2 ring-orange-400 ring-offset-1' : ''
+                    className={`relative w-8 h-8 rounded-lg text-xs transition-all ${btnClass} ${
+                      isToday && !isEdge ? 'ring-2 ring-orange-500 ring-offset-1 dark:ring-offset-slate-900 font-bold' : ''
                     }`}
                   >
                     {Number(d.slice(8))}
                     {d === bestDay && !future && (
-                      <span className="absolute -top-1.5 -right-1 text-[10px] leading-none" title="Best day of the month">
-                        👑
-                      </span>
+                      <span className="absolute -top-1 -right-0.5 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-white dark:ring-slate-900" title="Peak sales day" />
                     )}
                   </button>
                 </div>
@@ -296,25 +332,16 @@ const RangeCalendar = ({
           </div>
         </div>
 
-        {/* Legend + month summary */}
-        <div className="pt-3 border-t border-slate-100 space-y-2.5">
-          <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
-            <span>Low sales</span>
-            <div className="flex items-center gap-1">
-              {HEAT_BG.map((c, i) => (
-                <span key={i} className={`w-4 h-4 rounded-md border border-slate-200 ${c}`} />
-              ))}
-            </div>
-            <span>High sales</span>
-          </div>
-          <div className="flex items-center justify-between rounded-2xl bg-slate-50 border border-slate-100 px-3.5 py-2.5">
+        {/* Month Summary Bar */}
+        <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-between rounded-xl bg-slate-50 dark:bg-slate-800/60 px-3.5 py-2">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">This month</p>
-              <p className="text-sm font-black text-slate-900 font-mono">{inr(monthRevenue)}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Month Total</p>
+              <p className="text-xs font-black text-slate-900 dark:text-white font-mono">{inr(monthRevenue)}</p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Orders</p>
-              <p className="text-sm font-black text-slate-900 font-mono">{monthOrders}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Orders</p>
+              <p className="text-xs font-black text-slate-900 dark:text-white font-mono">{monthOrders}</p>
             </div>
           </div>
         </div>
@@ -323,28 +350,28 @@ const RangeCalendar = ({
   );
 };
 
-// ─────────────────────────── Page ───────────────────────────
+// ─────────────────────────── Main Dashboard Page ───────────────────────────
 export const DashboardPage = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
   const today = todayStr();
 
-  // calendar state
+  // Calendar State
   const [mode, setModeState] = useState<Mode>('day');
   const [start, setStart] = useState<string>(today);
   const [end, setEnd] = useState<string | null>(null);
   const [viewYear, setViewYear] = useState<number>(Number(today.slice(0, 4)));
   const [viewMonth, setViewMonth] = useState<number>(Number(today.slice(5, 7)) - 1);
 
-  // data state
+  // Data State
   const [data, setData] = useState<RangeStats | null>(null);
   const [monthDaily, setMonthDaily] = useState<Record<string, { orders: number; revenue: number }>>({});
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState('');
 
-  // subscription / payment
+  // Subscription / Payment State
   const [subscription, setSubscription] = useState<any>(() => {
     try {
       const cached = localStorage.getItem('orderkare_dash_sub');
@@ -355,11 +382,11 @@ export const DashboardPage = () => {
   });
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
-  const [plans, setPlans] = useState<any[]>([]); // Superadmin ke plans
+  const [plans, setPlans] = useState<any[]>([]);
 
   const [notification, setNotification] = useState<{ id: string; title: string; message: string } | null>(null);
 
-  // selected range
+  // Computed Date Range
   const from = start;
   const to = mode === 'range' && end ? end : start;
   const spanDays = daysBetween(from, to) + 1;
@@ -418,7 +445,7 @@ export const DashboardPage = () => {
     return '';
   }, [from, to, today]);
 
-  // ── subscription ──
+  // Fetch Subscription
   const fetchSubscription = useCallback(async () => {
     try {
       const res = await api.get('/restaurants/dashboard/overview');
@@ -435,7 +462,7 @@ export const DashboardPage = () => {
     } catch {}
   }, []);
 
-  // ── fetch plans for renewal ──
+  // Fetch Plans for Renewal
   const fetchPlans = useCallback(async () => {
     try {
       const res = await api.get('/plans/active');
@@ -452,7 +479,7 @@ export const DashboardPage = () => {
     fetchPlans();
   }, [fetchSubscription, fetchPlans]);
 
-  // ── selected range ka dashboard ──
+  // Fetch Range Stats
   const statsReq = useRef(0);
   const fetchStats = useCallback(
     async (showSpinner = false) => {
@@ -466,7 +493,7 @@ export const DashboardPage = () => {
       } catch (err) {
         if (id !== statsReq.current) return;
         console.error('range-stats error:', err);
-        setError('Data load nahi ho paya. Refresh karke dekhein.');
+        setError('Failed to load statistics. Please try refreshing.');
       } finally {
         if (id === statsReq.current) {
           setLoading(false);
@@ -482,7 +509,7 @@ export const DashboardPage = () => {
     fetchStats();
   }, [fetchStats]);
 
-  // ── calendar heatmap (visible month) ──
+  // Calendar Heatmap (Visible Month)
   const monthReq = useRef(0);
   const fetchMonth = useCallback(async () => {
     const id = ++monthReq.current;
@@ -505,7 +532,7 @@ export const DashboardPage = () => {
     fetchMonth();
   }, [fetchMonth]);
 
-  // ── live updates (socket + polling), reconnect ke bina ──
+  // Real-Time Socket Updates
   const refreshRef = useRef<() => void>(() => {});
   refreshRef.current = () => {
     if (includesToday) fetchStats();
@@ -535,8 +562,8 @@ export const DashboardPage = () => {
       } catch {}
       setNotification({
         id: o.id,
-        title: o.merged ? 'Items Added to Order' : 'New Order Received',
-        message: `${o.customerName || 'Guest'} from Table #${o.tableNumber} (₹${o.totalAmount})`,
+        title: o.merged ? 'Items Added to Table' : 'New Order Received',
+        message: `${o.customerName || 'Guest'} at Table #${o.tableNumber} (${inr(o.totalAmount)})`,
       });
       setTimeout(() => setNotification(null), 5000);
       refreshRef.current();
@@ -557,7 +584,7 @@ export const DashboardPage = () => {
     };
   }, []);
 
-  // ── chart data ──
+  // Chart Data Processing
   const dailyFilled = useMemo(() => {
     if (!data) return [];
     const map = new Map(data.daily.map(d => [d.day, d]));
@@ -578,173 +605,517 @@ export const DashboardPage = () => {
   const maxHourly = Math.max(1, ...hourlyFilled.map(h => h.orders));
   const peakHour = hourlyFilled.reduce((best, h) => (h.orders > best.orders ? h : best), { hour: -1, orders: 0 });
   const maxDish = Math.max(1, ...(data?.topDishes || []).map(d => d.qty));
-  const hourLabel = (h: number) => `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? 'am' : 'pm'}`;
+  const hourLabel = (h: number) => `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? ' AM' : ' PM'}`;
 
   const s = data?.summary;
   const statCards = [
-    { label: 'Orders', value: s ? String(s.orders) : '–', icon: ShoppingBag, color: 'bg-orange-50 text-orange-600' },
-    { label: 'Sales', value: s ? inr(s.revenue) : '–', icon: IndianRupee, color: 'bg-blue-50 text-blue-600' },
-    { label: 'Avg. Order Value', value: s ? inr(s.avgOrderValue) : '–', icon: TrendingUp, color: 'bg-violet-50 text-violet-600' },
-    { label: 'Tables Served', value: s ? String(s.tablesServed) : '–', icon: Grid2X2, color: 'bg-emerald-50 text-emerald-600' },
+    {
+      label: 'Gross Revenue',
+      value: s ? inr(s.revenue) : '–',
+      icon: IndianRupee,
+      color: 'bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400',
+      border: 'border-orange-200/70 dark:border-orange-800/70',
+    },
+    {
+      label: 'Total Orders',
+      value: s ? String(s.orders) : '–',
+      icon: ShoppingBag,
+      color: 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400',
+      border: 'border-blue-200/70 dark:border-blue-800/70',
+    },
+    {
+      label: 'Avg. Order Value',
+      value: s ? inr(s.avgOrderValue) : '–',
+      icon: TrendingUp,
+      color: 'bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400',
+      border: 'border-violet-200/70 dark:border-violet-800/70',
+    },
+    {
+      label: 'Tables Served',
+      value: s ? String(s.tablesServed) : '–',
+      icon: Grid2X2,
+      color: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400',
+      border: 'border-emerald-200/70 dark:border-emerald-800/70',
+    },
   ];
 
   const rangeTitle =
     from === to
       ? from === today
-        ? 'Dashboard'
+        ? "Today's Operations"
         : `${fmtDate(from, { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })}`
       : `${fmtDate(from, { day: '2-digit', month: 'short' })} – ${fmtDate(to, { day: '2-digit', month: 'short', year: 'numeric' })}`;
 
-  const stagger = {
-    container: { hidden: {}, show: { transition: { staggerChildren: 0.07 } } },
-    item: { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { duration: 0.35 } } },
-  };
-
   return (
-    <motion.div className="space-y-7" variants={stagger.container} initial="hidden" animate="show">
-      {notification && (
-        <motion.div
-          initial={{ opacity: 0, y: -18 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -18 }}
-          className="fixed top-4 right-4 z-50 max-w-sm w-full rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-lg shadow-emerald-100"
-        >
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white text-sm font-bold">✓</div>
-            <div className="flex-1">
-              <p className="text-sm font-bold text-emerald-800">{notification.title}</p>
-              <p className="text-xs text-emerald-700 mt-1">{notification.message}</p>
+    <div className="space-y-6 text-left">
+      {/* Real-time Order Popup */}
+      <AnimatePresence>
+        {notification && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-5 right-5 z-50 max-w-sm w-full rounded-2xl border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 p-4 shadow-xl shadow-emerald-500/10 flex items-start gap-3"
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-xs">
+              <CheckCircle2 className="w-5 h-5" />
             </div>
-          </div>
-        </motion.div>
-      )}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+                {notification.title}
+              </p>
+              <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 mt-0.5 truncate">
+                {notification.message}
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Header */}
-      <motion.div variants={stagger.item} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* ─── Top Header Action Bar ─── */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Operations Live View</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Restaurant Management & Master QR Ordering Dashboard</p>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+              Restaurant Operations
+            </h1>
+            <span className="inline-flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-xs px-2.5 py-0.5 rounded-full font-semibold">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Live Connected
+            </span>
+          </div>
+          <p className="text-slate-500 dark:text-slate-400 text-xs mt-1">
+            Real-time kitchen orders, daily revenue, and table metrics for {user?.name || 'your restaurant'}.
+          </p>
         </div>
-        <div className="flex items-center gap-3">
+
+        <div className="flex items-center gap-2.5 flex-wrap">
           <button
             onClick={() => {
               if (subscription?.isSubscribed) {
                 navigate('/dashboard/tables');
               } else {
-                // Superadmin ka pehla plan select karein (renewal ke liye)
                 if (!subscription?.isFirstTime && plans.length > 0) {
                   setSelectedPlan(plans[0]);
                 }
                 setShowPaymentModal(true);
               }
             }}
-            className="flex items-center space-x-2 bg-gradient-to-r from-primary to-orange-500 text-white px-4 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-primary/20 hover:opacity-95 transition-all cursor-pointer"
+            className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
           >
-            <QrCode className="w-4 h-4" />
+            <QrCode className="w-3.5 h-3.5" />
             <span>
-              {subscription?.isSubscribed 
-                ? 'Master QR Standee & Tables' 
-                : subscription?.isFirstTime 
-                  ? 'Unlock Master QR (₹1)' 
-                  : `Renew Master QR (₹${plans[0]?.priceMonthly || 249})`
-              }
+              {subscription?.isSubscribed
+                ? 'Print Master QR Standee'
+                : subscription?.isFirstTime
+                ? 'Activate Master QR (15 Days Free)'
+                : `Renew Master QR (₹${plans[0]?.priceMonthly || 249})`}
             </span>
           </button>
+
           <button
             onClick={() => {
               fetchStats(true);
               fetchMonth();
             }}
-            className="flex items-center space-x-2 bg-white text-slate-600 border border-slate-200 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 px-3.5 py-2 rounded-xl text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer shadow-xs"
           >
-            <RefreshCcw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-primary' : ''}`} />
+            <RefreshCcw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-orange-600' : ''}`} />
             <span>{isRefreshing ? 'Syncing...' : 'Refresh'}</span>
           </button>
         </div>
-      </motion.div>
+      </div>
 
-      {/* QR Code & Subscription Status Hero Banner */}
-     <motion.div
-  variants={stagger.item}
-  className={`rounded-3xl border-2 p-6 shadow-sm transition-all ${
-    subscription?.isSubscribed
-      ? 'bg-gradient-to-br from-emerald-50 via-white to-teal-50/40 border-emerald-300'
-      : 'bg-gradient-to-br from-orange-50 via-white to-amber-50/50 border-orange-300'
-  }`}
->
-  <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-    <div className="flex items-start gap-4">
+      {/* ─── Master QR Standee & Plan Status Card ─── */}
       <div
-        className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
+        className={`rounded-2xl border p-4 sm:p-5 transition-all shadow-xs ${
           subscription?.isSubscribed
-            ? 'bg-emerald-500 text-white shadow-emerald-200'
-            : 'bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-orange-200'
+            ? 'bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border-emerald-200 dark:border-emerald-800/60'
+            : 'bg-gradient-to-r from-orange-500/10 via-rose-500/5 to-transparent border-orange-200 dark:border-orange-800/60'
         }`}
       >
-        {subscription?.isSubscribed ? <QrCode className="w-7 h-7" /> : <Lock className="w-7 h-7" />}
-      </div>
-      <div>
-        <div className="flex items-center gap-2.5">
-          <h2 className="text-lg font-extrabold text-slate-900">
-            {subscription?.isSubscribed ? 'Master Restaurant QR Standee: Live & Active' : 'Master Restaurant QR Standee'}
-          </h2>
-          <span
-            className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
-              subscription?.isSubscribed
-                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                : 'bg-orange-100 text-orange-800 border border-orange-200'
-            }`}
-          >
-            {subscription?.isSubscribed
-              ? subscription?.daysRemaining !== undefined
-                ? `${subscription.daysRemaining} Days Left`
-                : 'Active'
-              : subscription?.isFirstTime
-              ? '₹11 Activation Needed'
-              : 'Subscription Expired'}
-          </span>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div
+              className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
+                subscription?.isSubscribed
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-gradient-to-br from-orange-500 to-rose-500 text-white'
+              }`}
+            >
+              {subscription?.isSubscribed ? <QrCode className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                  {subscription?.isSubscribed
+                    ? 'Master Dining QR Standee Active'
+                    : 'Master Dining QR Standee Inactive'}
+                </h2>
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                    subscription?.isSubscribed
+                      ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                      : 'bg-orange-100 dark:bg-orange-950/60 text-orange-800 dark:text-orange-300 border border-orange-200 dark:border-orange-800'
+                  }`}
+                >
+                  {subscription?.isSubscribed
+                    ? subscription?.daysRemaining !== undefined
+                      ? `${subscription.daysRemaining} Days Left`
+                      : 'Active'
+                    : subscription?.isFirstTime
+                    ? 'Activation Required'
+                    : 'Expired'}
+                </span>
+              </div>
+              <p className="text-slate-600 dark:text-slate-400 text-xs mt-0.5 max-w-xl">
+                {subscription?.isSubscribed
+                  ? 'Guests scanning your table QR standee place instant digital orders straight into your live kitchen display.'
+                  : subscription?.isFirstTime
+                  ? 'Activate your restaurant account to generate high-resolution print-ready QR standees with 15 days of full access.'
+                  : 'Renew your subscription to reactivate guest digital ordering and instant table QR generation.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            {subscription?.isSubscribed ? (
+              <button
+                onClick={() => navigate('/dashboard/tables')}
+                className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-xs"
+              >
+                <span>View Table Standees</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowPaymentModal(true)}
+                className="inline-flex items-center gap-1.5 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-xs"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>
+                  {subscription?.isFirstTime
+                    ? 'Activate Now (15 Days Free)'
+                    : `Renew Subscription (₹${plans[0]?.priceMonthly || 249})`}
+                </span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
-        <p className="text-slate-600 text-sm mt-1 max-w-2xl">
-          {subscription?.isSubscribed
-            ? `Your restaurant's single master QR standee is active. Guests scanning the QR from any table can view your live menu and place orders straight to this live dashboard.`
-            : subscription?.isFirstTime
-            ? 'New account special: Complete the one-time ₹11 activation to generate your permanent Master QR standee and receive 14 days completely free!'
-            : 'Renew your subscription to reactivate your permanent master QR code standee for live customer ordering.'}
-        </p>
       </div>
-    </div>
 
-    <div className="flex items-center gap-3 w-full lg:w-auto shrink-0">
-      {subscription?.isSubscribed ? (
-        <button
-          onClick={() => navigate('/dashboard/tables')}
-          className="w-full lg:w-auto flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3.5 rounded-2xl shadow-md shadow-emerald-200 transition-all cursor-pointer"
-        >
-          <QrCode className="w-4 h-4" />
-          <span>View & Print Master Standee</span>
-          <ArrowRight className="w-4 h-4" />
-        </button>
-      ) : (
-        <button
-          onClick={() => setShowPaymentModal(true)}
-          className="w-full lg:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black px-6 py-3.5 rounded-2xl shadow-lg shadow-orange-500/25 transition-all cursor-pointer active:scale-95"
-        >
-          <Sparkles className="w-4 h-4" />
-          <span>
-            {subscription?.isFirstTime 
-              ? 'Pay ₹11 & Unlock QR (14 Days Free)' 
-              : `Renew & Unlock Master QR (₹${plans[0]?.priceMonthly || 249})`}
-          </span>
-          <ArrowRight className="w-4 h-4" />
-        </button>
+      {/* ─── 4 Primary Metric Cards (KPIs) ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {statCards.map(stat => {
+          const Icon = stat.icon;
+          return (
+            <div
+              key={stat.label}
+              className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {stat.label}
+                </span>
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${stat.color}`}>
+                  <Icon className="w-4 h-4" />
+                </div>
+              </div>
+              <p className={`text-xl sm:text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight ${loading ? 'opacity-40' : ''}`}>
+                {stat.value}
+              </p>
+              <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-400">
+                <span>{spanDays === 1 ? 'Selected day' : `${spanDays} day total`}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 text-xs font-semibold px-4 py-3 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+          <span>{error}</span>
+        </div>
       )}
-    </div>
-  </div>
-</motion.div>
 
-      {/* Calendar + Dashboard of selected day / range */}
-      <motion.div variants={stagger.item} className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-6 items-start">
-        <div className="xl:sticky xl:top-4">
+      {/* ─── Main Analytics & Operational Grid ─── */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+        {/* Left Column: Visual Charts & Operational Performance */}
+        <div className="space-y-6 min-w-0">
+          {/* Main Chart Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs transition-colors">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  {spanDays === 1 ? 'Hourly Dining Activity' : 'Daily Sales Performance'}
+                </h3>
+                <p className="text-xs text-slate-400 font-medium mt-0.5">
+                  {spanDays === 1
+                    ? peakHour.hour >= 0
+                      ? `Peak dining time: ${hourLabel(peakHour.hour)} (${peakHour.orders} orders)`
+                      : 'Order volume distributed by hour'
+                    : 'Revenue trends across selected date range'}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-gradient-to-r from-orange-500 to-rose-500" />
+                  Peak
+                </span>
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-orange-300 dark:bg-orange-700/50" />
+                  Standard
+                </span>
+              </div>
+            </div>
+
+            {/* Empty state when 0 orders */}
+            {!loading && s && s.orders === 0 ? (
+              <div className="py-12 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 mx-auto flex items-center justify-center mb-2">
+                  <UtensilsCrossed className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                  No orders recorded for this period
+                </h4>
+                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                  Guests have not placed orders during this date selection. Select another day on the calendar or view live tables.
+                </p>
+              </div>
+            ) : spanDays === 1 ? (
+              /* Single Day Hourly Bar Chart */
+              <div>
+                <div className="flex items-end gap-1 h-36 pt-4">
+                  {hourlyFilled.map(h => (
+                    <div
+                      key={h.hour}
+                      className="flex-1 flex flex-col items-center justify-end h-full group"
+                      title={`${hourLabel(h.hour)}: ${h.orders} orders`}
+                    >
+                      <motion.div
+                        initial={{ height: 0 }}
+                        animate={{ height: `${(h.orders / maxHourly) * 100}%` }}
+                        transition={{ duration: 0.4 }}
+                        className={`w-full rounded-t-sm min-h-[3px] transition-all ${
+                          h.hour === peakHour.hour && h.orders > 0
+                            ? 'bg-gradient-to-t from-orange-500 to-rose-500 shadow-xs'
+                            : h.orders > 0
+                            ? 'bg-orange-300 dark:bg-orange-600/50 hover:bg-orange-400'
+                            : 'bg-slate-100 dark:bg-slate-800'
+                        }`}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-between text-[10px] font-bold text-slate-400 mt-2 px-1 border-t border-slate-100 dark:border-slate-800 pt-1.5">
+                  {[0, 6, 12, 18, 23].map(h => (
+                    <span key={h}>{hourLabel(h)}</span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              /* Multi-Day Range Bar Chart */
+              <div className="overflow-x-auto">
+                <div
+                  className="flex items-end gap-1.5 h-40 pt-4"
+                  style={{ minWidth: Math.min(dailyFilled.length * 24, 1200) }}
+                >
+                  {dailyFilled.map(d => (
+                    <div
+                      key={d.day}
+                      className="flex-1 flex flex-col items-center justify-end h-full group"
+                      title={`${fmtDate(d.day, { day: '2-digit', month: 'short' })}: ${inr(d.revenue)} (${d.orders} orders)`}
+                    >
+                      <motion.div
+                        initial={{ height: 0 }}
+                        animate={{ height: `${(d.revenue / maxDaily) * 100}%` }}
+                        transition={{ duration: 0.4 }}
+                        className={`w-full rounded-t-sm min-h-[3px] transition-all ${
+                          d.revenue === maxDaily && d.revenue > 0
+                            ? 'bg-gradient-to-t from-orange-500 to-rose-500 shadow-xs'
+                            : d.revenue > 0
+                            ? 'bg-orange-300 dark:bg-orange-600/50 hover:bg-orange-400'
+                            : 'bg-slate-100 dark:bg-slate-800'
+                        }`}
+                      />
+                      {dailyFilled.length <= 16 && (
+                        <span className="text-[10px] font-semibold text-slate-400 mt-1.5">
+                          {Number(d.day.slice(8))}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {dailyFilled.length > 16 && (
+                  <div className="flex justify-between text-[10px] font-bold text-slate-400 mt-2 border-t border-slate-100 dark:border-slate-800 pt-1.5">
+                    <span>{fmtDate(dailyFilled[0].day, { day: '2-digit', month: 'short' })}</span>
+                    <span>{fmtDate(dailyFilled[dailyFilled.length - 1].day, { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Lower Two-Column Grid: Top Dishes & Status */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Top Dishes */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs transition-colors">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-orange-500" />
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                    Top Selling Dishes
+                  </h3>
+                </div>
+                <span className="text-[11px] font-semibold text-slate-400">By Quantity</span>
+              </div>
+
+              {(data?.topDishes || []).length === 0 ? (
+                <div className="py-8 text-center text-slate-400 text-xs">
+                  No dish sales recorded in this period.
+                </div>
+              ) : (
+                <div className="space-y-3.5">
+                  {data!.topDishes.map((dish, i) => (
+                    <div key={dish.name}>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="font-semibold text-slate-800 dark:text-slate-200 truncate pr-2">
+                          <span className="text-slate-400 font-mono mr-1.5">{i + 1}.</span>
+                          {dish.name}
+                        </span>
+                        <span className="font-mono font-bold text-slate-700 dark:text-slate-300 shrink-0">
+                          {dish.qty} orders • {inr(dish.revenue)}
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${(dish.qty / maxDish) * 100}%` }}
+                          transition={{ duration: 0.4, delay: i * 0.05 }}
+                          className="h-full rounded-full bg-gradient-to-r from-orange-500 to-rose-500"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Order Status & Customer Feedback */}
+            <div className="space-y-5">
+              {/* Order Status Breakdown */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs transition-colors">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <ClipboardList className="w-4 h-4 text-blue-500" />
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                      Order Status Summary
+                    </h3>
+                  </div>
+                  <span className="text-[11px] font-semibold text-slate-400">Active Pipeline</span>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(data?.statusBreakdown || {}).map(([status, count]) => (
+                    <span
+                      key={status}
+                      className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg border ${STATUS_STYLE[status] || STATUS_STYLE.COMPLETED}`}
+                    >
+                      {status.toLowerCase()} • {count}
+                    </span>
+                  ))}
+                  {Object.keys(data?.statusBreakdown || {}).length === 0 && (
+                    <p className="text-slate-400 text-xs py-2">No active order status data.</p>
+                  )}
+                </div>
+
+                {s && s.rejected > 0 && (
+                  <p className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold mt-3 flex items-center gap-1.5">
+                    <XCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{s.rejected} orders rejected (excluded from gross revenue)</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Customer Rating Card */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs flex items-center gap-4 transition-colors">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Star className="w-6 h-6 fill-white" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Guest Satisfaction
+                  </p>
+                  <p className="text-xl font-black text-slate-900 dark:text-white font-mono leading-tight">
+                    {data && data.feedback.count > 0 ? data.feedback.average.toFixed(1) : '–'}
+                    <span className="text-xs text-slate-400 font-bold"> / 5.0</span>
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Based on {data?.feedback.count || 0} customer reviews
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Orders List */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs transition-colors">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-emerald-500" />
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  Recent Orders
+                </h3>
+              </div>
+              <button
+                onClick={() => navigate('/dashboard/orders')}
+                className="text-xs font-bold text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>View All Orders</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {(data?.recent || []).length === 0 ? (
+              <p className="text-slate-400 text-xs text-center py-6">
+                No recent transactions in this selection.
+              </p>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {data!.recent.map(o => (
+                  <div key={o.id} className="py-2.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                        {o.billNo ? `#${String(o.billNo).padStart(4, '0')} • ` : ''}
+                        Table {o.tableNumber} • {o.customerName || 'Guest'}
+                      </p>
+                      <p className="text-[11px] text-slate-400 font-medium">
+                        {spanDays > 1
+                          ? `${fmtDate(new Date(o.createdAt).toLocaleDateString('en-CA', { timeZone: IST }), { day: '2-digit', month: 'short' })}, `
+                          : ''}
+                        {fmtTime(o.createdAt)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg border ${STATUS_STYLE[o.status] || STATUS_STYLE.COMPLETED}`}>
+                        {o.status.toLowerCase()}
+                      </span>
+                      <span className="text-sm font-bold text-slate-900 dark:text-white font-mono w-16 text-right">
+                        {inr(o.totalAmount)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Business Calendar Filter */}
+        <div className="xl:sticky xl:top-20 space-y-4">
           <RangeCalendar
             mode={mode}
             setMode={setMode}
@@ -760,282 +1131,30 @@ export const DashboardPage = () => {
             activePreset={activePreset}
           />
         </div>
+      </div>
 
-        <div className="space-y-5 min-w-0">
-          {/* Title row */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">{rangeTitle}</h2>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                {spanDays === 1 ? 'Calculation of the day ' : `${spanDays} Financial Statement of the day`} • {includesToday ? 'Live & Updating' : 'Historical Data'}
-              </p>
-            </div>
-            {includesToday && (
-              <span className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs px-3 py-1 rounded-full font-bold">
-                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
-                Live
-              </span>
-            )}
-          </div>
-
-          {error && (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-bold px-4 py-3">{error}</div>
-          )}
-
-          {/* Stat cards */}
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-            {statCards.map(stat => {
-              const Icon = stat.icon;
-              return (
-                <div key={stat.label} className="bg-white rounded-3xl border border-slate-200/60 p-5 shadow-sm hover:shadow-md transition-all">
-                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center mb-3 ${stat.color}`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <AnimatePresence mode="wait">
-                    <motion.p
-                      key={`${stat.label}-${stat.value}-${loading}`}
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className={`text-2xl font-extrabold tracking-tight text-slate-900 ${loading ? 'opacity-40' : ''}`}
-                    >
-                      {stat.value}
-                    </motion.p>
-                  </AnimatePresence>
-                  <p className="text-xs text-slate-500 mt-1 font-medium">{stat.label}</p>
-                </div>
-              );
-            })}
-          </div>
-
-          {!loading && s && s.orders === 0 ? (
-            <div className="text-center py-16 bg-white rounded-3xl border border-slate-200/60 shadow-sm">
-              <span className="text-4xl block mb-2">🍽️</span>
-              <h3 className="font-bold text-slate-800 text-sm">Is {spanDays === 1 ? 'din' : 'period'} me koi order nahi mila</h3>
-              <p className="text-slate-400 text-xs mt-1">Calendar me doosri date chuno</p>
-            </div>
-          ) : (
-            <>
-              {/* Chart: single day = peak hours, range = daily sales */}
-              <div className="bg-white rounded-3xl border border-slate-200/60 p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-sm">
-                      {spanDays === 1 ? 'Peak Hours' : 'Daily Sales'}
-                    </h3>
-                    <p className="text-[11px] text-slate-400 font-medium">
-                      {spanDays === 1
-                        ? peakHour.hour >= 0
-                          ? `Peak hours: ${hourLabel(peakHour.hour)} (${peakHour.orders} orders)`
-                          : 'Hour-wise orders'
-                        : 'Daily order volume'}
-                    </p>
-                  </div>
-                  <Flame className="w-5 h-5 text-orange-400" />
-                </div>
-
-                {spanDays === 1 ? (
-                  <div>
-                    <div className="flex items-end gap-1 h-36">
-                      {hourlyFilled.map(h => (
-                        <div key={h.hour} className="flex-1 flex flex-col items-center justify-end h-full" title={`${hourLabel(h.hour)} • ${h.orders} orders`}>
-                          <motion.div
-                            initial={{ height: 0 }}
-                            animate={{ height: `${(h.orders / maxHourly) * 100}%` }}
-                            transition={{ duration: 0.5 }}
-                            className={`w-full rounded-t-md min-h-[3px] ${
-                              h.hour === peakHour.hour && h.orders > 0
-                                ? 'bg-gradient-to-t from-orange-500 to-rose-500'
-                                : h.orders > 0
-                                ? 'bg-orange-300'
-                                : 'bg-slate-100'
-                            }`}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex justify-between text-[10px] font-bold text-slate-400 mt-1.5 px-0.5">
-                      {[0, 6, 12, 18, 23].map(h => (
-                        <span key={h}>{hourLabel(h)}</span>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <div className="flex items-end gap-1.5 h-40" style={{ minWidth: Math.min(dailyFilled.length * 22, 1400) }}>
-                      {dailyFilled.map(d => (
-                        <div
-                          key={d.day}
-                          className="flex-1 flex flex-col items-center justify-end h-full"
-                          title={`${fmtDate(d.day, { day: '2-digit', month: 'short' })} • ${inr(d.revenue)} • ${d.orders} orders`}
-                        >
-                          <motion.div
-                            initial={{ height: 0 }}
-                            animate={{ height: `${(d.revenue / maxDaily) * 100}%` }}
-                            transition={{ duration: 0.5 }}
-                            className={`w-full rounded-t-md min-h-[3px] ${
-                              d.revenue === maxDaily && d.revenue > 0
-                                ? 'bg-gradient-to-t from-orange-500 to-rose-500'
-                                : d.revenue > 0
-                                ? 'bg-orange-300'
-                                : 'bg-slate-100'
-                            }`}
-                          />
-                          {dailyFilled.length <= 16 && (
-                            <span className="text-[9px] font-bold text-slate-400 mt-1">{Number(d.day.slice(8))}</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    {dailyFilled.length > 16 && (
-                      <div className="flex justify-between text-[10px] font-bold text-slate-400 mt-1.5">
-                        <span>{fmtDate(dailyFilled[0].day, { day: '2-digit', month: 'short' })}</span>
-                        <span>{fmtDate(dailyFilled[dailyFilled.length - 1].day, { day: '2-digit', month: 'short' })}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                {/* Top dishes */}
-                <div className="bg-white rounded-3xl border border-slate-200/60 p-5 shadow-sm">
-                  <h3 className="font-bold text-slate-900 text-sm mb-4">🍛 Top Selling Dishes</h3>
-                  {(data?.topDishes || []).length === 0 ? (
-                    <p className="text-slate-400 text-xs text-center py-6">Abhi koi data nahi</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {data!.topDishes.map((dish, i) => (
-                        <div key={dish.name}>
-                          <div className="flex items-center justify-between text-xs mb-1">
-                            <span className="font-bold text-slate-800 truncate pr-2">
-                              <span className="text-slate-400 font-mono mr-1.5">{i + 1}.</span>
-                              {dish.name}
-                            </span>
-                            <span className="font-mono font-bold text-slate-600 shrink-0">
-                              {dish.qty}× • {inr(dish.revenue)}
-                            </span>
-                          </div>
-                          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                            <motion.div
-                              initial={{ width: 0 }}
-                              animate={{ width: `${(dish.qty / maxDish) * 100}%` }}
-                              transition={{ duration: 0.5, delay: i * 0.05 }}
-                              className="h-full rounded-full bg-gradient-to-r from-orange-400 to-rose-500"
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Status + feedback */}
-                <div className="space-y-5">
-                  <div className="bg-white rounded-3xl border border-slate-200/60 p-5 shadow-sm">
-                    <h3 className="font-bold text-slate-900 text-sm mb-3">📋 Order Status</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(data?.statusBreakdown || {}).map(([status, count]) => (
-                        <span
-                          key={status}
-                          className={`text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border ${STATUS_STYLE[status] || STATUS_STYLE.COMPLETED}`}
-                        >
-                          {status.toLowerCase()} • {count}
-                        </span>
-                      ))}
-                      {Object.keys(data?.statusBreakdown || {}).length === 0 && (
-                        <p className="text-slate-400 text-xs">Koi data nahi</p>
-                      )}
-                    </div>
-                    {s && s.rejected > 0 && (
-                      <p className="text-[11px] text-rose-600 font-semibold mt-3 flex items-center gap-1">
-                        <XCircle className="w-3.5 h-3.5" />
-                        {s.rejected} order reject hue (sales me nahi gine gaye)
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="bg-white rounded-3xl border border-slate-200/60 p-5 shadow-sm flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center shadow-md shadow-orange-500/20">
-                      <Star className="w-6 h-6 fill-white" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Customer Rating</p>
-                      <p className="text-2xl font-black text-slate-900 font-mono leading-tight">
-                        {data && data.feedback.count > 0 ? data.feedback.average.toFixed(1) : '–'}
-                        <span className="text-xs text-slate-400 font-bold"> / 5</span>
-                      </p>
-                      <p className="text-[11px] text-slate-500 font-medium">
-                        {data?.feedback.count || 0} {data?.feedback.count === 1 ? 'review' : 'reviews'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Recent orders */}
-              <div className="bg-white rounded-3xl border border-slate-200/60 p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 text-sm">🧾 Recent Orders</h3>
-                  <button
-                    onClick={() => navigate('/dashboard/orders')}
-                    className="text-[11px] font-bold text-orange-600 hover:underline flex items-center gap-1"
-                  >
-                    see all <ArrowRight className="w-3 h-3" />
-                  </button>
-                </div>
-                {(data?.recent || []).length === 0 ? (
-                  <p className="text-slate-400 text-xs text-center py-6">No recent orders</p>
-                ) : (
-                  <div className="divide-y divide-slate-100">
-                    {data!.recent.map(o => (
-                      <div key={o.id} className="py-2.5 flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-slate-800 truncate">
-                            {o.billNo ? `#${String(o.billNo).padStart(4, '0')} • ` : ''}Table {o.tableNumber} • {o.customerName || 'Guest'}
-                          </p>
-                          <p className="text-[11px] text-slate-400 font-medium">
-                            {spanDays > 1 ? `${fmtDate(new Date(o.createdAt).toLocaleDateString('en-CA', { timeZone: IST }), { day: '2-digit', month: 'short' })}, ` : ''}
-                            {fmtTime(o.createdAt)}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${STATUS_STYLE[o.status] || STATUS_STYLE.COMPLETED}`}>
-                            {o.status.toLowerCase()}
-                          </span>
-                          <span className="text-sm font-black text-slate-900 font-mono w-16 text-right">{inr(o.totalAmount)}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      </motion.div>
-
-      {/* Payment Modal */}
+      {/* Payment / Subscription Modal */}
       <AnimatePresence>
-         {showPaymentModal && (
+        {showPaymentModal && (
           <PaymentModal
             planName={
-              subscription?.isFirstTime 
-                ? 'First-Time Activation (1 Month Free)' 
-                : (selectedPlan?.name || 'Monthly Plan Renewal')
+              subscription?.isFirstTime
+                ? 'First-Time Activation (15 Days Free Access)'
+                : (selectedPlan?.name || 'Monthly Subscription Renewal')
             }
             planId={
-              subscription?.isFirstTime 
-                ? 'FIRST_TIME_ACTIVATION' 
+              subscription?.isFirstTime
+                ? 'FIRST_TIME_ACTIVATION'
                 : (selectedPlan?.id || 'MONTHLY')
             }
             amount={
-              subscription?.isFirstTime 
-                ? 1 
+              subscription?.isFirstTime
+                ? 11
                 : (selectedPlan?.priceMonthly || 249)
             }
             durationDays={
-              subscription?.isFirstTime 
-                ? 30 
+              subscription?.isFirstTime
+                ? 15
                 : (selectedPlan?.days || 30)
             }
             upiId={subscription?.payment?.upiId || ''}
@@ -1048,6 +1167,6 @@ export const DashboardPage = () => {
           />
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
 };
