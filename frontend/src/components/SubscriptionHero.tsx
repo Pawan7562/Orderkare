@@ -62,9 +62,9 @@ export const SubscriptionHero = ({ sub, restaurantName, onPrimary, primaryDisabl
     <div
       className={`rounded-3xl p-6 sm:p-8 transition-all relative overflow-hidden shadow-sm border-2 ${
         isSubscribed
-          ? 'bg-gradient-to-br from-emerald-500/10 via-teal-50/50 to-white border-emerald-400/80 shadow-emerald-500/5'
+          ? 'bg-gradient-to-br from-emerald-500/10 via-teal-50/50 to-white dark:from-emerald-950/40 dark:via-slate-900/80 dark:to-slate-900 border-emerald-400/80 dark:border-emerald-800 shadow-emerald-500/5'
           : status === 'EXPIRED'
-          ? 'bg-gradient-to-br from-rose-500/10 via-red-50/50 to-white border-rose-300 shadow-rose-500/5'
+          ? 'bg-gradient-to-br from-rose-500/10 via-red-50/50 to-white dark:from-rose-950/40 dark:via-slate-900/80 dark:to-slate-900 border-rose-300 dark:border-rose-800 shadow-rose-500/5'
           : 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white border-slate-800 shadow-xl'
       }`}
     >
@@ -110,28 +110,28 @@ export const SubscriptionHero = ({ sub, restaurantName, onPrimary, primaryDisabl
 
               <span
                 className={`text-xs font-bold px-2.5 py-0.5 rounded-lg border ${
-                  isDark ? 'bg-white/10 text-slate-300 border-white/15' : 'bg-white/80 text-slate-700 border-slate-200/80'
+                  isDark ? 'bg-white/10 text-slate-300 border-white/15' : 'bg-white/80 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200/80 dark:border-slate-700'
                 }`}
               >
                 {name}
               </span>
 
               {isSubscribed && (
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 font-mono">
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 font-mono">
                   <QrCode className="w-3 h-3" />
                   QR Standee Live
                 </span>
               )}
 
               {!isSubscribed && (
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1">
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 flex items-center gap-1">
                   <Lock className="w-3 h-3" />
                   Features Locked
                 </span>
               )}
             </div>
 
-            <h2 className={`text-xl sm:text-2xl font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            <h2 className={`text-xl sm:text-2xl font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
               {isSubscribed
                 ? `${daysLeft} Days of Active Master QR Ordering Remaining`
                 : status === 'EXPIRED'
@@ -141,7 +141,7 @@ export const SubscriptionHero = ({ sub, restaurantName, onPrimary, primaryDisabl
                 : 'Choose a Plan to Activate Your Master QR'}
             </h2>
 
-            <p className={`text-xs sm:text-sm max-w-2xl leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+            <p className={`text-xs sm:text-sm max-w-2xl leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600 dark:text-slate-300'}`}>
               {isSubscribed
                 ? `Your dining standees are live until ${new Date(sub.validUntil || '').toLocaleDateString('en-IN', {
                     day: 'numeric',
@@ -155,13 +155,13 @@ export const SubscriptionHero = ({ sub, restaurantName, onPrimary, primaryDisabl
 
             {isSubscribed && sub.validUntil && (
               <div className="pt-2 max-w-md space-y-1">
-                <div className="flex justify-between text-[11px] font-bold text-slate-500">
+                <div className="flex justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
                   <span>Plan Expiration Progress</span>
-                  <span className="font-mono text-emerald-700">
+                  <span className="font-mono text-emerald-700 dark:text-emerald-400">
                     {daysLeft} Days Left ({progressPercent}%)
                   </span>
                 </div>
-                <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+                <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
                     style={{ width: `${progressPercent}%` }}
@@ -188,7 +188,7 @@ export const SubscriptionHero = ({ sub, restaurantName, onPrimary, primaryDisabl
             <button
               onClick={onPrimary}
               disabled={primaryDisabled}
-              className="px-5 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-900 font-extrabold text-xs rounded-2xl transition-all shadow-xs active:scale-95 cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-5 py-3 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-extrabold text-xs rounded-2xl transition-all shadow-xs active:scale-95 cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span>Extend Validity</span>
               <ChevronRight className="w-4 h-4 text-slate-400" />
