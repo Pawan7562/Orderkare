@@ -250,7 +250,7 @@ export default function DashboardScreen() {
         {/* Welcome Strip */}
         <View style={styles.welcomeStrip}>
           <View>
-            <Text style={styles.welcomeGreeting}>Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 17 ? 'Afternoon' : 'Evening'} 👋</Text>
+            <Text style={styles.welcomeGreeting}>Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 17 ? 'Afternoon' : 'Evening'}</Text>
             <Text style={styles.welcomeText}>Here's your live operations overview</Text>
           </View>
           <View style={styles.dateBadge}>
