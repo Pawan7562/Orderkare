@@ -132,10 +132,10 @@ export const SuperAdminLayout = () => {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-5 right-5 z-50 max-w-sm w-full bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-primary/20 p-4 overflow-hidden transition-colors duration-300"
+            className="fixed top-5 right-5 z-50 max-w-sm w-full bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-orange-500/30 dark:border-orange-500/20 p-4 overflow-hidden transition-colors duration-300"
           >
             <div className="flex items-start justify-between gap-3">
-              <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-orange-50 dark:bg-orange-950/50 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0">
                 <Bell className="w-5 h-5 animate-bounce" />
               </div>
               <div className="flex-1 min-w-0">
@@ -164,7 +164,7 @@ export const SuperAdminLayout = () => {
           <img src="/logo.jpg" alt="OrderKare Logo" className="h-10 w-auto object-contain rounded-xl shadow-xs" />
           <div>
             <h1 className="font-extrabold text-base text-slate-900 dark:text-white tracking-tight leading-tight">OrderKare</h1>
-            <span className="text-[10px] text-primary font-bold uppercase tracking-wider bg-primary/10 px-2 py-0.5 rounded-full inline-block mt-0.5">
+            <span className="text-[10px] text-orange-600 dark:text-orange-400 font-extrabold uppercase tracking-wider bg-orange-50 dark:bg-orange-950/40 border border-orange-200/80 dark:border-orange-900/40 px-2 py-0.5 rounded-full inline-block mt-0.5">
               Super Admin
             </span>
           </div>
@@ -180,18 +180,18 @@ export const SuperAdminLayout = () => {
                 to={item.path}
                 className={`relative flex items-center space-x-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
                   isActive
-                    ? 'text-primary bg-primary/10 shadow-xs'
-                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                    ? 'text-orange-600 dark:text-orange-400 bg-orange-50/80 dark:bg-orange-950/30 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 {isActive && (
                   <motion.div
                     layoutId="superadmin-sidebar-indicator"
-                    className="absolute left-0 top-2 bottom-2 w-1.5 bg-primary rounded-r-full"
+                    className="absolute left-0 top-2 bottom-2 w-1.5 bg-gradient-to-b from-orange-500 to-rose-500 rounded-r-full"
                     transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                   />
                 )}
-                <Icon className="w-4.5 h-4.5 shrink-0" />
+                <Icon className={`w-4.5 h-4.5 shrink-0 ${isActive ? 'text-orange-600 dark:text-orange-400' : ''}`} />
                 <span>{item.label}</span>
               </Link>
             );
@@ -199,8 +199,8 @@ export const SuperAdminLayout = () => {
         </nav>
 
         <div className="p-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
-          <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-bold text-xs">
+          <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-700/60 flex items-center space-x-3">
+            <div className="w-8 h-8 rounded-xl bg-orange-100 dark:bg-orange-950/50 text-orange-600 dark:text-orange-400 flex items-center justify-center font-bold text-xs">
               <ShieldCheck className="w-4 h-4" />
             </div>
             <div className="flex-1 min-w-0">
@@ -211,7 +211,7 @@ export const SuperAdminLayout = () => {
 
           <button
             onClick={logout}
-            className="flex items-center justify-center space-x-2 px-4 py-2.5 text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 rounded-xl w-full transition-colors"
+            className="flex items-center justify-center space-x-2 px-4 py-2.5 text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl w-full transition-colors"
           >
             <LogOut className="w-4 h-4" />
             <span>Sign Out</span>
@@ -222,15 +222,14 @@ export const SuperAdminLayout = () => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Header */}
-        <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between px-8 sticky top-0 z-10 shadow-2xs transition-colors duration-300">
+        <header className="h-16 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between px-6 sm:px-8 sticky top-0 z-10 shadow-2xs transition-colors duration-300">
           <div className="flex items-center space-x-3">
             <span className="text-slate-900 dark:text-white font-extrabold text-sm tracking-tight hidden sm:inline">
               Super Admin Console
             </span>
           </div>
 
-          <div className="flex items-center space-x-4">
-            {/* 👈 Dark Mode Toggle Yahan Add Kiya Hai */}
+          <div className="flex items-center space-x-3 sm:space-x-4">
             <ThemeToggle />
 
             {/* Notification Bell Dropdown */}
@@ -242,7 +241,7 @@ export const SuperAdminLayout = () => {
               >
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-xs animate-pulse">
+                  <span className="absolute -top-1 -right-1 bg-gradient-to-r from-orange-500 to-rose-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-xs animate-pulse">
                     {unreadCount > 99 ? '99+' : unreadCount}
                   </span>
                 )}
@@ -264,7 +263,7 @@ export const SuperAdminLayout = () => {
                       {unreadCount > 0 && (
                         <button
                           onClick={handleMarkAllAsRead}
-                          className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1"
+                          className="text-[10px] font-bold text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1"
                         >
                           <CheckCheck className="w-3 h-3" /> Mark all read
                         </button>
@@ -281,7 +280,7 @@ export const SuperAdminLayout = () => {
                           <div
                             key={n.id}
                             className={`p-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex items-start justify-between gap-2 ${
-                              !n.isRead ? 'bg-primary/5 dark:bg-primary/10' : ''
+                              !n.isRead ? 'bg-orange-50/50 dark:bg-orange-950/20' : ''
                             }`}
                           >
                             <div className="flex-1 min-w-0">
@@ -303,7 +302,7 @@ export const SuperAdminLayout = () => {
                             {!n.isRead && (
                               <button
                                 onClick={() => handleMarkAsRead(n.id)}
-                                className="text-slate-400 hover:text-primary p-1"
+                                className="text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 p-1"
                                 title="Mark read"
                               >
                                 <Check className="w-3.5 h-3.5" />
@@ -318,7 +317,7 @@ export const SuperAdminLayout = () => {
               </AnimatePresence>
             </div>
 
-            <div className="w-9 h-9 bg-primary/10 text-primary border border-primary/20 rounded-xl flex items-center justify-center font-bold text-sm">
+            <div className="w-9 h-9 bg-gradient-to-br from-orange-500 to-rose-500 text-white rounded-xl flex items-center justify-center font-bold text-sm shadow-sm shadow-orange-500/20">
               {user?.name?.charAt(0) || 'S'}
             </div>
           </div>
