@@ -17,6 +17,7 @@ export interface User {
   email: string;
   role: string;
   restaurant?: Restaurant;
+  restaurantId?: string;
 }
 
 interface AuthState {
@@ -42,18 +43,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const token = await SecureStore.getItemAsync('admin_token');
       const userJson = await SecureStore.getItemAsync('admin_user');
+
       if (token && userJson) {
-        set({ token, user: JSON.parse(userJson) });
-        await get().fetchMe();
-      } else {
-        set({ isReady: true });
+        try {
+          const user = JSON.parse(userJson);
+          // Restore authenticated session immediately so user enters app instantly
+          set({ token, user, isReady: true });
+
+          // Refresh profile in background without blocking or wiping the session on network lag
+          get().fetchMe().catch(() => {});
+          return;
+        } catch {
+          // JSON parse failed on corrupt storage
+        }
       }
-    } catch {
-      await SecureStore.deleteItemAsync('admin_token');
-      await SecureStore.deleteItemAsync('admin_user');
-      set({ token: null, user: null, isReady: true });
+    } catch (err) {
+      console.warn('SecureStore init error:', err);
     }
-    set({ isReady: true });
+
+    set({ token: null, user: null, isReady: true });
   },
 
   login: async (email, password) => {
@@ -62,11 +70,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { data } = await api.post('/auth/login', { email, password });
       const token = data.data?.token || data.token;
       const user = data.data?.user || data.user;
-      if (!token || !user) throw new Error('Invalid login response');
 
+      if (!token || !user) {
+        throw new Error('Invalid login response from server');
+      }
+
+      // Persist session securely on device
       await SecureStore.setItemAsync('admin_token', token);
       await SecureStore.setItemAsync('admin_user', JSON.stringify(user));
-      set({ user, token, isLoading: false });
+
+      set({ user, token, isLoading: false, error: null });
     } catch (err: any) {
       const msg = err.response?.data?.message || err.message || 'Login failed';
       set({ error: msg, isLoading: false });
@@ -75,22 +88,34 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
-    await SecureStore.deleteItemAsync('admin_token');
-    await SecureStore.deleteItemAsync('admin_user');
-    set({ user: null, token: null });
+    try {
+      await SecureStore.deleteItemAsync('admin_token');
+      await SecureStore.deleteItemAsync('admin_user');
+    } catch {}
+    set({ user: null, token: null, isReady: true });
   },
 
   fetchMe: async () => {
     try {
       const { data } = await api.get('/auth/me');
       const user = data.data?.user || data.user;
-      if (!user) throw new Error('Invalid session response');
-      await SecureStore.setItemAsync('admin_user', JSON.stringify(user));
-      set({ user });
-    } catch {
-      await SecureStore.deleteItemAsync('admin_token');
-      await SecureStore.deleteItemAsync('admin_user');
-      set({ user: null, token: null });
+      if (user) {
+        await SecureStore.setItemAsync('admin_user', JSON.stringify(user));
+        set({ user });
+      }
+    } catch (err: any) {
+      // ONLY clear session if server explicitly returns 401 Unauthorized (token invalid/expired)
+      if (err.response?.status === 401) {
+        console.warn('Server returned 401 Unauthorized. Clearing expired session.');
+        try {
+          await SecureStore.deleteItemAsync('admin_token');
+          await SecureStore.deleteItemAsync('admin_user');
+        } catch {}
+        set({ user: null, token: null });
+      } else {
+        // Network timeout, slow internet, or offline: retain local authenticated session!
+        console.log('Background session validation notice: retaining offline session.');
+      }
     }
   },
 }));
