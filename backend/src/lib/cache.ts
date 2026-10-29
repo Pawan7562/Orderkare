@@ -11,6 +11,8 @@ class CacheManager {
   private isRedisReady = false;
   private maxMemoryEntries = 5000;
 
+  private inFlightPromises = new Map<string, Promise<any>>();
+
   constructor() {
     this.initRedis();
     // Background garbage collection for in-memory cache every 30 seconds
@@ -68,8 +70,9 @@ class CacheManager {
   }
 
   /**
-   * High-throughput Get-Or-Set cache pattern.
-   * Checks RAM first (<1ms), then Redis (<3ms), then executes DB fetcher and populates both.
+   * High-throughput Get-Or-Set cache pattern with Single-Flight Coalescing.
+   * Checks RAM first (<1ms), then Redis (<3ms), then executes DB fetcher with
+   * single-flight deduplication to eliminate cache stampedes / thundering herd.
    */
   async getOrSet<T>(key: string, ttlSeconds: number, fetcher: () => Promise<T>): Promise<T> {
     const now = Date.now();
@@ -99,25 +102,30 @@ class CacheManager {
       }
     }
 
-    // 3. Cache Miss: Execute DB fetcher
-    const freshData = await fetcher();
+    // 3. Single-Flight Request Coalescing (Prevents Thundering Herd / Stampede)
+    let inFlight = this.inFlightPromises.get(key);
+    if (!inFlight) {
+      inFlight = (async () => {
+        try {
+          const freshData = await fetcher();
+          const expireTime = Date.now() + ttlSeconds * 1000;
+          this.memoryCache.set(key, {
+            value: freshData,
+            expiresAt: expireTime,
+          });
 
-    // 4. Populate L1 RAM
-    this.memoryCache.set(key, {
-      value: freshData,
-      expiresAt: now + ttlSeconds * 1000,
-    });
-
-    // 5. Populate L2 Redis asynchronously
-    if (this.isRedisReady && this.redisClient) {
-      try {
-        await this.redisClient.setEx(key, ttlSeconds, JSON.stringify(freshData));
-      } catch {
-        // Ignore background Redis set errors
-      }
+          if (this.isRedisReady && this.redisClient) {
+            this.redisClient.setEx(key, ttlSeconds, JSON.stringify(freshData)).catch(() => {});
+          }
+          return freshData;
+        } finally {
+          this.inFlightPromises.delete(key);
+        }
+      })();
+      this.inFlightPromises.set(key, inFlight);
     }
 
-    return freshData;
+    return await inFlight;
   }
 
   /**

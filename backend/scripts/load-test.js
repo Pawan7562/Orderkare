@@ -128,9 +128,13 @@ async function startLoadTest() {
   console.log('🏁 Starting OrderKare High-Performance Concurrency Test...');
   console.log(`🎯 Target: http://${TARGET_HOST}:${TARGET_PORT}`);
 
-  // Warmup cache
-  await sendRequest('/api/health');
-  await sendRequest(`/api/menu/${TEST_SLUG}`);
+  // Warmup cache and connection pool
+  console.log('🔄 Warming up cache & connection pools...');
+  const warmHealth = await sendRequest('/api/health');
+  console.log(`   ✓ Health warmup: HTTP ${warmHealth.statusCode} (${warmHealth.latencyMs.toFixed(1)}ms)`);
+  const warmMenu = await sendRequest(`/api/menu/${TEST_SLUG}`);
+  console.log(`   ✓ Menu warmup:   HTTP ${warmMenu.statusCode} (${warmMenu.latencyMs.toFixed(1)}ms)`);
+  await new Promise(r => setTimeout(r, 300));
 
   // Test 1: API Health check (Pure I/O throughput)
   await runBenchmark('API Gateway Health & Heartbeat', '/api/health');
