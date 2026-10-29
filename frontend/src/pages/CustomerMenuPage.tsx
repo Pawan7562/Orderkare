@@ -2079,7 +2079,7 @@ useEffect(() => {
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Table Number *
+                      Table Number/Table Number*
                     </label>
                     <input
                       type="text"
