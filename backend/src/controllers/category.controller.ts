@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { prisma } from '../lib/prisma';
 import { query } from '../lib/db';
+import cache from '../lib/cache';
 
 export const getCategories = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -45,6 +46,10 @@ export const createCategory = async (req: AuthRequest, res: Response): Promise<v
       const category = await prisma.category.create({
         data: { name, restaurantId, orderIndex: (maxIndex?.orderIndex ?? -1) + 1 },
       });
+
+      // Invalidate public menu cache
+      cache.delByPrefix('menu:public:').catch(() => {});
+
       res.status(201).json({ category });
     } catch (dbError) {
       res.status(503).json({ message: 'Database temporarily unavailable' });
@@ -69,6 +74,10 @@ export const updateCategory = async (req: AuthRequest, res: Response): Promise<v
         where: { id },
         data: { ...(name !== undefined && { name }), ...(isActive !== undefined && { isActive }), ...(orderIndex !== undefined && { orderIndex }) },
       });
+
+      // Invalidate public menu cache
+      cache.delByPrefix('menu:public:').catch(() => {});
+
       res.json({ category: updated });
     } catch (dbError) {
       res.status(503).json({ message: 'Database temporarily unavailable' });
@@ -90,6 +99,10 @@ export const deleteCategory = async (req: AuthRequest, res: Response): Promise<v
 
       await prisma.foodItem.deleteMany({ where: { categoryId: id, restaurantId } });
       await prisma.category.delete({ where: { id } });
+
+      // Invalidate public menu cache
+      cache.delByPrefix('menu:public:').catch(() => {});
+
       res.json({ message: 'Category deleted' });
     } catch (dbError) {
       res.status(503).json({ message: 'Database temporarily unavailable' });
@@ -103,15 +116,35 @@ export const deleteCategory = async (req: AuthRequest, res: Response): Promise<v
 export const getPublicCategories = async (req: Request, res: Response): Promise<void> => {
   try {
     const slug = req.params.slug as string;
-    try {
-      const restaurant = await prisma.restaurant.findUnique({ where: { slug } });
-      if (!restaurant || !restaurant.isActive) { res.status(404).json({ message: 'Restaurant not found' }); return; }
+    const cacheKey = `menu:public:categories:${slug.toLowerCase()}`;
 
-      const categories = await prisma.category.findMany({
-        where: { restaurantId: restaurant.id, isActive: true },
-        orderBy: { orderIndex: 'asc' },
+    try {
+      const data = await cache.getOrSet(cacheKey, 60, async () => {
+        const restaurant = await prisma.restaurant.findUnique({
+          where: { slug },
+          select: { id: true, name: true, logoUrl: true, bannerUrl: true, isActive: true },
+        });
+        if (!restaurant || !restaurant.isActive) return null;
+
+        const categories = await prisma.category.findMany({
+          where: { restaurantId: restaurant.id, isActive: true },
+          orderBy: { orderIndex: 'asc' },
+        });
+
+        return {
+          categories,
+          restaurant: {
+            id: restaurant.id,
+            name: restaurant.name,
+            logoUrl: restaurant.logoUrl,
+            bannerUrl: restaurant.bannerUrl,
+          },
+        };
       });
-      res.json({ categories, restaurant: { id: restaurant.id, name: restaurant.name, logoUrl: restaurant.logoUrl, bannerUrl: restaurant.bannerUrl } });
+
+      if (!data) { res.status(404).json({ message: 'Restaurant not found' }); return; }
+      res.setHeader('Cache-Control', 'public, max-age=15, stale-while-revalidate=30');
+      res.json(data);
     } catch (dbError) {
       res.status(503).json({ message: 'Database temporarily unavailable' });
     }

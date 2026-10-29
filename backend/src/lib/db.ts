@@ -35,10 +35,10 @@ types.setTypeParser(1114, (value: string) => new Date(value.replace(' ', 'T') + 
 export const db = new Pool({
   connectionString,
   ssl: { rejectUnauthorized: false },
-  max: Number(process.env.DB_POOL_MAX || 10),
-  min: 1,                       // Keep at least 1 connection alive at all times
+  max: Number(process.env.DB_POOL_MAX || 50),
+  min: Number(process.env.DB_POOL_MIN || 2),                       // Keep at least 2 connections alive at all times
   idleTimeoutMillis: 25000,      // Neon disconnects idle clients after ~30s; purge at 25s
-  connectionTimeoutMillis: 12000,
+  connectionTimeoutMillis: 15000,
   statement_timeout: 15000,
   keepAlive: true,               // TCP keep-alive on the socket level
   keepAliveInitialDelayMillis: 10000,
