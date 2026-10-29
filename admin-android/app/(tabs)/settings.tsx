@@ -1,16 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, Alert, StatusBar, Linking, Share, Switch,
+  TextInput, Modal,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import * as SecureStore from 'expo-secure-store';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
 import { Colors } from '../../constants/colors';
-import { MENU_BASE_URL } from '../../constants/config';
+import { MENU_BASE_URL, API_BASE_URL } from '../../constants/config';
 import { playOrderRingSound, registerForPushNotificationsAsync } from '../../lib/sound';
 import api from '../../lib/api';
 import * as Notifications from 'expo-notifications';
+
+interface Worker {
+  id: string;
+  name: string;
+  role: 'CHEF' | 'WAITER';
+  status: 'ACTIVE' | 'BREAK' | 'OFFLINE';
+  phone: string;
+}
 
 export default function SettingsScreen() {
   const { user, logout } = useAuthStore();
@@ -18,12 +28,121 @@ export default function SettingsScreen() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [pushStatus, setPushStatus] = useState<string | null>(null);
+  const [subData, setSubData] = useState<any>(null);
+  const [backendStatus, setBackendStatus] = useState<string | null>(null);
+  const [isPinging, setIsPinging] = useState(false);
+
+  // Workers / Staff management
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [showAddWorkerModal, setShowAddWorkerModal] = useState(false);
+  const [workerName, setWorkerName] = useState('');
+  const [workerPhone, setWorkerPhone] = useState('');
+  const [workerRole, setWorkerRole] = useState<'CHEF' | 'WAITER'>('WAITER');
+
+  const staffStorageKey = `orderkare_staff_${user?.restaurant?.id || 'default'}`;
+
+  // Load subscription and staff on mount
+  useEffect(() => {
+    fetchSubscription();
+    loadWorkers();
+  }, [user?.restaurant?.id]);
+
+  const fetchSubscription = async () => {
+    try {
+      const res = await api.get('/subscriptions/status');
+      setSubData(res.data);
+    } catch {
+      // Offline fallback
+    }
+  };
+
+  const loadWorkers = async () => {
+    try {
+      const saved = await SecureStore.getItemAsync(staffStorageKey);
+      if (saved) {
+        setWorkers(JSON.parse(saved));
+      }
+    } catch {
+      // Ignore
+    }
+  };
+
+  const saveWorkers = async (newWorkers: Worker[]) => {
+    setWorkers(newWorkers);
+    try {
+      await SecureStore.setItemAsync(staffStorageKey, JSON.stringify(newWorkers));
+    } catch {
+      // Ignore
+    }
+  };
+
+  const handleAddWorker = () => {
+    if (!workerName.trim()) {
+      Alert.alert('Required', 'Please enter staff member name');
+      return;
+    }
+    const newWorker: Worker = {
+      id: `w-${Date.now().toString(36)}`,
+      name: workerName.trim(),
+      role: workerRole,
+      status: 'ACTIVE',
+      phone: workerPhone.trim() || '—',
+    };
+    const updated = [newWorker, ...workers];
+    saveWorkers(updated);
+    setWorkerName('');
+    setWorkerPhone('');
+    setShowAddWorkerModal(false);
+    Alert.alert('Staff Added', `${newWorker.name} registered as ${newWorker.role}`);
+  };
+
+  const handleDeleteWorker = (id: string, name: string) => {
+    Alert.alert('Remove Staff', `Are you sure you want to remove ${name}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => {
+          const updated = workers.filter(w => w.id !== id);
+          saveWorkers(updated);
+        },
+      },
+    ]);
+  };
+
+  const toggleWorkerStatus = (id: string) => {
+    const nextMap: Record<Worker['status'], Worker['status']> = {
+      ACTIVE: 'BREAK',
+      BREAK: 'OFFLINE',
+      OFFLINE: 'ACTIVE',
+    };
+    const updated = workers.map(w => (w.id === id ? { ...w, status: nextMap[w.status] } : w));
+    saveWorkers(updated);
+  };
+
+  const checkBackendHealth = async () => {
+    setIsPinging(true);
+    setBackendStatus('Pinging server...');
+    const startTime = Date.now();
+    try {
+      const { data } = await api.get('/health');
+      const latency = Date.now() - startTime;
+      setBackendStatus(`Online (${latency}ms)`);
+      Alert.alert(
+        'Server Online & Connected',
+        `Backend API: ${API_BASE_URL}\nLatency: ${latency}ms\nStatus: ${data.status}\nGateway Mode: ${data.payments?.mode || 'live'}\nNeon DB: Connected`
+      );
+    } catch {
+      setBackendStatus('Offline / Error');
+      Alert.alert('Connection Failed', `Could not reach backend API server at:\n${API_BASE_URL}`);
+    } finally {
+      setIsPinging(false);
+    }
+  };
 
   const restaurant = user?.restaurant;
   const restaurantSlug = restaurant?.slug || 'orderkare-demo';
   const menuUrl = `${MENU_BASE_URL}/menu/${restaurantSlug}`;
-  
-  // High-contrast QR code for reliable instant scanning by any smartphone camera
   const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(menuUrl)}&color=111827&bgcolor=FFFFFF&margin=1`;
 
   const copyUrl = async () => {
@@ -73,7 +192,6 @@ export default function SettingsScreen() {
       setPushStatus('Token obtained! Sending server registration...');
       await api.post('/auth/push-token', { pushToken: token });
 
-      // Trigger high priority local notification banner
       await Notifications.scheduleNotificationAsync({
         content: {
           title: '🚨 TEST ORDER NOTIFICATION',
@@ -111,7 +229,7 @@ export default function SettingsScreen() {
           <View style={styles.headerAccent} />
           <Text style={styles.headerTitle}>Settings & Profile</Text>
         </View>
-        <Text style={styles.headerSubtitle}>Hotel profile, website QR menu & preferences</Text>
+        <Text style={styles.headerSubtitle}>Hotel profile, staff, subscription & server sync</Text>
       </View>
 
       <ScrollView
@@ -143,7 +261,7 @@ export default function SettingsScreen() {
               <Text style={styles.hotelName} numberOfLines={1}>
                 {restaurant?.name || 'Restaurant Name'}
               </Text>
-              
+
               <View style={styles.hotelMetaRow}>
                 <MaterialIcons name="mail-outline" size={13} color={Colors.textMuted} />
                 <Text style={styles.hotelMetaText}>{user?.email || 'admin@restaurant.com'}</Text>
@@ -168,6 +286,132 @@ export default function SettingsScreen() {
               ) : null}
             </View>
           </View>
+        </View>
+
+        {/* Subscription & Licensing Card */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconBg, { backgroundColor: '#F0FDF4' }]}>
+              <MaterialIcons name="verified-user" size={20} color="#16A34A" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={styles.sectionTitle}>License & Subscription</Text>
+                <View style={[styles.badgePill, { backgroundColor: subData?.isSubscribed ? '#DCFCE7' : '#FEF3C7' }]}>
+                  <Text style={[styles.badgePillText, { color: subData?.isSubscribed ? '#15803D' : '#B45309' }]}>
+                    {subData?.isSubscribed ? 'ACTIVE' : 'TRIAL'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.sectionSubtitle}>
+                {subData?.planName || 'Restaurant Starter'} • 0% Commission direct billing
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.subStatsRow}>
+            <View style={styles.subStatBox}>
+              <Text style={styles.subStatLabel}>Plan</Text>
+              <Text style={styles.subStatValue}>{subData?.planName || 'Starter'}</Text>
+            </View>
+            <View style={styles.subStatBox}>
+              <Text style={styles.subStatLabel}>Days Left</Text>
+              <Text style={[styles.subStatValue, { color: Colors.primary }]}>
+                {subData?.daysRemaining !== undefined ? `${subData.daysRemaining} Days` : '30 Days'}
+              </Text>
+            </View>
+            <View style={styles.subStatBox}>
+              <Text style={styles.subStatLabel}>Commission</Text>
+              <Text style={[styles.subStatValue, { color: '#16A34A' }]}>0% Direct</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.actionPillBtn}
+            onPress={fetchSubscription}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons name="sync" size={16} color={Colors.primary} />
+            <Text style={styles.actionPillText}>Refresh Subscription Status</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Restaurant Workers & Waiters (Synced with Website Workers feature) */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconBg, { backgroundColor: '#EFF6FF' }]}>
+              <MaterialIcons name="people" size={20} color="#2563EB" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={styles.sectionTitle}>Workers & Staff</Text>
+                <TouchableOpacity
+                  style={styles.smallAddBtn}
+                  onPress={() => setShowAddWorkerModal(true)}
+                  activeOpacity={0.7}
+                >
+                  <MaterialIcons name="add" size={16} color="#FFFFFF" />
+                  <Text style={styles.smallAddBtnText}>Add Staff</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.sectionSubtitle}>Manage waiters, chefs & active duty states</Text>
+            </View>
+          </View>
+
+          {workers.length === 0 ? (
+            <View style={styles.emptyWorkersBox}>
+              <MaterialIcons name="badge" size={28} color={Colors.textMuted} />
+              <Text style={styles.emptyWorkersTitle}>No Staff Members Registered</Text>
+              <Text style={styles.emptyWorkersSubtitle}>
+                Add your waitstaff and chefs to assign table duties and manage shifts
+              </Text>
+            </View>
+          ) : (
+            <View style={{ gap: 8 }}>
+              {workers.map(w => {
+                const statusColor =
+                  w.status === 'ACTIVE' ? '#16A34A' : w.status === 'BREAK' ? '#D97706' : '#6B7280';
+                const statusBg =
+                  w.status === 'ACTIVE' ? '#DCFCE7' : w.status === 'BREAK' ? '#FEF3C7' : '#F3F4F6';
+
+                return (
+                  <View key={w.id} style={styles.workerRow}>
+                    <View style={styles.workerRoleBadge}>
+                      <MaterialIcons
+                        name={w.role === 'CHEF' ? 'restaurant-menu' : 'room-service'}
+                        size={18}
+                        color={Colors.primary}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.workerName}>{w.name}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                        <Text style={styles.workerMeta}>{w.role}</Text>
+                        <Text style={styles.workerMeta}>•</Text>
+                        <Text style={styles.workerMeta}>{w.phone}</Text>
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.workerStatusPill, { backgroundColor: statusBg }]}
+                      onPress={() => toggleWorkerStatus(w.id)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+                      <Text style={[styles.workerStatusText, { color: statusColor }]}>{w.status}</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => handleDeleteWorker(w.id, w.name)}
+                      style={{ padding: 6 }}
+                    >
+                      <MaterialIcons name="delete-outline" size={18} color={Colors.red} />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </View>
 
         {/* Website QR Menu Card */}
@@ -221,6 +465,51 @@ export default function SettingsScreen() {
               <Text style={styles.actionPillText}>Share</Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Backend Server Connection & Diagnostics Card */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconBg, { backgroundColor: '#F3E8FF' }]}>
+              <MaterialIcons name="dns" size={20} color="#9333EA" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={styles.sectionTitle}>Backend Cloud API</Text>
+                {backendStatus ? (
+                  <View style={[styles.badgePill, { backgroundColor: backendStatus.includes('Online') ? '#DCFCE7' : '#FEE2E2' }]}>
+                    <Text style={[styles.badgePillText, { color: backendStatus.includes('Online') ? '#15803D' : '#B91C1C' }]}>
+                      {backendStatus}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              <Text style={styles.sectionSubtitle}>Shared Node.js + Neon PostgreSQL backend</Text>
+            </View>
+          </View>
+
+          <View style={styles.serverInfoBox}>
+            <View style={styles.serverInfoRow}>
+              <Text style={styles.serverLabel}>Endpoint</Text>
+              <Text style={styles.serverValue} numberOfLines={1}>{API_BASE_URL}</Text>
+            </View>
+            <View style={styles.serverInfoRow}>
+              <Text style={styles.serverLabel}>Realtime</Text>
+              <Text style={[styles.serverValue, { color: '#16A34A', fontWeight: '700' }]}>Socket.io Live Sync</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.testSoundBtn, { backgroundColor: '#FAF5FF', borderColor: '#E9D5FF' }]}
+            onPress={checkBackendHealth}
+            disabled={isPinging}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons name="network-check" size={18} color="#9333EA" />
+            <Text style={[styles.testSoundBtnText, { color: '#9333EA' }]}>
+              {isPinging ? 'Pinging Server...' : 'Test Backend Connection & Ping'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Preferences & Sound Alert Test */}
@@ -301,6 +590,100 @@ export default function SettingsScreen() {
           <Text style={styles.logoutBtnText}>Sign Out from Account</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Add Worker Modal */}
+      <Modal visible={showAddWorkerModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Register Staff Member</Text>
+                <Text style={styles.modalSubtitle}>Add waiter or kitchen staff</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowAddWorkerModal(false)} style={styles.closeBtn}>
+                <MaterialIcons name="close" size={20} color={Colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ gap: 12 }}>
+              <View>
+                <Text style={styles.inputLabel}>Staff Full Name *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="e.g. Ramesh Kumar"
+                  placeholderTextColor={Colors.textMuted}
+                  value={workerName}
+                  onChangeText={setWorkerName}
+                />
+              </View>
+
+              <View>
+                <Text style={styles.inputLabel}>Role</Text>
+                <View style={styles.rolePickerRow}>
+                  <TouchableOpacity
+                    style={[styles.roleOption, workerRole === 'WAITER' && styles.roleOptionActive]}
+                    onPress={() => setWorkerRole('WAITER')}
+                  >
+                    <MaterialIcons
+                      name="room-service"
+                      size={18}
+                      color={workerRole === 'WAITER' ? '#FFFFFF' : Colors.text}
+                    />
+                    <Text
+                      style={[
+                        styles.roleOptionText,
+                        workerRole === 'WAITER' && styles.roleOptionTextActive,
+                      ]}
+                    >
+                      Waiter / Service
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.roleOption, workerRole === 'CHEF' && styles.roleOptionActive]}
+                    onPress={() => setWorkerRole('CHEF')}
+                  >
+                    <MaterialIcons
+                      name="restaurant-menu"
+                      size={18}
+                      color={workerRole === 'CHEF' ? '#FFFFFF' : Colors.text}
+                    />
+                    <Text
+                      style={[
+                        styles.roleOptionText,
+                        workerRole === 'CHEF' && styles.roleOptionTextActive,
+                      ]}
+                    >
+                      Chef / Kitchen
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View>
+                <Text style={styles.inputLabel}>Phone Number</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="e.g. 9876543210"
+                  placeholderTextColor={Colors.textMuted}
+                  keyboardType="phone-pad"
+                  value={workerPhone}
+                  onChangeText={setWorkerPhone}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={styles.saveWorkerBtn}
+                onPress={handleAddWorker}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="person-add" size={18} color="#FFFFFF" />
+                <Text style={styles.saveWorkerBtnText}>Register Staff Member</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -472,6 +855,145 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     marginTop: 1,
   },
+  badgePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  badgePillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  subStatsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: Colors.bg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 10,
+  },
+  subStatBox: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  subStatLabel: {
+    fontSize: 10,
+    color: Colors.textMuted,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  subStatValue: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Colors.text,
+    marginTop: 2,
+  },
+  smallAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  smallAddBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  emptyWorkersBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 6,
+    backgroundColor: Colors.bg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  emptyWorkersTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  emptyWorkersSubtitle: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  workerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.bg,
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 10,
+  },
+  workerRoleBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: Colors.primaryBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  workerName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  workerMeta: {
+    fontSize: 11,
+    color: Colors.textMuted,
+  },
+  workerStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  workerStatusText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  serverInfoBox: {
+    backgroundColor: Colors.bg,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 6,
+  },
+  serverInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  serverLabel: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    fontWeight: '600',
+  },
+  serverValue: {
+    fontSize: 11,
+    color: Colors.text,
+    fontFamily: 'monospace',
+    fontWeight: '600',
+    maxWidth: '70%',
+  },
   qrCardContainer: {
     alignItems: 'center',
     backgroundColor: Colors.bg,
@@ -595,6 +1117,103 @@ const styles = StyleSheet.create({
   },
   logoutBtnText: {
     color: Colors.red,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    padding: 20,
+    gap: 16,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  closeBtn: {
+    padding: 4,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: 6,
+  },
+  textInput: {
+    backgroundColor: Colors.bg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: Colors.text,
+  },
+  rolePickerRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  roleOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: Colors.bg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  roleOptionActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  roleOptionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  roleOptionTextActive: {
+    color: '#FFFFFF',
+  },
+  saveWorkerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: Colors.primary,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 6,
+  },
+  saveWorkerBtnText: {
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800',
   },

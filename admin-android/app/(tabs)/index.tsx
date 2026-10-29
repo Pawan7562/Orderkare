@@ -64,14 +64,23 @@ export default function DashboardScreen() {
   const [selectedColumn, setSelectedColumn] = useState<string>('ALL');
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [incomingOrder, setIncomingOrder] = useState<Order | null>(null);
+  const [subInfo, setSubInfo] = useState<{
+    isSubscribed: boolean;
+    status: string;
+    daysRemaining: number;
+    planName: string;
+    isFirstTime?: boolean;
+  } | null>(null);
+  const [staffAlert, setStaffAlert] = useState<{ tableNumber: string; type: string } | null>(null);
 
   const restaurantId = user?.restaurant?.id || (user as any)?.restaurantId;
 
   const fetchDashboardData = useCallback(async () => {
     try {
-      const [ordersRes, statsRes] = await Promise.allSettled([
+      const [ordersRes, statsRes, subRes] = await Promise.allSettled([
         api.get('/orders'),
         api.get('/restaurants/dashboard/stats'),
+        api.get('/subscriptions/status'),
       ]);
 
       if (ordersRes.status === 'fulfilled') {
@@ -79,6 +88,10 @@ export default function DashboardScreen() {
         if (Array.isArray(fetchedOrders)) {
           setOrders(fetchedOrders);
         }
+      }
+
+      if (subRes.status === 'fulfilled' && subRes.value.data) {
+        setSubInfo(subRes.value.data);
       }
 
       if (statsRes.status === 'fulfilled') {
@@ -126,11 +139,20 @@ export default function DashboardScreen() {
         setOrders(prev => prev.map(o => ((o.id || o._id) === data.orderId ? { ...o, status: data.status } : o)));
       };
 
+      const handleStaffCall = (data: any) => {
+        if (!data) return;
+        if (!restaurantId || data.restaurantId === restaurantId) {
+          setStaffAlert({ tableNumber: String(data.tableNumber || ''), type: data.type || 'WAITER' });
+          playOrderRingSound(`Table #${data.tableNumber}: ${data.type === 'BILL' ? 'Bill Requested' : 'Waiter Called'}`).catch(() => {});
+        }
+      };
+
       socket.on('connect', joinRestaurant);
       socket.on('disconnect', handleDisconnect);
       socket.on('connect_error', handleDisconnect);
       socket.on('new_order', handleNewOrder);
       socket.on('order_updated', handleOrderUpdated);
+      socket.on('staff_call', handleStaffCall);
       if (socket.connected) joinRestaurant();
 
       return () => {
@@ -139,6 +161,7 @@ export default function DashboardScreen() {
         socket.off('connect_error', handleDisconnect);
         socket.off('new_order', handleNewOrder);
         socket.off('order_updated', handleOrderUpdated);
+        socket.off('staff_call', handleStaffCall);
       };
     }
   }, [token, restaurantId]);
@@ -234,6 +257,49 @@ export default function DashboardScreen() {
             <Text style={styles.dateBadgeText}>{new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</Text>
           </View>
         </View>
+
+        {/* Staff Call Alert Banner */}
+        {staffAlert && (
+          <View style={styles.staffAlertBanner}>
+            <View style={styles.staffAlertLeft}>
+              <MaterialIcons name={staffAlert.type === 'BILL' ? 'receipt' : 'pan-tool'} size={18} color="#FFFFFF" />
+              <Text style={styles.staffAlertText}>
+                Table #{staffAlert.tableNumber}: {staffAlert.type === 'BILL' ? 'Bill Requested' : 'Calling Waiter'}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setStaffAlert(null)} style={styles.staffAlertDismiss}>
+              <Text style={styles.staffAlertDismissText}>Dismiss</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Subscription License Status Banner */}
+        {subInfo && (
+          <View style={[
+            styles.subBanner,
+            subInfo.status === 'EXPIRED' ? styles.subBannerExpired : styles.subBannerActive
+          ]}>
+            <View style={styles.subBannerLeft}>
+              <MaterialIcons
+                name={subInfo.status === 'EXPIRED' ? 'lock' : 'verified'}
+                size={18}
+                color={subInfo.status === 'EXPIRED' ? Colors.red : Colors.green}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.subBannerTitle}>
+                  {subInfo.status === 'EXPIRED'
+                    ? 'Subscription Expired • Orders Locked'
+                    : `${subInfo.planName || 'Digital'} Pass • ${subInfo.daysRemaining || 0} Days Remaining`}
+                </Text>
+                <Text style={styles.subBannerSub}>
+                  {subInfo.status === 'EXPIRED'
+                    ? 'Renew on web portal to unlock customer digital menu'
+                    : 'Active Universal QR License • 0% Platform Commission'}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* KPI Stat Cards */}
         <View style={styles.statsGrid}>
@@ -1050,5 +1116,64 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800',
+  },
+  staffAlertBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+  },
+  staffAlertLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  staffAlertText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  staffAlertDismiss: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  staffAlertDismissText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  subBanner: {
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  subBannerActive: {
+    backgroundColor: Colors.greenBg,
+    borderColor: Colors.greenBorder,
+  },
+  subBannerExpired: {
+    backgroundColor: Colors.redBg,
+    borderColor: Colors.redBorder,
+  },
+  subBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  subBannerTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  subBannerSub: {
+    fontSize: 10,
+    color: Colors.textMuted,
+    marginTop: 1,
   },
 });

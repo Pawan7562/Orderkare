@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   TextInput, Switch, Alert, Modal, ScrollView,
-  RefreshControl, StatusBar,
+  RefreshControl, StatusBar, Image,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
@@ -42,6 +42,7 @@ export default function MenuScreen() {
     price: '',
     isVeg: true,
     categoryId: '',
+    imageUrl: '',
   });
 
   const [catModalVisible, setCatModalVisible] = useState(false);
@@ -104,6 +105,7 @@ export default function MenuScreen() {
         price: String(food.price),
         isVeg: food.isVeg,
         categoryId: food.categoryId || '',
+        imageUrl: food.imageUrl || '',
       });
     } else {
       setEditingFood(null);
@@ -113,6 +115,7 @@ export default function MenuScreen() {
         price: '',
         isVeg: true,
         categoryId: activeCat !== 'ALL' ? activeCat : (categories[0]?.id || categories[0]?._id || ''),
+        imageUrl: '',
       });
     }
     setFoodModalVisible(true);
@@ -125,6 +128,7 @@ export default function MenuScreen() {
     }
 
     const priceNum = parseFloat(foodForm.price) || 0;
+    const img = foodForm.imageUrl.trim() || undefined;
 
     if (editingFood) {
       const foodId = editingFood.id || editingFood._id || '';
@@ -135,10 +139,11 @@ export default function MenuScreen() {
           price: priceNum,
           isVeg: foodForm.isVeg,
           categoryId: foodForm.categoryId || undefined,
+          imageUrl: img,
         });
         setFoods(prev => prev.map(f =>
           (f.id || f._id) === foodId
-            ? { ...f, name: foodForm.name.trim(), description: foodForm.description.trim(), price: priceNum, isVeg: foodForm.isVeg, categoryId: foodForm.categoryId }
+            ? { ...f, name: foodForm.name.trim(), description: foodForm.description.trim(), price: priceNum, isVeg: foodForm.isVeg, categoryId: foodForm.categoryId, imageUrl: img }
             : f
         ));
       } catch {
@@ -154,6 +159,7 @@ export default function MenuScreen() {
         isVeg: foodForm.isVeg,
         isAvailable: true,
         categoryId: foodForm.categoryId || (categories[0]?.id || categories[0]?._id || ''),
+        imageUrl: img,
       };
       try {
         const { data } = await api.post('/foods', {
@@ -162,6 +168,7 @@ export default function MenuScreen() {
           price: priceNum,
           isVeg: foodForm.isVeg,
           categoryId: foodForm.categoryId || undefined,
+          imageUrl: img,
         });
         const savedFood = data.data || data.food || data;
         setFoods(prev => [savedFood?.name ? savedFood : newFood, ...prev]);
@@ -171,6 +178,31 @@ export default function MenuScreen() {
       }
     }
     setFoodModalVisible(false);
+  };
+
+  const deleteCategory = (cat: Category) => {
+    const catId = cat.id || cat._id || '';
+    Alert.alert(
+      'Delete Category',
+      `Are you sure you want to delete category "${cat.name}"? Dishes in this category will remain available.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.delete(`/categories/${catId}`);
+              setCategories(prev => prev.filter(c => (c.id || c._id) !== catId));
+              if (activeCat === catId) setActiveCat('ALL');
+              Alert.alert('Deleted', `Category "${cat.name}" removed.`);
+            } catch (err: any) {
+              Alert.alert('Error', err?.response?.data?.message || 'Failed to delete category.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const deleteFood = (food: FoodItem) => {
@@ -303,11 +335,21 @@ export default function MenuScreen() {
                 key={catId}
                 style={[styles.catTab, isActive && styles.activeCatTab]}
                 onPress={() => setActiveCat(catId)}
+                onLongPress={() => deleteCategory(cat)}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.catTabText, isActive && styles.activeCatTabText]}>
                   {cat.name} {count > 0 ? `(${count})` : ''}
                 </Text>
+                {isActive && (
+                  <TouchableOpacity
+                    onPress={() => deleteCategory(cat)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={{ marginLeft: 4 }}
+                  >
+                    <MaterialIcons name="close" size={14} color={Colors.primary} />
+                  </TouchableOpacity>
+                )}
               </TouchableOpacity>
             );
           })}
@@ -346,6 +388,13 @@ export default function MenuScreen() {
           const matchedCategory = categories.find(c => (c.id || c._id) === item.categoryId);
           return (
             <View style={[styles.dishCard, !item.isAvailable && styles.dishCardUnavailable]}>
+              {item.imageUrl ? (
+                <Image
+                  source={{ uri: item.imageUrl }}
+                  style={{ width: 56, height: 56, borderRadius: 10, margin: 12, marginRight: 0, backgroundColor: Colors.border }}
+                  resizeMode="cover"
+                />
+              ) : null}
               <View style={styles.dishMain}>
                 <View style={styles.dishHeaderRow}>
                   {/* Veg / Non-Veg Indicator */}
@@ -485,6 +534,18 @@ export default function MenuScreen() {
                   onChangeText={v => setFoodForm(prev => ({ ...prev, description: v }))}
                   multiline
                   numberOfLines={3}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Dish Image URL (Optional)</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="https://images.unsplash.com/photo-..."
+                  placeholderTextColor={Colors.textDim}
+                  value={foodForm.imageUrl}
+                  onChangeText={v => setFoodForm(prev => ({ ...prev, imageUrl: v }))}
+                  autoCapitalize="none"
                 />
               </View>
 

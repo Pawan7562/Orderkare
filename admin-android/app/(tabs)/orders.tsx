@@ -1,27 +1,35 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  TextInput, RefreshControl, Alert, StatusBar,
+  TextInput, RefreshControl, Alert, StatusBar, Modal, ScrollView,
+  Share,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import api from '../../lib/api';
-
 import { useAuthStore } from '../../store/authStore';
 import { getSocket } from '../../lib/socket';
 import { playOrderRingSound } from '../../lib/sound';
 
-interface OrderItem {
+export interface OrderItem {
   id?: string;
   name?: string;
   quantity: number;
   price: number;
-  foodItem?: { name: string };
+  batch?: number;
+  foodItem?: { name: string; price?: number };
 }
 
-interface Order {
+export interface Order {
   id?: string;
   _id?: string;
+  billNo?: number | null;
+  billedAt?: string | null;
+  gstEnabled?: boolean | null;
+  serviceChargePct?: number | null;
+  gstAmount?: number | null;
+  serviceAmount?: number | null;
+  finalAmount?: number | null;
   orderNumber?: number | string;
   tableNumber: string | number;
   status: string;
@@ -31,13 +39,22 @@ interface Order {
   customerName?: string;
   phoneNumber?: string;
   notes?: string;
+  estimatedReadyAt?: string | null;
+}
+
+interface StaffCall {
+  id: string;
+  tableNumber: string;
+  type: 'WAITER' | 'BILL';
+  customerName?: string;
+  at: number;
 }
 
 const ALL_STATUSES = ['ALL', 'PENDING', 'ACCEPTED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED', 'REJECTED'];
 
 const STATUS_CONFIG: Record<string, { bg: string; text: string; border: string; icon: string; next: string | null; label: string; actionBg: string }> = {
   PENDING:   { bg: Colors.amberBg,  text: Colors.amber,   border: Colors.amberBorder,  icon: 'hourglass-empty', next: 'ACCEPTED',  label: 'Accept Order',    actionBg: Colors.primary },
-  ACCEPTED:  { bg: Colors.blueBg,   text: Colors.blue,    border: Colors.blueBorder,   icon: 'thumb-up',        next: 'PREPARING', label: 'Start Preparing', actionBg: Colors.blue },
+  ACCEPTED:  { bg: Colors.blueBg,   text: Colors.blue,    border: Colors.blueBorder,   icon: 'thumb-up',        next: 'PREPARING', label: 'Start Cooking',   actionBg: Colors.blue },
   PREPARING: { bg: Colors.purpleBg, text: Colors.purple,  border: Colors.purpleBorder, icon: 'restaurant',      next: 'READY',     label: 'Mark Ready',      actionBg: Colors.purple },
   READY:     { bg: Colors.greenBg,  text: Colors.green,   border: Colors.greenBorder,  icon: 'check-circle',    next: 'SERVED',    label: 'Mark Served',     actionBg: Colors.green },
   SERVED:    { bg: Colors.cyanBg,   text: Colors.cyan,    border: Colors.cyanBorder,   icon: 'room-service',    next: 'COMPLETED', label: 'Complete Order',  actionBg: Colors.cyan },
@@ -55,12 +72,26 @@ function getTimeAgo(dateStr: string) {
 
 export default function OrdersScreen() {
   const { token, user } = useAuthStore();
-  const restaurantId = user?.restaurant?.id || (user as any)?.restaurantId;
+  const restaurant = user?.restaurant;
+  const restaurantId = restaurant?.id || (user as any)?.restaurantId;
   const [orders, setOrders] = useState<Order[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [activeStatus, setActiveStatus] = useState('ALL');
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Staff calls (waiter / bill)
+  const [staffCalls, setStaffCalls] = useState<StaffCall[]>([]);
+
+  // Bill Receipt Modal State
+  const [billModalOrder, setBillModalOrder] = useState<Order | null>(null);
+  const [gstOn, setGstOn] = useState(true);
+  const [servicePct, setServicePct] = useState(0);
+  const [isFinalizingBill, setIsFinalizingBill] = useState(false);
+
+  // ETA Modal State
+  const [etaModalOrder, setEtaModalOrder] = useState<Order | null>(null);
+  const [isSettingEta, setIsSettingEta] = useState(false);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -86,20 +117,29 @@ export default function OrdersScreen() {
         setOrders(prev => [newOrder, ...prev.filter(o => (o.id || o._id) !== (newOrder.id || newOrder._id))]);
       };
 
-      const onGlobalOrder = (broadcastOrder: any) => {
-        if (!broadcastOrder) return;
-        if (!restaurantId || broadcastOrder.restaurantId === restaurantId) {
-          onNewOrder(broadcastOrder);
-        }
-      };
-
       const onOrderUpdated = (data: { orderId: string; status: string }) => {
         if (!data?.orderId) return;
         setOrders(prev => prev.map(o => ((o.id || o._id) === data.orderId ? { ...o, status: data.status } : o)));
       };
 
+      const onStaffCall = (call: any) => {
+        if (!call) return;
+        if (!restaurantId || call.restaurantId === restaurantId) {
+          playOrderRingSound(`Table #${call.tableNumber}: ${call.type === 'BILL' ? 'Bill Requested' : 'Waiter Called'}`);
+          const newCall: StaffCall = {
+            id: `call-${Date.now()}-${Math.random()}`,
+            tableNumber: String(call.tableNumber || ''),
+            type: call.type === 'BILL' ? 'BILL' : 'WAITER',
+            customerName: call.customerName,
+            at: Date.now(),
+          };
+          setStaffCalls(prev => [newCall, ...prev]);
+        }
+      };
+
       socket.on('new_order', onNewOrder);
       socket.on('order_updated', onOrderUpdated);
+      socket.on('staff_call', onStaffCall);
 
       const interval = setInterval(() => {
         fetchOrders();
@@ -109,6 +149,7 @@ export default function OrdersScreen() {
         clearInterval(interval);
         socket.off('new_order', onNewOrder);
         socket.off('order_updated', onOrderUpdated);
+        socket.off('staff_call', onStaffCall);
       };
     }
   }, [token, restaurantId, fetchOrders]);
@@ -133,6 +174,67 @@ export default function OrdersScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Reject', style: 'destructive', onPress: () => advanceOrder(orderId, 'REJECTED') },
     ]);
+  };
+
+  // Set Preparation ETA
+  const handleSetEta = async (minutes: number) => {
+    if (!etaModalOrder) return;
+    const orderId = etaModalOrder.id || etaModalOrder._id || '';
+    setIsSettingEta(true);
+    try {
+      await api.patch(`/orders/${orderId}/estimate`, { minutes });
+      const readyAt = new Date(Date.now() + minutes * 60000).toISOString();
+      setOrders(prev => prev.map(o => (o.id || o._id) === orderId ? { ...o, estimatedReadyAt: readyAt } : o));
+      setEtaModalOrder(null);
+      Alert.alert('ETA Updated', `Estimated preparation time set to ${minutes} minutes.`);
+    } catch {
+      Alert.alert('Failed', 'Could not update ETA time.');
+    } finally {
+      setIsSettingEta(false);
+    }
+  };
+
+  // Finalize & Settle Bill
+  const handleFinalizeBill = async () => {
+    if (!billModalOrder) return;
+    const orderId = billModalOrder.id || billModalOrder._id || '';
+    setIsFinalizingBill(true);
+    try {
+      const res = await api.patch(`/orders/${orderId}/bill`, {
+        gstOn,
+        servicePct,
+      });
+      const closed = res.data?.order || {};
+      const patch = {
+        status: 'COMPLETED',
+        billedAt: closed.billedAt || new Date().toISOString(),
+        gstEnabled: closed.gstEnabled,
+        serviceChargePct: closed.serviceChargePct,
+        gstAmount: closed.gstAmount,
+        serviceAmount: closed.serviceAmount,
+        finalAmount: closed.finalAmount,
+      };
+      setOrders(prev => prev.map(o => (o.id || o._id) === orderId ? { ...o, ...patch } : o));
+      setBillModalOrder(prev => prev ? { ...prev, ...patch } : null);
+      Alert.alert('Bill Finalized', 'The bill has been settled and the order is marked COMPLETED.');
+    } catch {
+      Alert.alert('Error', 'Could not finalize bill.');
+    } finally {
+      setIsFinalizingBill(false);
+    }
+  };
+
+  // Share bill summary
+  const shareBillReceipt = (order: Order) => {
+    const subtotal = order.totalAmount || 0;
+    const gst = gstOn ? subtotal * 0.05 : (order.gstAmount || 0);
+    const service = servicePct > 0 ? (subtotal * servicePct) / 100 : (order.serviceAmount || 0);
+    const grandTotal = order.finalAmount || (subtotal + gst + service);
+
+    let itemsText = (order.items || []).map(i => `${i.quantity}x ${i.foodItem?.name || i.name} - ₹${i.price * i.quantity}`).join('\n');
+    const msg = `🧾 ${restaurant?.name || 'OrderKare'} - Table #${order.tableNumber}\nBill #${order.billNo || order.orderNumber || '1'}\n\n${itemsText}\n\nSubtotal: ₹${subtotal}\nGST (5%): ₹${gst.toFixed(2)}\nTotal: ₹${grandTotal.toFixed(2)}\n\nThank you for dining with us!`;
+
+    Share.share({ message: msg, title: `Bill Table #${order.tableNumber}` });
   };
 
   const filteredOrders = orders.filter(o => {
@@ -173,6 +275,28 @@ export default function OrdersScreen() {
           <MaterialIcons name="refresh" size={20} color={Colors.primary} />
         </TouchableOpacity>
       </View>
+
+      {/* Staff Calls Attention Banner */}
+      {staffCalls.length > 0 && (
+        <View style={styles.staffCallsBanner}>
+          <View style={styles.staffCallLeft}>
+            <MaterialIcons
+              name={staffCalls[0].type === 'BILL' ? 'receipt' : 'notifications-active'}
+              size={18}
+              color="#FFFFFF"
+            />
+            <Text style={styles.staffCallText}>
+              Table #{staffCalls[0].tableNumber}: {staffCalls[0].type === 'BILL' ? 'Requested Bill' : 'Calling Waiter'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.staffCallDismiss}
+            onPress={() => setStaffCalls(prev => prev.slice(1))}
+          >
+            <Text style={styles.staffCallDismissText}>Dismiss</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Search Bar */}
       <View style={styles.searchWrapper}>
@@ -255,22 +379,45 @@ export default function OrdersScreen() {
           };
           const isExpanded = expandedId === orderId;
 
+          // Check if ETA has been set
+          let etaMinutesLeft: number | null = null;
+          if (item.estimatedReadyAt) {
+            const diff = new Date(item.estimatedReadyAt).getTime() - Date.now();
+            etaMinutesLeft = Math.max(0, Math.round(diff / 60000));
+          }
+
           return (
             <View style={styles.orderCard}>
               {/* Colored left accent line */}
               <View style={[styles.cardAccent, { backgroundColor: cfg.text }]} />
 
               <View style={styles.cardBody}>
-                {/* Top Row: Table badge + Status pill */}
+                {/* Top Row: Table badge + Bill button + Status pill */}
                 <View style={styles.cardTopRow}>
                   <View style={styles.tablePill}>
                     <MaterialIcons name="table-restaurant" size={14} color={Colors.primary} />
                     <Text style={styles.tablePillText}>Table #{item.tableNumber}</Text>
+                    {item.billNo ? (
+                      <Text style={styles.billNoText}>• Bill #{item.billNo}</Text>
+                    ) : null}
                   </View>
 
-                  <View style={[styles.statusTag, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
-                    <MaterialIcons name={cfg.icon as any} size={12} color={cfg.text} />
-                    <Text style={[styles.statusTagText, { color: cfg.text }]}>{statusKey}</Text>
+                  <View style={styles.cardTopRight}>
+                    {/* Bill Receipt Icon Button */}
+                    <TouchableOpacity
+                      style={styles.billIconBtn}
+                      onPress={() => setBillModalOrder(item)}
+                      activeOpacity={0.7}
+                    >
+                      <MaterialIcons name="receipt" size={14} color={Colors.primary} />
+                      <Text style={styles.billIconText}>Bill</Text>
+                    </TouchableOpacity>
+
+                    {/* Status Pill */}
+                    <View style={[styles.statusTag, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+                      <MaterialIcons name={cfg.icon as any} size={12} color={cfg.text} />
+                      <Text style={[styles.statusTagText, { color: cfg.text }]}>{statusKey}</Text>
+                    </View>
                   </View>
                 </View>
 
@@ -296,6 +443,25 @@ export default function OrdersScreen() {
                   </View>
                 </View>
 
+                {/* Preparation ETA Badge (if COOKING or ACCEPTED) */}
+                {(statusKey === 'ACCEPTED' || statusKey === 'PREPARING') && (
+                  <View style={styles.etaRow}>
+                    <TouchableOpacity
+                      style={styles.etaBtn}
+                      onPress={() => setEtaModalOrder(item)}
+                      activeOpacity={0.7}
+                    >
+                      <MaterialIcons name="timer" size={13} color={Colors.purple} />
+                      <Text style={styles.etaBtnText}>
+                        {etaMinutesLeft !== null
+                          ? `${etaMinutesLeft}m remaining`
+                          : 'Set Prep ETA'}
+                      </Text>
+                      <MaterialIcons name="arrow-drop-down" size={16} color={Colors.purple} />
+                    </TouchableOpacity>
+                  </View>
+                )}
+
                 {/* Notes (if any) */}
                 {item.notes ? (
                   <View style={styles.notesBox}>
@@ -315,12 +481,19 @@ export default function OrdersScreen() {
                   {(item.items || []).slice(0, isExpanded ? (item.items || []).length : 2).map((oi, idx) => {
                     const dishName = oi.foodItem?.name || oi.name || 'Menu Dish';
                     const isLast = idx === (isExpanded ? item.items.length - 1 : Math.min(item.items.length - 1, 1));
+                    const isAddon = (oi.batch || 1) > 1;
+
                     return (
                       <View key={idx} style={[styles.itemRow, !isLast && styles.itemRowDivider]}>
                         <View style={styles.itemQtyBadge}>
                           <Text style={styles.itemQty}>{oi.quantity}×</Text>
                         </View>
-                        <Text style={styles.itemName} numberOfLines={1}>{dishName}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.itemName} numberOfLines={1}>{dishName}</Text>
+                          {isAddon ? (
+                            <Text style={styles.batchBadgeText}>Round {oi.batch} add-on</Text>
+                          ) : null}
+                        </View>
                         <Text style={styles.itemPrice}>₹{(oi.price * oi.quantity).toLocaleString('en-IN')}</Text>
                       </View>
                     );
@@ -383,6 +556,155 @@ export default function OrdersScreen() {
           );
         }}
       />
+
+      {/* ── Bill Receipt & Settle Modal ── */}
+      <Modal
+        visible={!!billModalOrder}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setBillModalOrder(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.billSheet}>
+            {billModalOrder ? (
+              <>
+                <View style={styles.billSheetHeader}>
+                  <View>
+                    <Text style={styles.billSheetTitle}>Table #{billModalOrder.tableNumber} Bill</Text>
+                    <Text style={styles.billSheetSubtitle}>
+                      Bill #{billModalOrder.billNo || billModalOrder.orderNumber || '1'} • {billModalOrder.customerName || 'Guest'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setBillModalOrder(null)}>
+                    <MaterialIcons name="close" size={24} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+                  {/* Itemized List */}
+                  <View style={styles.billItemsBox}>
+                    {(billModalOrder.items || []).map((it, idx) => (
+                      <View key={idx} style={styles.billItemRow}>
+                        <Text style={styles.billItemQty}>{it.quantity}×</Text>
+                        <Text style={styles.billItemName} numberOfLines={1}>
+                          {it.foodItem?.name || it.name}
+                        </Text>
+                        <Text style={styles.billItemRate}>₹{it.price}</Text>
+                        <Text style={styles.billItemTotal}>₹{(it.price * it.quantity).toLocaleString('en-IN')}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Calculations */}
+                  {(() => {
+                    const subtotal = billModalOrder.totalAmount || 0;
+                    const gst = gstOn ? subtotal * 0.05 : (billModalOrder.gstAmount || 0);
+                    const service = servicePct > 0 ? (subtotal * servicePct) / 100 : (billModalOrder.serviceAmount || 0);
+                    const grandTotal = billModalOrder.finalAmount || (subtotal + gst + service);
+
+                    return (
+                      <View style={styles.billCalcBox}>
+                        <View style={styles.calcRow}>
+                          <Text style={styles.calcLabel}>Subtotal</Text>
+                          <Text style={styles.calcVal}>₹{subtotal.toLocaleString('en-IN')}</Text>
+                        </View>
+                        <View style={styles.calcRow}>
+                          <Text style={styles.calcLabel}>GST (5%)</Text>
+                          <Text style={styles.calcVal}>₹{gst.toFixed(2)}</Text>
+                        </View>
+                        {servicePct > 0 && (
+                          <View style={styles.calcRow}>
+                            <Text style={styles.calcLabel}>Service Charge ({servicePct}%)</Text>
+                            <Text style={styles.calcVal}>₹{service.toFixed(2)}</Text>
+                          </View>
+                        )}
+                        <View style={[styles.calcRow, styles.grandTotalRow]}>
+                          <Text style={styles.grandTotalLabel}>GRAND TOTAL</Text>
+                          <Text style={styles.grandTotalVal}>₹{grandTotal.toFixed(2)}</Text>
+                        </View>
+                      </View>
+                    );
+                  })()}
+
+                  {/* Bill Status */}
+                  <View style={styles.billStatusNotice}>
+                    <MaterialIcons
+                      name={billModalOrder.billedAt ? 'verified' : 'pending'}
+                      size={16}
+                      color={billModalOrder.billedAt ? Colors.green : Colors.amber}
+                    />
+                    <Text style={[styles.billStatusText, { color: billModalOrder.billedAt ? Colors.green : Colors.amber }]}>
+                      {billModalOrder.billedAt
+                        ? `Settled on ${new Date(billModalOrder.billedAt).toLocaleTimeString()}`
+                        : 'Open Bill (Not Yet Finalized)'}
+                    </Text>
+                  </View>
+                </ScrollView>
+
+                {/* Bill Sheet Action Buttons */}
+                <View style={styles.billSheetActions}>
+                  <TouchableOpacity
+                    style={styles.shareBillBtn}
+                    onPress={() => shareBillReceipt(billModalOrder)}
+                  >
+                    <MaterialIcons name="share" size={16} color={Colors.text} />
+                    <Text style={styles.shareBillBtnText}>Share</Text>
+                  </TouchableOpacity>
+
+                  {!billModalOrder.billedAt && (
+                    <TouchableOpacity
+                      style={styles.settleBillBtn}
+                      onPress={handleFinalizeBill}
+                      disabled={isFinalizingBill}
+                    >
+                      <MaterialIcons name="check-circle" size={18} color="#FFFFFF" />
+                      <Text style={styles.settleBillBtnText}>
+                        {isFinalizingBill ? 'Finalizing...' : 'Settle & Mark Complete'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Set Preparation ETA Modal ── */}
+      <Modal
+        visible={!!etaModalOrder}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEtaModalOrder(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.etaCard}>
+            <View style={styles.etaHeader}>
+              <Text style={styles.etaTitle}>Set Kitchen Preparation ETA</Text>
+              <TouchableOpacity onPress={() => setEtaModalOrder(null)}>
+                <MaterialIcons name="close" size={20} color={Colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.etaSub}>
+              Customers will see the countdown live on their mobile menu screen.
+            </Text>
+
+            <View style={styles.etaOptionsGrid}>
+              {[10, 15, 20, 25, 30, 45].map(mins => (
+                <TouchableOpacity
+                  key={mins}
+                  style={styles.etaOptionBtn}
+                  onPress={() => handleSetEta(mins)}
+                  disabled={isSettingEta}
+                >
+                  <MaterialIcons name="schedule" size={16} color={Colors.purple} />
+                  <Text style={styles.etaOptionText}>{mins} mins</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -402,11 +724,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 3,
   },
   headerLeft: {
     flex: 1,
@@ -448,7 +765,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.amberBorder,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 12,
+    borderRadius: 10,
   },
   pendingDot: {
     width: 6,
@@ -464,42 +781,70 @@ const styles = StyleSheet.create({
   refreshBtn: {
     width: 38,
     height: 38,
-    borderRadius: 12,
+    borderRadius: 10,
     backgroundColor: Colors.primaryBg,
-    borderWidth: 1,
-    borderColor: Colors.primaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
+    borderWidth: 1,
+    borderColor: Colors.primaryBorder,
+  },
+  staffCallsBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  staffCallLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  staffCallText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  staffCallDismiss: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  staffCallDismissText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   searchWrapper: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
+    paddingVertical: 10,
+    backgroundColor: Colors.surface,
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    borderRadius: 14,
+    backgroundColor: Colors.bg,
+    borderRadius: 12,
     paddingHorizontal: 12,
-    height: 44,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
     gap: 8,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 1,
-    shadowRadius: 4,
-    elevation: 1,
   },
   searchInput: {
     flex: 1,
-    color: Colors.text,
     fontSize: 13,
+    color: Colors.text,
+    padding: 0,
   },
   filterSection: {
-    paddingBottom: 8,
+    backgroundColor: Colors.surface,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
   filterList: {
     paddingHorizontal: 16,
@@ -508,26 +853,20 @@ const styles = StyleSheet.create({
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: Colors.bg,
     borderWidth: 1,
     borderColor: Colors.border,
-    minHeight: 34,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    gap: 6,
   },
   activeFilterChip: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-    shadowColor: Colors.shadowOrange,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.8,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: Colors.text,
+    borderColor: Colors.text,
   },
   filterChipText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: Colors.textMuted,
   },
@@ -535,12 +874,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   filterCountBadge: {
-    minWidth: 18,
-    alignItems: 'center',
-    backgroundColor: Colors.bg,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 6,
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 10,
   },
   activeFilterCountBadge: {
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
@@ -548,98 +885,95 @@ const styles = StyleSheet.create({
   filterCountText: {
     fontSize: 10,
     fontWeight: '800',
-    color: Colors.textSecondary,
+    color: Colors.textMuted,
   },
   activeFilterCountText: {
     color: '#FFFFFF',
   },
   listContent: {
     padding: 16,
-    paddingTop: 6,
-    paddingBottom: 36,
+    gap: 14,
+    paddingBottom: 40,
   },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 48,
+  orderCard: {
+    flexDirection: 'row',
     backgroundColor: Colors.surface,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginTop: 8,
-  },
-  emptyIconBg: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: Colors.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  emptyText: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginTop: 4,
-  },
-  orderCard: {
-    backgroundColor: Colors.surface,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    borderRadius: 16,
-    marginBottom: 14,
-    flexDirection: 'row',
     overflow: 'hidden',
     shadowColor: Colors.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
+    shadowOpacity: 0.8,
     shadowRadius: 6,
     elevation: 2,
   },
   cardAccent: {
-    width: 4.5,
+    width: 4,
   },
   cardBody: {
     flex: 1,
     padding: 14,
+    gap: 10,
   },
   cardTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
   },
   tablePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
+    backgroundColor: Colors.primaryBg,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.primaryBorder,
+  },
+  tablePillText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Colors.primary,
+  },
+  billNoText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textMuted,
+  },
+  cardTopRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  billIconBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
     backgroundColor: Colors.primaryBg,
     borderWidth: 1,
     borderColor: Colors.primaryBorder,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
   },
-  tablePillText: {
-    color: Colors.primary,
-    fontSize: 12,
+  billIconText: {
+    fontSize: 11,
     fontWeight: '800',
+    color: Colors.primary,
   },
   statusTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
     gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
   },
   statusTagText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.3,
   },
@@ -647,7 +981,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
   },
   customerIdentity: {
     flexDirection: 'row',
@@ -656,9 +989,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   customerAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: Colors.primaryBg,
     alignItems: 'center',
     justifyContent: 'center',
@@ -683,52 +1016,67 @@ const styles = StyleSheet.create({
   orderTime: {
     fontSize: 11,
     color: Colors.textDim,
-    fontWeight: '600',
+  },
+  etaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  etaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: Colors.purpleBg,
+    borderWidth: 1,
+    borderColor: Colors.purpleBorder,
+  },
+  etaBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.purple,
   },
   notesBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     backgroundColor: Colors.amberBg,
-    borderRadius: 8,
     borderWidth: 1,
     borderColor: Colors.amberBorder,
     paddingHorizontal: 8,
-    paddingVertical: 5,
-    marginBottom: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   notesText: {
     fontSize: 11,
-    color: Colors.amber,
     fontWeight: '600',
+    color: Colors.amber,
     flex: 1,
   },
   itemsBox: {
     backgroundColor: Colors.bg,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginBottom: 12,
+    padding: 10,
+    gap: 6,
   },
   itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 6,
   },
   itemRowDivider: {
+    paddingBottom: 6,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
   itemQtyBadge: {
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 6,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
+    backgroundColor: Colors.primaryBg,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
   },
   itemQty: {
     fontSize: 11,
@@ -736,15 +1084,19 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   itemName: {
-    flex: 1,
     fontSize: 12,
-    color: Colors.textSecondary,
     fontWeight: '600',
+    color: Colors.text,
+  },
+  batchBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: Colors.primary,
   },
   itemPrice: {
     fontSize: 12,
     fontWeight: '700',
-    color: Colors.text,
+    color: Colors.textSecondary,
   },
   expandPrompt: {
     flexDirection: 'row',
@@ -752,77 +1104,69 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
     paddingTop: 4,
-    paddingBottom: 2,
   },
   moreItemsText: {
     fontSize: 11,
-    color: Colors.primary,
     fontWeight: '700',
+    color: Colors.primary,
   },
   cardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    paddingTop: 2,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
   },
   totalBlock: {
-    flexShrink: 0,
+    gap: 2,
   },
   totalLabel: {
     fontSize: 9,
-    color: Colors.textDim,
     fontWeight: '800',
+    color: Colors.textMuted,
     letterSpacing: 0.5,
   },
   totalAmount: {
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '900',
     color: Colors.text,
   },
   footerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
     gap: 8,
-    flex: 1,
   },
   rejectBtn: {
-    backgroundColor: Colors.redBg,
-    borderColor: Colors.redBorder,
-    borderWidth: 1,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.redBorder,
+    backgroundColor: Colors.redBg,
   },
   rejectBtnText: {
-    color: Colors.red,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
+    color: Colors.red,
   },
   advanceBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
+    gap: 5,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 10,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.8,
-    shadowRadius: 3,
-    elevation: 2,
+    borderRadius: 8,
   },
   advanceBtnText: {
-    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '800',
+    color: '#FFFFFF',
   },
   finalState: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
@@ -831,5 +1175,229 @@ const styles = StyleSheet.create({
   finalStateText: {
     fontSize: 11,
     fontWeight: '700',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 50,
+    gap: 8,
+  },
+  emptyIconBg: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  emptyText: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  billSheet: {
+    width: '100%',
+    backgroundColor: Colors.surface,
+    borderRadius: 22,
+    padding: 18,
+    maxHeight: '90%',
+    gap: 12,
+  },
+  billSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  billSheetTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: Colors.text,
+  },
+  billSheetSubtitle: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  billItemsBox: {
+    backgroundColor: Colors.bg,
+    borderRadius: 12,
+    padding: 10,
+    gap: 6,
+  },
+  billItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  billItemQty: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.primary,
+  },
+  billItemName: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  billItemRate: {
+    fontSize: 11,
+    color: Colors.textMuted,
+  },
+  billItemTotal: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  billCalcBox: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: Colors.bg,
+    gap: 6,
+  },
+  calcRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  calcLabel: {
+    fontSize: 12,
+    color: Colors.textMuted,
+  },
+  calcVal: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  grandTotalRow: {
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  grandTotalLabel: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: Colors.text,
+  },
+  grandTotalVal: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: Colors.primary,
+  },
+  billStatusNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  billStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  billSheetActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  shareBillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.bg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  shareBillBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  settleBillBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.green,
+  },
+  settleBillBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  etaCard: {
+    width: '90%',
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    padding: 18,
+    gap: 10,
+  },
+  etaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  etaTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: Colors.text,
+  },
+  etaSub: {
+    fontSize: 12,
+    color: Colors.textMuted,
+  },
+  etaOptionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 8,
+  },
+  etaOptionBtn: {
+    width: '47%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.purpleBg,
+    borderWidth: 1,
+    borderColor: Colors.purpleBorder,
+  },
+  etaOptionText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Colors.purple,
   },
 });

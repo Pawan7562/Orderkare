@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, StatusBar,
@@ -7,72 +7,85 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import api from '../../lib/api';
 
-interface DayRev { day: string; revenue: number; }
-interface TopDish { name: string; count: number; revenue: number; }
-
-interface AnalyticsStats {
-  revenueByDay: DayRev[];
-  topDishes: TopDish[];
-  totalSales: number;
-  totalOrders: number;
-  customerRating: number;
-  totalRatings: number;
+interface DayRev {
+  day: string;
+  revenue: number;
+  orders?: number;
 }
 
-const EMPTY_STATS: AnalyticsStats = {
-  revenueByDay: [
-    { day: 'Mon', revenue: 4200 },
-    { day: 'Tue', revenue: 6800 },
-    { day: 'Wed', revenue: 5400 },
-    { day: 'Thu', revenue: 8900 },
-    { day: 'Fri', revenue: 11200 },
-    { day: 'Sat', revenue: 15400 },
-    { day: 'Sun', revenue: 13800 },
-  ],
-  topDishes: [],
-  totalSales: 0,
-  totalOrders: 0,
-  customerRating: 4.8,
-  totalRatings: 124,
-};
+interface PopularItem {
+  name: string;
+  orders: number;
+  revenue: string;
+  percentage?: string;
+}
 
-type TimeRange = 'TODAY' | '7D' | '30D' | 'ALL';
+interface FeedbackItem {
+  id: string;
+  customerName: string;
+  tableNumber?: string | null;
+  rating: number;
+  comment?: string | null;
+  tags?: string[];
+  createdAt: string;
+}
+
+type TimeRange = 'TODAY' | '7D' | '30D';
 
 export default function AnalyticsScreen() {
   const [refreshing, setRefreshing] = useState(false);
-  const [stats, setStats] = useState<AnalyticsStats>(EMPTY_STATS);
   const [timeRange, setTimeRange] = useState<TimeRange>('7D');
 
-  const revenueByDay = stats.revenueByDay.length > 0 ? stats.revenueByDay : EMPTY_STATS.revenueByDay;
-  const topDishes = stats.topDishes;
-  const totalRev = stats.totalSales;
-  const totalOrders = stats.totalOrders;
-  const avgOV       = Math.round(totalRev / (totalOrders || 1));
-  const maxDayRev   = Math.max(...revenueByDay.map(d => d.revenue), 1);
-  const maxDishCount = Math.max(...topDishes.map(d => d.count), 1);
+  // Real Analytics State
+  const [salesFormatted, setSalesFormatted] = useState('₹0');
+  const [totalSalesRaw, setTotalSalesRaw] = useState(0);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [avgTicket, setAvgTicket] = useState('₹0');
+  const [topCategory, setTopCategory] = useState('None yet');
+  const [chartData, setChartData] = useState<DayRev[]>([]);
+  const [popularItems, setPopularItems] = useState<PopularItem[]>([]);
 
-  const loadAnalytics = async () => {
+  // Customer Feedback State
+  const [avgRating, setAvgRating] = useState('5.0');
+  const [totalFeedbacks, setTotalFeedbacks] = useState(0);
+  const [ratingDistribution, setRatingDistribution] = useState<Record<string, number>>({});
+  const [recentReviews, setRecentReviews] = useState<FeedbackItem[]>([]);
+
+  const loadAnalytics = useCallback(async () => {
     try {
-      const { data } = await api.get('/restaurants/dashboard/stats');
-      const payload = data.data || data;
-      setStats({
-        revenueByDay: Array.isArray(payload.revenueByDay) && payload.revenueByDay.length > 0
-          ? payload.revenueByDay
-          : EMPTY_STATS.revenueByDay,
-        topDishes: Array.isArray(payload.topDishes) ? payload.topDishes : [],
-        totalSales: Number(payload.totalSales ?? payload.todayRevenue ?? 0),
-        totalOrders: Number(payload.totalOrders ?? payload.todayOrders ?? 0),
-        customerRating: Number(payload.customerRating ?? 4.8),
-        totalRatings: Number(payload.totalRatings ?? 124),
-      });
-    } catch {
-      setStats(EMPTY_STATS);
+      const rangeParam = timeRange === 'TODAY' ? 'today' : timeRange === '30D' ? 'month' : 'week';
+      const [analyticsRes, feedbackRes] = await Promise.allSettled([
+        api.get(`/restaurants/analytics?range=${rangeParam}`),
+        api.get('/orders/feedback?limit=6'),
+      ]);
+
+      if (analyticsRes.status === 'fulfilled' && analyticsRes.value.data) {
+        const d = analyticsRes.value.data;
+        const st = d.stats || {};
+        setSalesFormatted(st.sales || `₹${Number(st.salesRaw || 0).toLocaleString('en-IN')}`);
+        setTotalSalesRaw(Number(st.salesRaw || 0));
+        setTotalOrders(Number(st.orders || 0));
+        setAvgTicket(st.avgTicket || '₹0');
+        setTopCategory(st.topCategory || 'General');
+        setPopularItems(Array.isArray(d.popularItems) ? d.popularItems : []);
+        setChartData(Array.isArray(d.chartData) ? d.chartData : []);
+      }
+
+      if (feedbackRes.status === 'fulfilled' && feedbackRes.value.data) {
+        const fb = feedbackRes.value.data;
+        setAvgRating(fb.averageRating || '5.0');
+        setTotalFeedbacks(Number(fb.totalRatings || fb.total || 0));
+        setRatingDistribution(fb.distribution || {});
+        setRecentReviews(Array.isArray(fb.feedback) ? fb.feedback : []);
+      }
+    } catch (err) {
+      console.log('Error loading analytics:', err);
     }
-  };
+  }, [timeRange]);
 
   useEffect(() => {
     loadAnalytics();
-  }, []);
+  }, [loadAnalytics]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -80,20 +93,22 @@ export default function AnalyticsScreen() {
     setRefreshing(false);
   };
 
+  const maxDayRev = Math.max(...chartData.map(d => d.revenue || 0), 1);
+
   const KPI_CARDS = [
     {
-      label: 'Total Sales',
-      value: `₹${totalRev.toLocaleString('en-IN')}`,
-      delta: '+14.2%',
+      label: 'Total Revenue',
+      value: salesFormatted,
+      delta: `${timeRange} Sales`,
       icon: 'trending-up',
       color: Colors.primary,
       bg: Colors.primaryBg,
       border: Colors.primaryBorder,
     },
     {
-      label: 'Orders Served',
+      label: 'Orders Processed',
       value: `${totalOrders}`,
-      delta: '+8.5%',
+      delta: 'Completed',
       icon: 'receipt-long',
       color: Colors.blue,
       bg: Colors.blueBg,
@@ -101,18 +116,18 @@ export default function AnalyticsScreen() {
     },
     {
       label: 'Average Order Value',
-      value: `₹${avgOV}`,
-      delta: 'Healthy',
+      value: avgTicket,
+      delta: 'Per Order',
       icon: 'payments',
       color: Colors.amber,
       bg: Colors.amberBg,
       border: Colors.amberBorder,
     },
     {
-      label: 'Customers',
-      value: `${stats.totalRatings || (totalOrders > 0 ? totalOrders : 86)}`,
-      delta: `${stats.customerRating || 4.8} ★`,
-      icon: 'people',
+      label: 'Guest Satisfaction',
+      value: `${avgRating} ★`,
+      delta: `${totalFeedbacks} reviews`,
+      icon: 'star',
       color: Colors.purple,
       bg: Colors.purpleBg,
       border: Colors.purpleBorder,
@@ -128,9 +143,11 @@ export default function AnalyticsScreen() {
         <View style={styles.headerLeft}>
           <View style={styles.headerTitleRow}>
             <View style={styles.headerAccent} />
-            <Text style={styles.headerTitle}>Hotel Analytics</Text>
+            <Text style={styles.headerTitle}>Restaurant Analytics</Text>
           </View>
-          <Text style={styles.headerSubtitle}>Performance, sales trends & popular dishes</Text>
+          <Text style={styles.headerSubtitle}>
+            Live revenue breakdown, popular dishes & guest reviews
+          </Text>
         </View>
 
         <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh} activeOpacity={0.7}>
@@ -143,24 +160,23 @@ export default function AnalyticsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} colors={[Colors.primary]} />}
         showsVerticalScrollIndicator={false}
       >
-        {/* Time Range Filter Selector */}
-        <View style={styles.rangeContainer}>
-          {(['TODAY', '7D', '30D', 'ALL'] as TimeRange[]).map((r) => {
-            const isActive = timeRange === r;
+        {/* Time Range Selector */}
+        <View style={styles.rangeSelector}>
+          {(['TODAY', '7D', '30D'] as TimeRange[]).map((r) => {
+            const isSel = timeRange === r;
             const labelMap: Record<TimeRange, string> = {
               TODAY: 'Today',
-              '7D': '7 Days',
-              '30D': '30 Days',
-              ALL: 'All Time',
+              '7D': 'Last 7 Days',
+              '30D': 'Last 30 Days',
             };
             return (
               <TouchableOpacity
                 key={r}
-                style={[styles.rangeBtn, isActive && styles.activeRangeBtn]}
+                style={[styles.rangeBtn, isSel && styles.rangeBtnActive]}
                 onPress={() => setTimeRange(r)}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.rangeBtnText, isActive && styles.activeRangeBtnText]}>
+                <Text style={[styles.rangeBtnText, isSel && styles.rangeBtnTextActive]}>
                   {labelMap[r]}
                 </Text>
               </TouchableOpacity>
@@ -168,132 +184,182 @@ export default function AnalyticsScreen() {
           })}
         </View>
 
-        {/* Section Header */}
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionTitleRow}>
-            <View style={styles.sectionAccent} />
-            <Text style={styles.sectionTitle}>Overview Statistics</Text>
-          </View>
-          <View style={styles.livePill}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>Live Data</Text>
-          </View>
-        </View>
-
-        {/* KPI Stat Cards (Balanced 2x2 Grid) */}
-        <View style={styles.kpiContainer}>
-          {[0, 2].map((rowStart) => (
-            <View key={rowStart} style={styles.kpiRow}>
-              {KPI_CARDS.slice(rowStart, rowStart + 2).map((k) => (
-                <View
-                  key={k.label}
-                  style={[
-                    styles.kpiCard,
-                    { borderColor: k.border },
-                  ]}
-                >
-                  <View style={styles.kpiTopRow}>
-                    <View style={[styles.kpiIconBg, { backgroundColor: k.bg }]}>
-                      <MaterialIcons name={k.icon as any} size={20} color={k.color} />
+        {/* KPI Cards Grid */}
+        <View style={styles.kpiGrid}>
+          {[0, 2].map((startIdx) => (
+            <View key={startIdx} style={styles.kpiRow}>
+              {KPI_CARDS.slice(startIdx, startIdx + 2).map((kpi) => (
+                <View key={kpi.label} style={[styles.kpiCard, { borderColor: kpi.border }]}>
+                  <View style={styles.kpiCardTop}>
+                    <View style={[styles.kpiIconBubble, { backgroundColor: kpi.bg }]}>
+                      <MaterialIcons name={kpi.icon as any} size={18} color={kpi.color} />
                     </View>
-                    <View style={[styles.kpiDeltaBadge, { backgroundColor: k.bg, borderColor: k.border }]}>
-                      <Text style={[styles.kpiDelta, { color: k.color }]}>{k.delta}</Text>
+                    <View style={[styles.kpiDeltaBadge, { backgroundColor: kpi.bg, borderColor: kpi.border }]}>
+                      <Text style={[styles.kpiDeltaText, { color: kpi.color }]}>{kpi.delta}</Text>
                     </View>
                   </View>
-                  <View style={styles.kpiContent}>
-                    <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit>
-                      {k.value}
-                    </Text>
-                    <Text style={styles.kpiLabel} numberOfLines={1}>
-                      {k.label}
-                    </Text>
-                  </View>
+                  <Text style={styles.kpiValue} numberOfLines={1}>{kpi.value}</Text>
+                  <Text style={styles.kpiLabel} numberOfLines={1}>{kpi.label}</Text>
                 </View>
               ))}
             </View>
           ))}
         </View>
 
-        {/* Revenue Bar Chart */}
-        <View style={styles.chartCard}>
-          <View style={styles.chartHeaderRow}>
-            <View>
-              <Text style={styles.chartTitle}>Revenue Trend</Text>
-              <Text style={styles.chartSubtitle}>Weekly sales velocity (₹)</Text>
+        {/* Revenue Performance Chart (7 Days) */}
+        {chartData.length > 0 && (
+          <View style={styles.chartCard}>
+            <View style={styles.chartCardHeader}>
+              <View>
+                <Text style={styles.sectionHeading}>Daily Sales Trend</Text>
+                <Text style={styles.sectionSub}>Calculated from confirmed guest orders</Text>
+              </View>
+              <View style={styles.topCatBadge}>
+                <MaterialIcons name="local-fire-department" size={13} color={Colors.primary} />
+                <Text style={styles.topCatText}>Top: {topCategory}</Text>
+              </View>
             </View>
-            <View style={styles.chartBadge}>
-              <MaterialIcons name="show-chart" size={14} color={Colors.primary} />
-              <Text style={styles.chartBadgeText}>This Week</Text>
+
+            {/* Bar Chart Visual */}
+            <View style={styles.barsContainer}>
+              {chartData.map((d, idx) => {
+                const heightPct = Math.max(12, Math.round(((d.revenue || 0) / maxDayRev) * 100));
+                const isHighest = (d.revenue || 0) === maxDayRev && maxDayRev > 0;
+
+                return (
+                  <View key={idx} style={styles.barColumn}>
+                    <Text style={styles.barTopAmount}>
+                      {d.revenue > 0 ? `₹${d.revenue > 999 ? Math.round(d.revenue / 1000) + 'k' : d.revenue}` : ''}
+                    </Text>
+                    <View style={styles.barTrack}>
+                      <View
+                        style={[
+                          styles.barFill,
+                          { height: `${heightPct}%` },
+                          isHighest ? styles.barFillHighest : styles.barFillNormal,
+                        ]}
+                      />
+                    </View>
+                    <Text style={[styles.barLabel, isHighest && styles.barLabelHighest]}>{d.day}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* Popular Dishes Section */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionAccent} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sectionHeading}>Top Selling Dishes</Text>
+              <Text style={styles.sectionSub}>Most ordered items by customers</Text>
             </View>
           </View>
 
-          <View style={styles.barChartContainer}>
-            {revenueByDay.map((item, idx) => {
-              const heightPct = Math.max(Math.round((item.revenue / maxDayRev) * 100), 10);
-              const isPeak = item.revenue === maxDayRev;
-              return (
-                <View key={idx} style={styles.barColumn}>
-                  <Text style={[styles.barValueText, isPeak && { color: Colors.primary, fontWeight: '800' }]}>
-                    ₹{(item.revenue / 1000).toFixed(1)}k
-                  </Text>
-                  <View style={styles.barTrack}>
-                    <View
-                      style={[
-                        styles.barFill,
-                        { height: `${heightPct}%` as any },
-                        isPeak && styles.peakBarFill,
-                      ]}
-                    />
-                  </View>
-                  <Text style={[styles.barDayText, isPeak && styles.peakDayText]}>{item.day}</Text>
+          {popularItems.length === 0 ? (
+            <View style={styles.emptyItemsBox}>
+              <MaterialIcons name="restaurant" size={32} color={Colors.textDim} />
+              <Text style={styles.emptyItemsText}>No dish order data recorded for this time range yet.</Text>
+            </View>
+          ) : (
+            popularItems.map((item, idx) => (
+              <View key={idx} style={styles.popularRow}>
+                <View style={[styles.rankBadge, idx === 0 && styles.rankBadgeFirst]}>
+                  <Text style={[styles.rankText, idx === 0 && styles.rankTextFirst]}>#{idx + 1}</Text>
                 </View>
-              );
-            })}
-          </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.popularDishName} numberOfLines={1}>{item.name}</Text>
+                  <Text style={styles.popularDishOrders}>{item.orders} orders placed</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.popularDishRev}>{item.revenue}</Text>
+                  {item.percentage ? (
+                    <Text style={styles.popularDishPct}>{item.percentage} of sales</Text>
+                  ) : null}
+                </View>
+              </View>
+            ))
+          )}
         </View>
 
-        {/* Top Dishes */}
-        <View style={styles.topDishesCard}>
-          <View style={styles.chartHeaderRow}>
-            <View>
-              <Text style={styles.chartTitle}>Top Performing Dishes</Text>
-              <Text style={styles.chartSubtitle}>Highest ordered menu items</Text>
+        {/* Customer Reviews & Feedback Section */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={[styles.sectionAccent, { backgroundColor: Colors.purple }]} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sectionHeading}>Customer Reviews & Feedback</Text>
+              <Text style={styles.sectionSub}>Real ratings submitted via customer QR menu</Text>
             </View>
-            <View style={[styles.chartBadge, { backgroundColor: Colors.amberBg, borderColor: Colors.amberBorder }]}>
-              <MaterialIcons name="local-fire-department" size={14} color={Colors.amber} />
-              <Text style={[styles.chartBadgeText, { color: Colors.amber }]}>Hot Items</Text>
+            <View style={styles.ratingBadge}>
+              <MaterialIcons name="star" size={14} color="#FFFFFF" />
+              <Text style={styles.ratingBadgeText}>{avgRating}</Text>
             </View>
           </View>
 
-          {topDishes.length > 0 ? (
-            topDishes.map((dish, i) => {
-              const progressPct = (dish.count / maxDishCount) * 100;
-              const rankColors = [Colors.primary, Colors.blue, Colors.purple, Colors.amber, Colors.green];
-              const rankColor = rankColors[i] || Colors.textMuted;
-              return (
-                <View key={i} style={styles.dishRankRow}>
-                  <View style={[styles.rankBadge, { backgroundColor: rankColor + '18', borderColor: rankColor + '40' }]}>
-                    <Text style={[styles.rankNum, { color: rankColor }]}>#{i + 1}</Text>
+          {/* Rating Distribution Breakdown */}
+          {totalFeedbacks > 0 && (
+            <View style={styles.distributionBox}>
+              {[5, 4, 3, 2, 1].map(stars => {
+                const count = ratingDistribution[String(stars)] || 0;
+                const pct = totalFeedbacks > 0 ? Math.round((count / totalFeedbacks) * 100) : 0;
+                return (
+                  <View key={stars} style={styles.distRow}>
+                    <Text style={styles.distStars}>{stars} ★</Text>
+                    <View style={styles.distTrack}>
+                      <View style={[styles.distFill, { width: `${pct}%` }]} />
+                    </View>
+                    <Text style={styles.distCount}>{count}</Text>
                   </View>
-                  <View style={styles.dishRankInfo}>
-                    <View style={styles.dishRankHeader}>
-                      <Text style={styles.dishRankName}>{dish.name}</Text>
-                      <Text style={styles.dishRankCount}>{dish.count} orders</Text>
-                    </View>
-                    <View style={styles.dishProgressTrack}>
-                      <View style={[styles.dishProgressFill, { width: `${progressPct}%` as any, backgroundColor: rankColor }]} />
-                    </View>
-                    <Text style={[styles.dishRevenue, { color: rankColor }]}>₹{dish.revenue.toLocaleString('en-IN')}</Text>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Recent Reviews List */}
+          {recentReviews.length === 0 ? (
+            <View style={styles.emptyItemsBox}>
+              <MaterialIcons name="rate-review" size={32} color={Colors.textDim} />
+              <Text style={styles.emptyItemsText}>No customer reviews received yet. Reviews submitted by guests will appear here.</Text>
+            </View>
+          ) : (
+            recentReviews.map((rev) => (
+              <View key={rev.id} style={styles.reviewCard}>
+                <View style={styles.reviewTopRow}>
+                  <View>
+                    <Text style={styles.reviewerName}>{rev.customerName || 'Dining Guest'}</Text>
+                    {rev.tableNumber ? (
+                      <Text style={styles.reviewTable}>Table #{rev.tableNumber}</Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.starsRow}>
+                    {[1, 2, 3, 4, 5].map(s => (
+                      <MaterialIcons
+                        key={s}
+                        name="star"
+                        size={14}
+                        color={s <= rev.rating ? Colors.amber : Colors.border}
+                      />
+                    ))}
                   </View>
                 </View>
-              );
-            })
-          ) : (
-            <View style={styles.emptyDishes}>
-              <MaterialIcons name="restaurant-menu" size={32} color={Colors.textDim} />
-              <Text style={styles.emptyDishesText}>No sales data yet for dishes</Text>
-              <Text style={styles.emptyDishesSub}>Completed orders will rank top dishes here</Text>
-            </View>
+
+                {rev.comment ? (
+                  <Text style={styles.reviewComment}>{rev.comment}</Text>
+                ) : null}
+
+                {Array.isArray(rev.tags) && rev.tags.length > 0 ? (
+                  <View style={styles.reviewTagsRow}>
+                    {rev.tags.map((tag, tIdx) => (
+                      <View key={tIdx} style={styles.reviewTag}>
+                        <Text style={styles.reviewTagText}>{tag}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            ))
           )}
         </View>
       </ScrollView>
@@ -316,11 +382,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 3,
   },
   headerLeft: {
     flex: 1,
@@ -328,343 +389,373 @@ const styles = StyleSheet.create({
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   headerAccent: {
     width: 4,
-    height: 22,
+    height: 20,
     backgroundColor: Colors.primary,
     borderRadius: 2,
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: '800',
+    fontWeight: '900',
     color: Colors.text,
   },
   headerSubtitle: {
     fontSize: 12,
     color: Colors.textMuted,
     marginTop: 2,
-    marginLeft: 14,
   },
   refreshBtn: {
     width: 38,
     height: 38,
-    borderRadius: 12,
+    borderRadius: 10,
     backgroundColor: Colors.primaryBg,
-    borderWidth: 1,
-    borderColor: Colors.primaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
+    borderWidth: 1,
+    borderColor: Colors.primaryBorder,
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 36,
-    gap: 16,
+    gap: 14,
+    paddingBottom: 40,
   },
-  rangeContainer: {
+  rangeSelector: {
     flexDirection: 'row',
     backgroundColor: Colors.surface,
-    borderRadius: 14,
     padding: 4,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 1,
-    shadowRadius: 4,
-    elevation: 1,
+    gap: 4,
   },
   rangeBtn: {
     flex: 1,
     paddingVertical: 8,
     alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
+    borderRadius: 8,
   },
-  activeRangeBtn: {
+  rangeBtnActive: {
     backgroundColor: Colors.primary,
-    shadowColor: Colors.shadowOrange,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.8,
-    shadowRadius: 4,
-    elevation: 2,
   },
   rangeBtnText: {
     fontSize: 12,
     fontWeight: '700',
     color: Colors.textMuted,
   },
-  activeRangeBtnText: {
+  rangeBtnTextActive: {
     color: '#FFFFFF',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 2,
-  },
-  sectionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sectionAccent: {
-    width: 4,
-    height: 16,
-    backgroundColor: Colors.primary,
-    borderRadius: 2,
-  },
-  sectionTitle: {
-    fontSize: 15,
     fontWeight: '800',
-    color: Colors.text,
   },
-  livePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.greenBg,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.greenBorder,
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.green,
-  },
-  liveText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: Colors.green,
-  },
-  kpiContainer: {
-    gap: 12,
+  kpiGrid: {
+    gap: 10,
   },
   kpiRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   kpiCard: {
     flex: 1,
     backgroundColor: Colors.surface,
-    borderWidth: 1.5,
     borderRadius: 16,
-    padding: 14,
-    justifyContent: 'space-between',
-    minHeight: 126,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
+    padding: 12,
+    borderWidth: 1.5,
+    gap: 4,
   },
-  kpiTopRow: {
+  kpiCardTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 4,
   },
-  kpiIconBg: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
+  kpiIconBubble: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
   },
   kpiDeltaBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: 8,
     borderWidth: 1,
   },
-  kpiDelta: {
+  kpiDeltaText: {
     fontSize: 10,
     fontWeight: '700',
   },
-  kpiContent: {
-    gap: 2,
-  },
   kpiValue: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '900',
     color: Colors.text,
-    letterSpacing: -0.5,
   },
   kpiLabel: {
     fontSize: 11,
-    color: Colors.textMuted,
     fontWeight: '600',
+    color: Colors.textMuted,
   },
   chartCard: {
     backgroundColor: Colors.surface,
-    borderRadius: 16,
-    borderWidth: 1.5,
+    borderRadius: 18,
+    borderWidth: 1,
     borderColor: Colors.border,
     padding: 16,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
+    gap: 14,
   },
-  chartHeaderRow: {
+  chartCardHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 16,
   },
-  chartTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.text,
-  },
-  chartSubtitle: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginTop: 2,
-  },
-  chartBadge: {
+  topCatBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: Colors.primaryBg,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: Colors.primaryBorder,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 20,
   },
-  chartBadgeText: {
+  topCatText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
     color: Colors.primary,
   },
-  barChartContainer: {
+  barsContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    height: 140,
-    paddingTop: 10,
+    height: 150,
+    paddingTop: 20,
+    paddingHorizontal: 4,
   },
   barColumn: {
-    alignItems: 'center',
     flex: 1,
+    alignItems: 'center',
+    height: '100%',
+    justifyContent: 'flex-end',
+    gap: 4,
   },
-  barValueText: {
+  barTopAmount: {
     fontSize: 9,
-    color: Colors.textDim,
     fontWeight: '700',
-    marginBottom: 4,
+    color: Colors.textDim,
   },
   barTrack: {
+    width: 18,
     height: 90,
-    width: 16,
     backgroundColor: Colors.bg,
     borderRadius: 8,
     justifyContent: 'flex-end',
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Colors.border,
   },
   barFill: {
-    backgroundColor: Colors.primaryLight,
-    borderRadius: 8,
     width: '100%',
+    borderRadius: 8,
   },
-  peakBarFill: {
+  barFillNormal: {
+    backgroundColor: Colors.primaryLight,
+  },
+  barFillHighest: {
     backgroundColor: Colors.primary,
   },
-  barDayText: {
+  barLabel: {
     fontSize: 11,
+    fontWeight: '700',
     color: Colors.textMuted,
-    fontWeight: '600',
-    marginTop: 6,
   },
-  peakDayText: {
+  barLabelHighest: {
     color: Colors.primary,
-    fontWeight: '800',
+    fontWeight: '900',
   },
-  topDishesCard: {
+  sectionCard: {
     backgroundColor: Colors.surface,
-    borderRadius: 16,
-    borderWidth: 1.5,
+    borderRadius: 18,
+    borderWidth: 1,
     borderColor: Colors.border,
     padding: 16,
-    gap: 14,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  dishRankRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 12,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  sectionAccent: {
+    width: 4,
+    height: 18,
+    backgroundColor: Colors.primary,
+    borderRadius: 2,
+  },
+  sectionHeading: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: Colors.text,
+  },
+  sectionSub: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 1,
+  },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.purple,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  ratingBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  emptyItemsBox: {
+    padding: 20,
+    alignItems: 'center',
+    gap: 6,
+  },
+  emptyItemsText: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    textAlign: 'center',
+  },
+  popularRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
   rankBadge: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    borderWidth: 1,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rankNum: {
-    fontSize: 12,
+  rankBadgeFirst: {
+    backgroundColor: Colors.primaryBg,
+  },
+  rankText: {
+    fontSize: 11,
     fontWeight: '800',
+    color: Colors.textMuted,
   },
-  dishRankInfo: {
-    flex: 1,
+  rankTextFirst: {
+    color: Colors.primary,
   },
-  dishRankHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  dishRankName: {
+  popularDishName: {
     fontSize: 13,
     fontWeight: '700',
     color: Colors.text,
   },
-  dishRankCount: {
-    fontSize: 12,
+  popularDishOrders: {
+    fontSize: 11,
+    color: Colors.textMuted,
+  },
+  popularDishRev: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  popularDishPct: {
+    fontSize: 10,
+    color: Colors.textMuted,
+  },
+  distributionBox: {
+    backgroundColor: Colors.bg,
+    borderRadius: 12,
+    padding: 10,
+    gap: 6,
+  },
+  distRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  distStars: {
+    width: 28,
+    fontSize: 11,
     fontWeight: '700',
     color: Colors.textMuted,
   },
-  dishProgressTrack: {
+  distTrack: {
+    flex: 1,
     height: 6,
-    backgroundColor: Colors.bg,
+    backgroundColor: Colors.border,
     borderRadius: 3,
     overflow: 'hidden',
   },
-  dishProgressFill: {
+  distFill: {
     height: '100%',
+    backgroundColor: Colors.amber,
     borderRadius: 3,
   },
-  dishRevenue: {
-    fontSize: 11,
+  distCount: {
+    width: 24,
+    fontSize: 10,
     fontWeight: '700',
-    marginTop: 4,
+    color: Colors.textDim,
+    textAlign: 'right',
   },
-  emptyDishes: {
-    alignItems: 'center',
-    paddingVertical: 24,
+  reviewCard: {
+    backgroundColor: Colors.bg,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
     gap: 6,
   },
-  emptyDishesText: {
-    fontSize: 14,
-    fontWeight: '700',
+  reviewTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  reviewerName: {
+    fontSize: 13,
+    fontWeight: '800',
     color: Colors.text,
   },
-  emptyDishesSub: {
-    fontSize: 12,
+  reviewTable: {
+    fontSize: 11,
     color: Colors.textMuted,
+  },
+  starsRow: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  reviewComment: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    lineHeight: 16,
+  },
+  reviewTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 2,
+  },
+  reviewTag: {
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  reviewTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.primary,
   },
 });

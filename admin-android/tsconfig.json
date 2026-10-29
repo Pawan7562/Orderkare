@@ -1,14 +1,8 @@
-
 {
+  "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "CommonJS",
-    "moduleResolution": "node",
     "strict": true,
-    "esModuleInterop": true,
-    "types": ["node"],
-    "skipLibCheck": true
-  },
-  "include": ["prisma/**/*.ts", "**/*.ts"],
-  "exclude": ["node_modules"]
+    "skipLibCheck": true,
+    "ignoreDeprecations": "6.0"
+  }
 }

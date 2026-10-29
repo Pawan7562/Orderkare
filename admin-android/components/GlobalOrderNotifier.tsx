@@ -43,6 +43,12 @@ export default function GlobalOrderNotifier({ onNavigateToTab }: Props) {
   const [incomingOrder, setIncomingOrder] = useState<Order | null>(null);
   const seenOrderIds = useRef<Set<string>>(new Set());
 
+  const [incomingStaffCall, setIncomingStaffCall] = useState<{
+    tableNumber: string;
+    type: 'WAITER' | 'BILL';
+    customerName?: string;
+  } | null>(null);
+
   // 0. Register device for Expo Push Notifications
   useEffect(() => {
     if (!token) return;
@@ -92,6 +98,14 @@ export default function GlobalOrderNotifier({ onNavigateToTab }: Props) {
     setIncomingOrder(order);
   };
 
+  // Trigger staff call alert
+  const triggerStaffCallAlert = (data: { tableNumber: string; type: 'WAITER' | 'BILL'; customerName?: string }) => {
+    const title = data.type === 'BILL' ? '🧾 BILL REQUESTED' : '🔔 WAITER CALLED';
+    const summary = `Table #${data.tableNumber} - ${data.type === 'BILL' ? 'Guest requested the bill' : 'Guest needs assistance'}`;
+    playOrderRingSound(`${title}: ${summary}`);
+    setIncomingStaffCall(data);
+  };
+
   // 1. Real-time WebSocket Listener
   useEffect(() => {
     if (!token) return;
@@ -113,10 +127,20 @@ export default function GlobalOrderNotifier({ onNavigateToTab }: Props) {
       triggerNewOrderAlert(newOrder);
     };
 
+    const handleStaffCall = (data: any) => {
+      if (!data) return;
+      if (!restaurantId || data.restaurantId === restaurantId) {
+        console.log('[GlobalOrderNotifier] Staff call received:', data);
+        triggerStaffCallAlert(data);
+      }
+    };
+
     socket.on('new_order', handleNewOrder);
+    socket.on('staff_call', handleStaffCall);
 
     return () => {
       socket.off('new_order', handleNewOrder);
+      socket.off('staff_call', handleStaffCall);
       socket.off('connect', joinRoom);
     };
   }, [token, restaurantId]);
@@ -190,9 +214,77 @@ export default function GlobalOrderNotifier({ onNavigateToTab }: Props) {
     }
   };
 
-  if (!incomingOrder) return null;
+  if (!incomingOrder && !incomingStaffCall) return null;
 
   return (
+    <>
+    {incomingStaffCall ? (
+      <Modal
+        visible={!!incomingStaffCall}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIncomingStaffCall(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { borderColor: incomingStaffCall.type === 'BILL' ? Colors.blue : Colors.amber }]}>
+            <View style={[styles.bannerRow, { backgroundColor: incomingStaffCall.type === 'BILL' ? Colors.blueBg : Colors.amberBg, borderColor: incomingStaffCall.type === 'BILL' ? Colors.blueBorder : Colors.amberBorder }]}>
+              <View style={[styles.bellIconCircle, { backgroundColor: incomingStaffCall.type === 'BILL' ? Colors.blue : Colors.amber }]}>
+                <MaterialIcons name={incomingStaffCall.type === 'BILL' ? 'receipt' : 'pan-tool'} size={24} color="#FFFFFF" />
+              </View>
+              <View style={styles.bannerTextGroup}>
+                <Text style={[styles.bannerTitle, { color: incomingStaffCall.type === 'BILL' ? Colors.blue : Colors.amber }]}>
+                  {incomingStaffCall.type === 'BILL' ? 'BILL REQUESTED' : 'WAITER CALLED'}
+                </Text>
+                <Text style={styles.bannerSubtitle}>Guest at Table #{incomingStaffCall.tableNumber} needs immediate attention</Text>
+              </View>
+            </View>
+
+            <View style={styles.orderSummaryCard}>
+              <View style={styles.tableRow}>
+                <View style={[styles.tablePill, { borderColor: incomingStaffCall.type === 'BILL' ? Colors.blue : Colors.amber }]}>
+                  <MaterialIcons name="table-restaurant" size={16} color={incomingStaffCall.type === 'BILL' ? Colors.blue : Colors.amber} />
+                  <Text style={[styles.tablePillText, { color: incomingStaffCall.type === 'BILL' ? Colors.blue : Colors.amber }]}>
+                    Table #{incomingStaffCall.tableNumber}
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textMuted }}>
+                  {incomingStaffCall.type === 'BILL' ? 'Bill Settle Needed' : 'Service Request'}
+                </Text>
+              </View>
+              {incomingStaffCall.customerName ? (
+                <View style={styles.customerRow}>
+                  <MaterialIcons name="person" size={15} color={Colors.textMuted} />
+                  <Text style={styles.customerName}>{incomingStaffCall.customerName}</Text>
+                </View>
+              ) : null}
+            </View>
+
+            <View style={styles.actionButtonsRow}>
+              <TouchableOpacity
+                style={styles.dismissBtn}
+                onPress={() => setIncomingStaffCall(null)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.dismissBtnText}>Dismiss</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.acceptBtn, { backgroundColor: incomingStaffCall.type === 'BILL' ? Colors.blue : Colors.amber }]}
+                onPress={() => {
+                  setIncomingStaffCall(null);
+                  if (onNavigateToTab) onNavigateToTab('orders');
+                }}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="arrow-forward" size={18} color="#FFFFFF" />
+                <Text style={styles.acceptBtnText}>Go to Table / Orders</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    ) : null}
+
+    {incomingOrder ? (
     <Modal
       visible={!!incomingOrder}
       transparent
@@ -296,6 +388,8 @@ export default function GlobalOrderNotifier({ onNavigateToTab }: Props) {
         </View>
       </View>
     </Modal>
+    ) : null}
+    </>
   );
 }
 
