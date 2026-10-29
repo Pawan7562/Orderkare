@@ -3,15 +3,10 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform,
   ActivityIndicator, ScrollView, Image, Keyboard,
-  UIManager, TouchableWithoutFeedback, LayoutAnimation,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuthStore } from '../store/authStore';
 import { Colors } from '../constants/colors';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 export default function LoginScreen() {
   const { login, isLoading } = useAuthStore();
@@ -26,19 +21,19 @@ export default function LoginScreen() {
   const passwordRef = useRef<any>(null);
   const scrollViewRef = useRef<any>(null);
 
+  // Combined flag: activates whenever an input is focused OR keyboard event fires
+  const isCompact = emailFocused || passFocused || isKeyboardVisible;
+
   useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setIsKeyboardVisible(true)
+    );
 
-    const showSub = Keyboard.addListener(showEvent, () => {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setIsKeyboardVisible(true);
-    });
-
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setIsKeyboardVisible(false);
-    });
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setIsKeyboardVisible(false)
+    );
 
     return () => {
       showSub.remove();
@@ -65,185 +60,184 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <ScrollView
-          ref={scrollViewRef}
-          contentContainerStyle={[
-            styles.scrollContent,
-            isKeyboardVisible && styles.scrollContentKeyboard,
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-        >
-          {/* Dynamic Top Orange Banner */}
-          <View style={[styles.topBanner, isKeyboardVisible && styles.topBannerCompact]}>
-            {isKeyboardVisible ? (
-              <View style={styles.brandRowCompact}>
-                <View style={styles.logoWrapperCompact}>
-                  <Image
-                    source={require('../assets/logo.jpg')}
-                    style={styles.logoImageCompact}
-                    resizeMode="contain"
-                  />
-                </View>
-                <View style={styles.brandTextWrapperCompact}>
-                  <Text style={styles.brandTitleCompact}>
-                    Order<Text style={styles.brandOrange}>Kare</Text>
-                  </Text>
-                  <Text style={styles.brandSubtitleCompact}>Manager Portal</Text>
-                </View>
+      <ScrollView
+        ref={scrollViewRef}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isCompact && styles.scrollContentCompact,
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        {/* Dynamic Top Banner */}
+        <View style={[styles.topBanner, isCompact && styles.topBannerCompact]}>
+          {isCompact ? (
+            <View style={styles.brandRowCompact}>
+              <View style={styles.logoWrapperCompact}>
+                <Image
+                  source={require('../assets/logo.jpg')}
+                  style={styles.logoImageCompact}
+                  resizeMode="contain"
+                />
               </View>
-            ) : (
-              <View style={styles.brandContainer}>
-                <View style={styles.logoWrapper}>
-                  <Image
-                    source={require('../assets/logo.jpg')}
-                    style={styles.logoImage}
-                    resizeMode="contain"
-                  />
-                </View>
-                <Text style={styles.brandTitle}>
+              <View style={styles.brandTextWrapperCompact}>
+                <Text style={styles.brandTitleCompact}>
                   Order<Text style={styles.brandOrange}>Kare</Text>
                 </Text>
-                <Text style={styles.brandSubtitle}>Hotel & Restaurant Admin Portal</Text>
+                <Text style={styles.brandSubtitleCompact}>Manager Portal</Text>
               </View>
-            )}
-          </View>
-
-          {/* Form Card Area */}
-          <View style={[styles.formArea, isKeyboardVisible && styles.formAreaCompact]}>
-            <View style={[styles.card, isKeyboardVisible && styles.cardCompact]}>
-              <View style={styles.cardTitleRow}>
-                <View style={styles.cardTitleAccent} />
-                <Text style={styles.cardTitle}>Welcome Back</Text>
+            </View>
+          ) : (
+            <View style={styles.brandContainer}>
+              <View style={styles.logoWrapper}>
+                <Image
+                  source={require('../assets/logo.jpg')}
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
               </View>
+              <Text style={styles.brandTitle}>
+                Order<Text style={styles.brandOrange}>Kare</Text>
+              </Text>
+              <Text style={styles.brandSubtitle}>Hotel & Restaurant Admin Portal</Text>
+            </View>
+          )}
+        </View>
 
-              {!isKeyboardVisible && (
-                <Text style={styles.cardSubtitle}>
-                  Sign in with your manager credentials to manage orders and operations.
-                </Text>
-              )}
-
-              {error ? (
-                <View style={styles.errorBox}>
-                  <MaterialIcons name="error-outline" size={16} color={Colors.red} />
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              ) : null}
-
-              {/* Email Field */}
-              <View style={[styles.inputGroup, isKeyboardVisible && styles.inputGroupCompact]}>
-                <Text style={styles.label}>Email Address</Text>
-                <View style={[styles.inputWrapper, emailFocused && styles.inputWrapperFocused]}>
-                  <View style={[styles.inputIconBg, emailFocused && styles.inputIconBgActive]}>
-                    <MaterialIcons
-                      name="mail-outline"
-                      size={18}
-                      color={emailFocused ? Colors.primary : Colors.textMuted}
-                    />
-                  </View>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="manager@hotel.com"
-                    placeholderTextColor={Colors.textDim}
-                    value={email}
-                    onChangeText={setEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    returnKeyType="next"
-                    blurOnSubmit={false}
-                    onSubmitEditing={() => passwordRef.current?.focus()}
-                    onFocus={() => {
-                      setEmailFocused(true);
-                      setTimeout(() => {
-                        scrollViewRef.current?.scrollTo({ y: 80, animated: true });
-                      }, 100);
-                    }}
-                    onBlur={() => setEmailFocused(false)}
-                  />
-                </View>
-              </View>
-
-              {/* Password Field */}
-              <View style={[styles.inputGroup, isKeyboardVisible && styles.inputGroupCompact]}>
-                <Text style={styles.label}>Password</Text>
-                <View style={[styles.inputWrapper, passFocused && styles.inputWrapperFocused]}>
-                  <View style={[styles.inputIconBg, passFocused && styles.inputIconBgActive]}>
-                    <MaterialIcons
-                      name="lock-outline"
-                      size={18}
-                      color={passFocused ? Colors.primary : Colors.textMuted}
-                    />
-                  </View>
-                  <TextInput
-                    ref={passwordRef}
-                    style={[styles.input, { paddingRight: 44 }]}
-                    placeholder="••••••••"
-                    placeholderTextColor={Colors.textDim}
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry={!showPass}
-                    autoCapitalize="none"
-                    returnKeyType="go"
-                    onSubmitEditing={handleLogin}
-                    onFocus={() => {
-                      setPassFocused(true);
-                      setTimeout(() => {
-                        scrollViewRef.current?.scrollTo({ y: 120, animated: true });
-                      }, 100);
-                    }}
-                    onBlur={() => setPassFocused(false)}
-                  />
-                  <TouchableOpacity
-                    style={styles.eyeIcon}
-                    onPress={() => setShowPass(!showPass)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <MaterialIcons
-                      name={showPass ? 'visibility-off' : 'visibility'}
-                      size={20}
-                      color={Colors.textMuted}
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Submit Button */}
-              <TouchableOpacity
-                style={[styles.loginBtn, isLoading && styles.disabledBtn]}
-                onPress={handleLogin}
-                disabled={isLoading}
-                activeOpacity={0.85}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Text style={styles.loginBtnText}>Access Dashboard</Text>
-                    <View style={styles.loginBtnArrow}>
-                      <MaterialIcons name="arrow-forward" size={18} color={Colors.primary} />
-                    </View>
-                  </>
-                )}
-              </TouchableOpacity>
+        {/* Form Card Area */}
+        <View style={[styles.formArea, isCompact && styles.formAreaCompact]}>
+          <View style={[styles.card, isCompact && styles.cardCompact]}>
+            <View style={styles.cardTitleRow}>
+              <View style={styles.cardTitleAccent} />
+              <Text style={styles.cardTitle}>Welcome Back</Text>
             </View>
 
-            {/* Feature Chips (only visible when keyboard is hidden to keep inputs centered) */}
-            {!isKeyboardVisible && (
-              <View style={styles.featureRow}>
-                {['Live Orders', 'QR Menu', 'Analytics'].map((f, i) => (
-                  <View key={i} style={styles.featureChip}>
-                    <MaterialIcons name="check-circle" size={13} color={Colors.primary} />
-                    <Text style={styles.featureChipText}>{f}</Text>
-                  </View>
-                ))}
-              </View>
+            {!isCompact && (
+              <Text style={styles.cardSubtitle}>
+                Sign in with your manager credentials to manage orders and operations.
+              </Text>
             )}
+
+            {error ? (
+              <View style={[styles.errorBox, isCompact && styles.errorBoxCompact]}>
+                <MaterialIcons name="error-outline" size={15} color={Colors.red} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
+            {/* Email Field */}
+            <View style={[styles.inputGroup, isCompact && styles.inputGroupCompact]}>
+              <Text style={styles.label}>Email Address</Text>
+              <View style={[styles.inputWrapper, emailFocused && styles.inputWrapperFocused]}>
+                <View style={[styles.inputIconBg, emailFocused && styles.inputIconBgActive]}>
+                  <MaterialIcons
+                    name="mail-outline"
+                    size={18}
+                    color={emailFocused ? Colors.primary : Colors.textMuted}
+                  />
+                </View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="manager@hotel.com"
+                  placeholderTextColor={Colors.textDim}
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="next"
+                  blurOnSubmit={false}
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  onFocus={() => {
+                    setEmailFocused(true);
+                    setTimeout(() => {
+                      scrollViewRef.current?.scrollTo({ y: 50, animated: true });
+                    }, 80);
+                  }}
+                  onBlur={() => setEmailFocused(false)}
+                />
+              </View>
+            </View>
+
+            {/* Password Field */}
+            <View style={[styles.inputGroup, isCompact && styles.inputGroupCompact]}>
+              <Text style={styles.label}>Password</Text>
+              <View style={[styles.inputWrapper, passFocused && styles.inputWrapperFocused]}>
+                <View style={[styles.inputIconBg, passFocused && styles.inputIconBgActive]}>
+                  <MaterialIcons
+                    name="lock-outline"
+                    size={18}
+                    color={passFocused ? Colors.primary : Colors.textMuted}
+                  />
+                </View>
+                <TextInput
+                  ref={passwordRef}
+                  style={[styles.input, { paddingRight: 44 }]}
+                  placeholder="••••••••"
+                  placeholderTextColor={Colors.textDim}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPass}
+                  autoCapitalize="none"
+                  returnKeyType="go"
+                  onSubmitEditing={handleLogin}
+                  onFocus={() => {
+                    setPassFocused(true);
+                    setTimeout(() => {
+                      scrollViewRef.current?.scrollTo({ y: 110, animated: true });
+                    }, 80);
+                  }}
+                  onBlur={() => setPassFocused(false)}
+                />
+                <TouchableOpacity
+                  style={styles.eyeIcon}
+                  onPress={() => setShowPass(!showPass)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MaterialIcons
+                    name={showPass ? 'visibility-off' : 'visibility'}
+                    size={20}
+                    color={Colors.textMuted}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Submit Button */}
+            <TouchableOpacity
+              style={[styles.loginBtn, isCompact && styles.loginBtnCompact, isLoading && styles.disabledBtn]}
+              onPress={handleLogin}
+              disabled={isLoading}
+              activeOpacity={0.85}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={styles.loginBtnText}>Access Dashboard</Text>
+                  <View style={styles.loginBtnArrow}>
+                    <MaterialIcons name="arrow-forward" size={17} color={Colors.primary} />
+                  </View>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
-        </ScrollView>
-      </TouchableWithoutFeedback>
+
+          {/* Feature Chips (only visible when keyboard is hidden to keep inputs centered) */}
+          {!isCompact && (
+            <View style={styles.featureRow}>
+              {['Live Orders', 'QR Menu', 'Analytics'].map((f, i) => (
+                <View key={i} style={styles.featureChip}>
+                  <MaterialIcons name="check-circle" size={13} color={Colors.primary} />
+                  <Text style={styles.featureChipText}>{f}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -256,23 +250,23 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
   },
-  scrollContentKeyboard: {
-    paddingBottom: 24,
+  scrollContentCompact: {
+    paddingBottom: 280,
   },
   topBanner: {
     backgroundColor: Colors.primary,
-    paddingTop: 56,
-    paddingBottom: 40,
-    paddingHorizontal: 24,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    paddingTop: 44,
+    paddingBottom: 30,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
   topBannerCompact: {
-    paddingTop: Platform.OS === 'android' ? 24 : 44,
-    paddingBottom: 14,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    paddingTop: Platform.OS === 'android' ? 24 : 40,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
   },
   brandContainer: {
     alignItems: 'center',
@@ -282,24 +276,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoWrapper: {
-    width: 76,
-    height: 76,
-    borderRadius: 20,
+    width: 64,
+    height: 64,
+    borderRadius: 18,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 6,
-    padding: 6,
+    shadowRadius: 8,
+    elevation: 5,
+    padding: 5,
   },
   logoWrapperCompact: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -311,26 +305,26 @@ const styles = StyleSheet.create({
     padding: 3,
   },
   logoImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 14,
+    width: 50,
+    height: 50,
+    borderRadius: 12,
   },
   logoImageCompact: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 7,
   },
   brandTextWrapperCompact: {
-    marginLeft: 12,
+    marginLeft: 10,
   },
   brandTitle: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: -0.5,
   },
   brandTitleCompact: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: -0.3,
@@ -339,9 +333,9 @@ const styles = StyleSheet.create({
     color: '#FFE0C4',
   },
   brandSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: 'rgba(255, 255, 255, 0.85)',
-    marginTop: 4,
+    marginTop: 3,
     fontWeight: '500',
   },
   brandSubtitleCompact: {
@@ -351,56 +345,56 @@ const styles = StyleSheet.create({
   },
   formArea: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 22,
-    paddingBottom: 28,
-    gap: 16,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 24,
+    gap: 14,
   },
   formAreaCompact: {
-    paddingTop: 14,
-    paddingBottom: 16,
+    paddingTop: 10,
+    paddingBottom: 12,
     gap: 0,
   },
   card: {
     backgroundColor: Colors.surface,
-    borderRadius: 24,
-    padding: 22,
+    borderRadius: 22,
+    padding: 20,
     shadowColor: Colors.shadowMd,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 1,
-    shadowRadius: 16,
-    elevation: 6,
+    shadowRadius: 14,
+    elevation: 5,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   cardCompact: {
-    borderRadius: 20,
-    padding: 18,
-    paddingBottom: 20,
-    elevation: 4,
+    borderRadius: 18,
+    padding: 16,
+    paddingBottom: 16,
+    elevation: 3,
   },
   cardTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     marginBottom: 6,
   },
   cardTitleAccent: {
     width: 4,
-    height: 20,
+    height: 18,
     backgroundColor: Colors.primary,
     borderRadius: 2,
   },
   cardTitle: {
-    fontSize: 19,
+    fontSize: 18,
     fontWeight: '800',
     color: Colors.text,
   },
   cardSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.textMuted,
-    marginBottom: 18,
-    lineHeight: 18,
+    marginBottom: 16,
+    lineHeight: 17,
   },
   errorBox: {
     flexDirection: 'row',
@@ -408,10 +402,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.redBg,
     borderColor: Colors.redBorder,
     borderWidth: 1,
-    padding: 10,
+    padding: 9,
     borderRadius: 10,
-    marginBottom: 14,
+    marginBottom: 12,
     gap: 8,
+  },
+  errorBoxCompact: {
+    padding: 7,
+    marginBottom: 10,
   },
   errorText: {
     color: Colors.red,
@@ -420,16 +418,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   inputGroup: {
-    marginBottom: 14,
+    marginBottom: 12,
   },
   inputGroupCompact: {
-    marginBottom: 10,
+    marginBottom: 8,
   },
   label: {
     fontSize: 11,
     fontWeight: '700',
     color: Colors.textSecondary,
-    marginBottom: 6,
+    marginBottom: 5,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -447,8 +445,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceElevated,
   },
   inputIconBg: {
-    width: 42,
-    height: 48,
+    width: 40,
+    height: 46,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.bg,
@@ -461,7 +459,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    height: 48,
+    height: 46,
     paddingHorizontal: 12,
     color: Colors.text,
     fontSize: 14,
@@ -476,14 +474,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: Colors.primary,
     borderRadius: 12,
-    height: 50,
+    height: 48,
     marginTop: 6,
-    gap: 10,
+    gap: 8,
     shadowColor: Colors.shadowOrange,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.9,
     shadowRadius: 10,
     elevation: 4,
+  },
+  loginBtnCompact: {
+    height: 46,
+    marginTop: 4,
   },
   disabledBtn: {
     opacity: 0.7,
@@ -495,9 +497,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   loginBtnArrow: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 6,
     backgroundColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -507,7 +509,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 12,
     flexWrap: 'wrap',
-    marginTop: 12,
+    marginTop: 10,
   },
   featureChip: {
     flexDirection: 'row',
@@ -517,7 +519,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 4,
     borderRadius: 20,
   },
   featureChipText: {

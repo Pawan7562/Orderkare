@@ -14,6 +14,7 @@
     },
     "android": {
       "package": "com.orderkare.admin",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
