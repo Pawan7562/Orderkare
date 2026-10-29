@@ -128,7 +128,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
               r."phone" as "restaurantPhone", r."logoUrl" as "restaurantLogo", r."isActive" as "restaurantIsActive"
        FROM "User" u
        LEFT JOIN "Restaurant" r ON u."restaurantId" = r."id"
-       WHERE u."email" = $1 LIMIT 1;`,
+       WHERE LOWER(u."email") = LOWER($1) LIMIT 1;`,
       [cleanEmail]
     );
 

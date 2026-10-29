@@ -35,12 +35,12 @@ types.setTypeParser(1114, (value: string) => new Date(value.replace(' ', 'T') + 
 export const db = new Pool({
   connectionString,
   ssl: { rejectUnauthorized: false },
-  max: Number(process.env.DB_POOL_MAX || 50),
-  min: Number(process.env.DB_POOL_MIN || 2),                       // Keep at least 2 connections alive at all times
-  idleTimeoutMillis: 25000,      // Neon disconnects idle clients after ~30s; purge at 25s
-  connectionTimeoutMillis: 15000,
+  max: Number(process.env.DB_POOL_MAX || 20),
+  min: 0,                         // Serverless: don't retain dead sockets when Neon suspends/idles
+  idleTimeoutMillis: 15000,       // Neon disconnects idle clients quickly; purge early
+  connectionTimeoutMillis: 10000,
   statement_timeout: 15000,
-  keepAlive: true,               // TCP keep-alive on the socket level
+  keepAlive: true,                // TCP keep-alive on the socket level
   keepAliveInitialDelayMillis: 10000,
 });
 
@@ -49,47 +49,67 @@ db.on('error', (err: any) => {
   console.warn('⚡ Neon Pool notice (auto-recovering):', err?.message || err);
 });
 
-// Keep-alive ping: query the pool every 20 seconds so Neon never drops all connections.
-// This eliminates the 5-second cold-start on the first request after idle.
+// Keep-alive ping: lightweight query every 25 seconds to keep the compute warm during development
 const keepAliveInterval = setInterval(() => {
   db.query('SELECT 1').catch(() => {});
-}, 20000);
+}, 25000);
 
 // Allow process to exit cleanly when pool is shut down
 keepAliveInterval.unref();
 
-export const query = async (text: string, params?: any[]) => {
-  try {
-    return await db.query(text, params);
-  } catch (err: any) {
-    if (
-      err?.message?.includes('Connection terminated') ||
-      err?.message?.includes('connection timeout') ||
-      err?.message?.includes('closed')
-    ) {
-      console.warn('Retrying database query after connection reset...');
+export const query = async (text: string, params?: any[], retries = 2): Promise<any> => {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
       return await db.query(text, params);
+    } catch (err: any) {
+      const isTransient =
+        err?.message?.includes('Connection terminated') ||
+        err?.message?.includes('connection timeout') ||
+        err?.message?.includes('closed') ||
+        err?.code === 'ECONNRESET' ||
+        err?.code === '57P01';
+
+      if (isTransient && attempt < retries) {
+        console.warn(`⚡ DB connection reset on query (attempt ${attempt + 1}/${retries}). Reconnecting in 300ms...`);
+        await new Promise(r => setTimeout(r, 300));
+        continue;
+      }
+      throw err;
     }
-    throw err;
   }
 };
 
-
 export const withTransaction = async <T>(
-  callback: (client: PoolClient) => Promise<T>
+  callback: (client: PoolClient) => Promise<T>,
+  retries = 2
 ): Promise<T> => {
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-    const result = await callback(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
-    throw error;
-  } finally {
-    client.release();
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    let client: PoolClient | undefined;
+    try {
+      client = await db.connect();
+      await client.query('BEGIN');
+      const result = await callback(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error: any) {
+      await client?.query('ROLLBACK').catch(() => {});
+      const isTransient =
+        error?.message?.includes('Connection terminated') ||
+        error?.message?.includes('connection timeout') ||
+        error?.message?.includes('closed') ||
+        error?.code === 'ECONNRESET';
+
+      if (isTransient && attempt < retries) {
+        console.warn(`⚡ DB connection reset on transaction (attempt ${attempt + 1}/${retries}). Reconnecting in 300ms...`);
+        await new Promise(r => setTimeout(r, 300));
+        continue;
+      }
+      throw error;
+    } finally {
+      client?.release();
+    }
   }
+  throw new Error('Transaction failed after retries');
 };
 
 export default db;
