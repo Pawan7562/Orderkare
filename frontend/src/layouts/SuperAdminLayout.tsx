@@ -81,14 +81,22 @@ export const SuperAdminLayout = () => {
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.start();
-        osc.stop(audioCtx.currentTime + 0.45);
       } catch {}
     };
 
     socket.on('admin_notification', handleNotification);
     socket.on('super_admin_notification', handleNotification);
 
-    return () =>{socket.disconnect();};
+    return () => {
+      socket.off('connect', joinRoom);
+      socket.off('admin_notification', handleNotification);
+      socket.off('super_admin_notification', handleNotification);
+      if (socket.connected) {
+        socket.disconnect();
+      } else {
+        socket.once('connect', () => socket.disconnect());
+      }
+    };
   }, []);
 
   useEffect(() => {
